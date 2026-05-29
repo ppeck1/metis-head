@@ -30,6 +30,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_privacy(next_state, event)
     elif event_type == "provider_event":
         _reduce_provider(next_state, event)
+    elif event_type == "chat_event":
+        _reduce_chat(next_state, event)
     elif event_type == "failure_event":
         _set_failure(next_state, event.get("failure_id"), event.get("reason"))
     elif event_type == "user_intent":
@@ -129,6 +131,31 @@ def _reduce_provider(state: dict[str, Any], event: dict[str, Any]) -> None:
         state["source_state"] = "unsourced"
 
 
+def _reduce_chat(state: dict[str, Any], event: dict[str, Any]) -> None:
+    status = event.get("status")
+    if status == "complete":
+        state["cognition_state"] = "idle"
+        state["last_llm_provider"] = event.get("provider")
+        state["last_llm_model"] = event.get("model")
+        state["module_health"]["metis_llm"] = "ok"
+        adapter = state["input_adapters"].get("llm_router")
+        if adapter:
+            adapter["enabled"] = True
+            adapter["health"] = "ok"
+            adapter["mode"] = event.get("provider") or "mock"
+        if state.get("source_grounding_enabled"):
+            state["source_state"] = event.get("source_state", "unsourced")
+        history = state.setdefault("chat_history", [])
+        user_message = event.get("user_message")
+        assistant_message = event.get("assistant_message")
+        if isinstance(user_message, str):
+            history.append({"role": "user", "content": user_message})
+        if isinstance(assistant_message, str):
+            history.append({"role": "assistant", "content": assistant_message})
+    elif status == "failure":
+        _set_failure(state, "llm_failure", event.get("reason"))
+
+
 def _reduce_intent(state: dict[str, Any], event: dict[str, Any]) -> None:
     action_class = event.get("action_class")
     intent = event.get("intent", "")
@@ -213,6 +240,13 @@ def _set_failure(state: dict[str, Any], failure_id: str | None, reason: str | No
         state["module_health"]["metis_memory"] = "unavailable"
     elif failure_id == "camera_failure":
         state["module_health"]["metis_vision"] = "unavailable"
+    elif failure_id == "llm_failure":
+        state["module_health"]["metis_llm"] = "unavailable"
+        adapter = state["input_adapters"].get("llm_router")
+        if adapter:
+            adapter["enabled"] = False
+            adapter["health"] = "unavailable"
+            adapter["mode"] = "disabled"
     elif failure_id in {"tool_blocked", "governance_block"}:
         state["module_health"]["metis_governance"] = "blocked"
         state["authority_state"] = "blocked"

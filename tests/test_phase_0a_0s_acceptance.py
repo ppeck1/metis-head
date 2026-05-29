@@ -175,6 +175,59 @@ def test_mock_brain_exports_resets_and_replays_event_log() -> None:
     assert exported["event_log"][2]["action_class"] == "external_action"
 
 
+def test_mock_chat_uses_governed_llm_router(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = TestClient(app)
+    client.post("/metis/state/reset")
+    response = client.post("/metis/chat", json={"message": "What is the current mode?"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "mock"
+    assert "Mock response" in body["message"]
+    assert body["state"]["module_health"]["metis_llm"] == "ok"
+    assert body["state"]["input_adapters"]["llm_router"]["enabled"] is True
+
+
+def test_chat_provider_failure_is_visible(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    client = TestClient(app)
+    client.post("/metis/state/reset")
+    response = client.post("/metis/chat", json={"message": "hello"})
+    assert response.status_code == 502
+    state = client.get("/metis/state").json()["state"]
+    assert state["active_failure"] == "llm_failure"
+    assert state["module_health"]["metis_llm"] == "unavailable"
+    assert state["input_adapters"]["llm_router"]["health"] == "unavailable"
+
+
+def test_agent_mode_chat_queues_proposal_not_execution(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = TestClient(app)
+    client.post("/metis/state/reset")
+    client.post("/metis/event", json={"type": "button_event", "button": "am_fm", "state": "fm"})
+    response = client.post("/metis/chat", json={"message": "Send an email to the team"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["proposal_queued"] is True
+    assert body["message"].startswith("Proposal only:")
+    assert body["state"]["pending_approval_count"] == 1
+    assert body["state"]["external_action_executed"] is False
+
+
+def test_source_grounded_chat_labels_unsourced_without_retrieval(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = TestClient(app)
+    client.post("/metis/state/reset")
+    client.post("/metis/event", json={"type": "button_event", "button": "afc", "state": True})
+    response = client.post("/metis/chat", json={"message": "What do we know?"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source_state"] == "unsourced"
+    assert "unsourced" in body["message"].lower()
+    assert body["state"]["source_state"] == "unsourced"
+
+
 def test_dashboard_contains_virtual_radio_controls() -> None:
     dashboard = Path("metis_head/static/dashboard.html").read_text(encoding="utf-8")
     assert "Virtual Radio" in dashboard
@@ -189,3 +242,6 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "downloadExport" in dashboard
     assert "replayEvents" in dashboard
     assert "resetState" in dashboard
+    assert "Virtual Chat" in dashboard
+    assert "chatInput" in dashboard
+    assert "sendChat" in dashboard

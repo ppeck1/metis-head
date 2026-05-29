@@ -26,6 +26,7 @@ EVENT_TYPES = {
     "hardware_privacy",
     "heartbeat",
     "provider_event",
+    "chat_event",
     "failure_event",
     "user_intent",
     "memory_event",
@@ -56,6 +57,7 @@ FAILURE_TABLE = {
     "tool_blocked": "Tool action blocked by governance",
     "governance_block": "Governance blocked requested action",
     "adapter_schema_mismatch": "Adapter schema version unsupported",
+    "llm_failure": "LLM router provider failed",
 }
 
 
@@ -140,10 +142,14 @@ def baseline_state(*, adapters_enabled: bool = False, timestamp: str = "2026-05-
             "metis_tools": "disabled",
             "metis_dashboard": "ok",
             "metis_integrations": "disabled",
+            "metis_llm": "disabled",
         },
         "input_adapters": adapters,
         "event_log": [],
         "external_action_executed": False,
+        "chat_history": [],
+        "last_llm_provider": None,
+        "last_llm_model": None,
         "memory_promoted": False,
         "blocked_capture_count": 0,
         "capture_count": 0,

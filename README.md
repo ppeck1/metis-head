@@ -8,13 +8,13 @@ adapters and deterministic mock providers.
 
 ## Current Phase
 
-Phase scope: `0A + 0S`
+Phase scope: `0A + 0S + 0R virtual chat`
 
-Status: initial simulation-first skeleton implemented.
+Status: initial simulation-first skeleton implemented with a governed Phase 0R LLM router.
 
-Latest patch: the dashboard now includes export/replay controls for state snapshots and event logs, plus a lightweight virtual radio view whose knobs and switches emit the same mock Brain events as the future bridge. TTS failure handling also forces simulated speech back to `idle` if the failure arrives while `audio_state` is `speaking`.
+Latest patch: `/metis/chat` now routes governed virtual chat through `mock`, `ollama`, or `openai` providers. The dashboard includes export/replay controls, virtual radio controls, and virtual chat. TTS failure handling also forces simulated speech back to `idle` if the failure arrives while `audio_state` is `speaking`.
 
-Functioning UI estimate: about `78%` for the Phase 0S simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, and export/replay current events. Remaining UI work is mostly richer scenario result summaries, bridge replay presets, and deeper provider failure controls.
+Functioning UI estimate: about `84%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, and governed virtual chat. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
 
 Implemented:
 
@@ -30,6 +30,8 @@ Implemented:
 - Static dashboard for canonical state, LEDs, adapter health, readiness, scenario results, and event log.
 - Virtual radio view for volume, depth, initiative, PWR, LOUD, AFC, AM/FM, mic cutoff, camera cutoff, LEDs, visualizer, and speaker grille placement.
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
+- Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
+- Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 
 See [docs/project_variable_map.md](docs/project_variable_map.md) for the current and future build variable map.
 
@@ -62,11 +64,38 @@ Dashboard:
 http://127.0.0.1:8787/
 ```
 
+## LLM Provider Config
+
+Default provider is mock:
+
+```powershell
+$env:METIS_LLM_PROVIDER="mock"
+```
+
+Ollama:
+
+```powershell
+$env:METIS_LLM_PROVIDER="ollama"
+$env:METIS_OLLAMA_BASE_URL="http://127.0.0.1:11434"
+$env:METIS_OLLAMA_MODEL="llama3.1"
+```
+
+OpenAI:
+
+```powershell
+$env:METIS_LLM_PROVIDER="openai"
+$env:OPENAI_API_KEY="..."
+$env:METIS_OPENAI_MODEL="gpt-4o-mini"
+```
+
+Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or autonomous execution. Agent Mode chat can queue proposals only.
+
 ## API
 
 - `GET /metis/state`
 - `GET /metis/export`
 - `POST /metis/event`
+- `POST /metis/chat`
 - `POST /metis/replay`
 - `POST /metis/state/reset`
 - `POST /metis/scenario/run`
@@ -82,11 +111,11 @@ http://127.0.0.1:8787/
 Last verified:
 
 ```text
-16 passed under Python 3.11
+20 passed under Python 3.11
 ```
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.
 
 ## Boundaries
 
-Phase 0A/0S does not implement real hardware, microphone, camera, BOH integration, Project Atlas integration, external tools, autonomous execution, or provider selection. Reference repositories remain pattern donors only.
+Phase 0A/0S/0R does not implement real hardware, microphone, camera, BOH retrieval, Project Atlas integration, external tools, or autonomous execution. Reference repositories remain pattern donors only.

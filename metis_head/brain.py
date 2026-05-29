@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 
 from .bridge import HARDWARE_PARITY_MANIFEST
 from .leds import resolve_leds
+from .llm_providers import LLMProviderError, governed_messages, provider_from_env
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
@@ -48,6 +49,61 @@ def post_event(event: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"state": STATE, "leds": resolve_leds(STATE)}
+
+
+@app.post("/metis/chat")
+def chat(payload: dict[str, Any]) -> dict[str, Any]:
+    global STATE
+    user_message = payload.get("message")
+    if not isinstance(user_message, str) or not user_message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    proposal_queued = False
+    if STATE.get("interaction_mode") == "agent" and _looks_like_external_action(user_message):
+        STATE = reduce_metis_event(
+            STATE,
+            {"type": "user_intent", "intent": user_message, "action_class": "external_action"},
+        )
+        proposal_queued = True
+
+    messages = governed_messages(user_message, STATE, STATE.get("chat_history", []))
+    try:
+        result = provider_from_env().generate(messages, STATE, options)
+    except LLMProviderError as exc:
+        STATE = reduce_metis_event(
+            STATE,
+            {"type": "chat_event", "status": "failure", "provider": "llm_router", "reason": str(exc)},
+        )
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    assistant_message = result.text
+    source_state = "unsourced" if STATE.get("source_grounding_enabled") else STATE.get("source_state", "unsourced")
+    if proposal_queued and not assistant_message.lower().startswith("proposal only"):
+        assistant_message = f"Proposal only: {assistant_message}"
+    if STATE.get("source_grounding_enabled") and "unsourced" not in assistant_message.lower():
+        assistant_message = f"{assistant_message}\n\nSource label: unsourced; retrieval is not enabled in Phase 0R."
+    STATE = reduce_metis_event(
+        STATE,
+        {
+            "type": "chat_event",
+            "status": "complete",
+            "provider": result.provider,
+            "model": result.model,
+            "user_message": user_message,
+            "assistant_message": assistant_message,
+            "source_state": source_state,
+        },
+    )
+    return {
+        "message": assistant_message,
+        "provider": result.provider,
+        "model": result.model,
+        "proposal_queued": proposal_queued,
+        "source_state": source_state,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+        "metadata": result.metadata,
+    }
 
 
 @app.post("/metis/replay")
@@ -139,3 +195,9 @@ def clear_all_failures() -> dict[str, Any]:
     global STATE
     STATE = clear_failures(STATE)
     return {"state": STATE, "leds": resolve_leds(STATE)}
+
+
+def _looks_like_external_action(text: str) -> bool:
+    lowered = text.lower()
+    action_words = ("send", "publish", "buy", "purchase", "post", "commit", "push", "email", "schedule", "create issue")
+    return any(word in lowered for word in action_words)

@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0A + 0S`
+Last phase updated: `0A + 0S + 0R virtual chat`
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S UI estimate: `78%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, and event logs can be exported/replayed. Remaining UI work includes bridge replay presets, richer scenario summaries, and provider failure tuning.
+Current Phase 0S/0R UI estimate: `84%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, and virtual chat can call a governed LLM router. Remaining UI work includes bridge replay presets, richer scenario summaries, provider health controls, and chat transcript export polish.
 
 ## Phase Commit Checklist
 
@@ -26,6 +26,7 @@ Before committing any phase:
 | `READINESS_CHECKLIST_VERSION` | `metis_readiness.v0.1` | `metis_head.schemas` | Computed readiness checklist version. |
 | `BRIDGE_SCHEMA_VERSION` | `metis_bridge_event.v0.1` | `metis_head.bridge` | Simulated bridge event protocol version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
+| `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
 
 ## Canonical State Fields
@@ -60,6 +61,9 @@ Before committing any phase:
 | `input_adapters` | object | 0A | Versioned adapter registry. |
 | `event_log` | array | 0S | In-memory event log for replay/testing. |
 | `external_action_executed` | boolean | 0S | Assertion field proving Agent Mode queues instead of executes. |
+| `chat_history` | array | 0R | User/assistant virtual chat transcript, stored in canonical state. |
+| `last_llm_provider` | nullable string | 0R | Last successful LLM provider ID. |
+| `last_llm_model` | nullable string | 0R | Last successful LLM model name. |
 | `memory_promoted` | boolean | 0S | Assertion field proving memory promotion requires approval. |
 | `blocked_capture_count` | integer | 0S | Count of capture attempts blocked by hardware cutoff. |
 | `capture_count` | integer | 0S | Count of allowed simulated captures. |
@@ -75,6 +79,7 @@ Before committing any phase:
 | `hardware_privacy` | 0A/0S | `device`, `enabled` | Mic/camera hardware cutoff state. |
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
+| `chat_event` | 0R | `status`, `provider`, `model`, `user_message`, `assistant_message`, `source_state` | Governed virtual chat completion/failure. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
@@ -111,6 +116,26 @@ Before committing any phase:
 | `boh_memory` | memory vault provider | `boh_adapter.v0.1` | disabled mock | future BOH adapter only |
 | `robot_safety` | safety pattern provider | `robot_safety_adapter.v0.1` | disabled mock | future safety doctrine adapter |
 
+## LLM Provider Environment
+
+| Variable | Values | Default | Purpose |
+|---|---|---|---|
+| `METIS_LLM_PROVIDER` | `mock`, `ollama`, `openai` | `mock` | Selects the Phase 0R virtual chat provider. |
+| `METIS_OLLAMA_BASE_URL` | URL | `http://127.0.0.1:11434` | Ollama API base URL. |
+| `METIS_OLLAMA_MODEL` | model name | none | Required when `METIS_LLM_PROVIDER=ollama`. |
+| `OPENAI_API_KEY` | secret | none | Required when `METIS_LLM_PROVIDER=openai`. |
+| `METIS_OPENAI_MODEL` | model name | `gpt-4o-mini` | OpenAI chat model. |
+
+## LLM Provider Classes
+
+| Class | Current Phase | Purpose |
+|---|---|---|
+| `BaseLLMProvider` | 0R | Interface with `generate(messages, state, options) -> LLMResult`. |
+| `MockLLMProvider` | 0R | Deterministic governed local chat provider for tests and safe boot. |
+| `OllamaLLMProvider` | 0R | Calls local Ollama `/api/chat`; no tools or retrieval. |
+| `OpenAILLMProvider` | 0R | Calls OpenAI Chat Completions; no tools or retrieval. |
+| `LLMProviderError` | 0R | Provider failure exception converted into visible `llm_failure`. |
+
 ## Module Health Keys
 
 | Key | Current Values |
@@ -124,6 +149,7 @@ Before committing any phase:
 | `metis_tools` | `disabled` |
 | `metis_dashboard` | `ok` |
 | `metis_integrations` | `disabled` |
+| `metis_llm` | `disabled`, `ok`, `unavailable` |
 
 ## Failure IDs
 
@@ -138,6 +164,7 @@ Before committing any phase:
 | `tool_blocked` | Tool action blocked by governance. |
 | `governance_block` | Governance blocked requested action. |
 | `adapter_schema_mismatch` | Adapter schema version unsupported. |
+| `llm_failure` | LLM router provider failed. |
 
 ## LED Resolver Output
 
@@ -182,6 +209,9 @@ Before committing any phase:
 | `radioCamera` | 0S | Virtual camera cutoff readout. |
 | `replayInput` | 0S | JSON/JSONL event-log replay input. |
 | `replayStatus` | 0S | Export/replay status line. |
+| `chatLog` | 0R | Virtual chat transcript display. |
+| `chatInput` | 0R | Governed virtual chat input. |
+| `chatStatus` | 0R | Provider/proposal/source/failure status line. |
 
 ## Dashboard Functions
 
@@ -193,6 +223,8 @@ Before committing any phase:
 | `loadCurrentEvents` | 0S | Loads current `event_log` into replay input. |
 | `replayEvents` | 0S | Posts parsed JSON/JSONL events to `/metis/replay`. |
 | `resetState` | 0S | Posts to `/metis/state/reset`. |
+| `sendChat` | 0R | Posts chat input to `/metis/chat`. |
+| `clearChatInput` | 0R | Clears unsent chat input. |
 
 ## API Routes
 
@@ -201,6 +233,7 @@ Before committing any phase:
 | `GET` | `/` | `metis_head.brain` | Static dashboard. |
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
+| `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
 | `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |

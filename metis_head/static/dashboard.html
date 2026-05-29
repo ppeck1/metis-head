@@ -218,6 +218,35 @@
       color: #536173;
       font-size: 12px;
     }
+    .chat-log {
+      display: grid;
+      gap: 10px;
+      max-height: 320px;
+      overflow: auto;
+      background: #f1f3f6;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .chat-message {
+      border: 1px solid #d8dde5;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 10px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .chat-message.user {
+      border-left: 4px solid #2f6fbe;
+    }
+    .chat-message.assistant {
+      border-left: 4px solid #2d9b67;
+    }
+    .chat-message strong {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
       .span-3, .span-4, .span-5, .span-6, .span-7, .span-12 { grid-column: span 1; }
@@ -327,6 +356,16 @@
       <div id="replayStatus" class="status-line"></div>
     </section>
     <section class="span-12">
+      <h2>Virtual Chat</h2>
+      <div class="tool-row">
+        <button onclick="sendChat()">Send</button>
+        <button onclick="clearChatInput()">Clear Input</button>
+      </div>
+      <div id="chatLog" class="chat-log"></div>
+      <textarea id="chatInput" spellcheck="true" placeholder="Ask Metis a governed virtual-chat question"></textarea>
+      <div id="chatStatus" class="status-line"></div>
+    </section>
+    <section class="span-12">
       <h2>Event Log</h2>
       <pre id="eventLog"></pre>
     </section>
@@ -374,6 +413,29 @@
       }
       return trimmed.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
     }
+    function renderChat(history) {
+      const log = document.getElementById('chatLog');
+      log.innerHTML = '';
+      if (!history || history.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'status-line';
+        empty.textContent = 'No chat messages yet.';
+        log.appendChild(empty);
+        return;
+      }
+      for (const message of history.slice(-12)) {
+        const item = document.createElement('div');
+        item.className = `chat-message ${message.role}`;
+        const label = document.createElement('strong');
+        label.textContent = message.role === 'user' ? 'You' : 'Metis';
+        const body = document.createElement('div');
+        body.textContent = message.content;
+        item.appendChild(label);
+        item.appendChild(body);
+        log.appendChild(item);
+      }
+      log.scrollTop = log.scrollHeight;
+    }
     async function downloadExport() {
       const data = await fetch('/metis/export').then(r => r.json());
       downloadJson('metis_state_export.json', data);
@@ -414,6 +476,39 @@
       await fetch('/metis/state/reset', {method: 'POST'});
       document.getElementById('replayStatus').textContent = 'Reset to baseline state.';
       await refresh();
+    }
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      if (!message) {
+        document.getElementById('chatStatus').textContent = 'Enter a message first.';
+        return;
+      }
+      document.getElementById('chatStatus').textContent = 'Generating...';
+      try {
+        const response = await fetch('/metis/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({message})
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.detail || 'Chat failed');
+        }
+        const labels = [`${result.provider}:${result.model}`];
+        if (result.proposal_queued) labels.push('proposal queued');
+        if (result.source_state) labels.push(result.source_state);
+        document.getElementById('chatStatus').textContent = labels.join(' / ');
+        input.value = '';
+        await refresh();
+      } catch (error) {
+        document.getElementById('chatStatus').textContent = String(error);
+        await refresh();
+      }
+    }
+    function clearChatInput() {
+      document.getElementById('chatInput').value = '';
+      document.getElementById('chatStatus').textContent = '';
     }
     async function postEvent(event) {
       await fetch('/metis/event', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(event)});
@@ -482,6 +577,7 @@
       document.getElementById('state').textContent = JSON.stringify(data.state, null, 2);
       document.getElementById('eventLog').textContent = JSON.stringify(data.state.event_log, null, 2);
       document.getElementById('adapters').textContent = JSON.stringify(data.state.input_adapters, null, 2);
+      renderChat(data.state.chat_history);
       document.getElementById('activityDot').style.background = colorFor(data.leds.activity_led.color);
       document.getElementById('authorityDot').style.background = colorFor(data.leds.authority_led.color);
       document.getElementById('activityText').textContent = data.leds.activity_led.state;
