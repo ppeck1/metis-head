@@ -29,6 +29,7 @@ Before committing any phase:
 | `BRIDGE_SCHEMA_VERSION` | `metis_bridge_event.v0.1` | `metis_head.bridge` | Simulated bridge event protocol version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
+| `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
 
 ## Canonical State Fields
@@ -140,6 +141,15 @@ Before committing any phase:
 | `list_ollama_models` | 0R | Lists local Ollama models via `/api/tags` for dashboard selection. |
 | `probe_llm_provider` | 0R | Reports provider configuration/reachability without generating chat. |
 
+## Governance Policy
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `ActionPolicy` | 0R | Action class, approval requirement, default decision, and reasons. |
+| `classify_intent` | 0R | Deterministically maps intent text to an action policy. |
+| `should_queue_proposal` | 0R | Checks whether Agent Mode should queue a proposal instead of acting. |
+| `POLICY_VERSION` | 0R | Current governance policy schema/version label. |
+
 ## Module Health Keys
 
 | Key | Current Values |
@@ -246,6 +256,7 @@ Before committing any phase:
 | `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |
+| `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
 | `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |

@@ -12,7 +12,7 @@ Phase scope: `0A + 0S + 0R virtual chat`
 
 Status: initial simulation-first skeleton implemented with a governed Phase 0R LLM router.
 
-Latest patch: the UI test harness is satisfactory for now, so focus has shifted back to backend readiness. `/metis/llm/health` probes Mock/Ollama/OpenAI configuration and reachability without sending a chat completion.
+Latest patch: the UI test harness is satisfactory for now, so focus has shifted back to backend readiness. Governance action classification is now a deterministic policy module with explicit action classes, approval requirements, default decisions, and reasons.
 
 Functioning UI estimate: about `86%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, governed virtual chat, and Ollama model selection. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
 
@@ -35,6 +35,7 @@ Implemented:
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
 - Dashboard order: Virtual Radio, Virtual Chat, readiness/LED/adapter/state/scenario panels, export/replay, event log.
 - LLM provider health probe for mock readiness, Ollama reachability/model availability, and OpenAI key configuration.
+- Deterministic governance classifier for observe/retrieve/draft/propose-memory/local-modify/external/sensitive/actuator intents.
 
 See [docs/project_variable_map.md](docs/project_variable_map.md) for the current and future build variable map.
 
@@ -103,6 +104,7 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 - `POST /metis/event`
 - `POST /metis/chat`
 - `POST /metis/llm/health`
+- `POST /metis/governance/classify`
 - `POST /metis/replay`
 - `POST /metis/state/reset`
 - `POST /metis/scenario/run`
@@ -118,7 +120,7 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 Last verified:
 
 ```text
-24 passed under Python 3.11
+26 passed under Python 3.11
 ```
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.

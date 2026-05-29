@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from .governance import classify_intent
 from .schemas import FAILURE_TABLE, SUPPORTED_ADAPTER_SCHEMAS, validate_event
 
 
@@ -159,14 +160,16 @@ def _reduce_chat(state: dict[str, Any], event: dict[str, Any]) -> None:
 def _reduce_intent(state: dict[str, Any], event: dict[str, Any]) -> None:
     action_class = event.get("action_class")
     intent = event.get("intent", "")
-    if action_class is None and any(word in intent for word in ("send", "publish", "purchase", "external")):
-        action_class = "external_action"
+    policy = event.get("policy") if isinstance(event.get("policy"), dict) else classify_intent(intent, state).to_dict()
+    if action_class is None:
+        action_class = policy["action_class"]
     if state.get("interaction_mode") == "agent" and action_class in {"external_action", "modify_local", "sensitive_action", "actuator_action"}:
         state["pending_approval_count"] += 1
         state["tool_queue_count"] += 1
         state["cognition_state"] = "awaiting_approval"
         state["authority_state"] = "awaiting_approval"
         state["external_action_executed"] = False
+        state["last_block_reason"] = "; ".join(policy.get("reasons", []))
     elif action_class == "sensitive_action":
         _set_failure(state, "governance_block", "sensitive action blocked by default")
         state["authority_state"] = "blocked"

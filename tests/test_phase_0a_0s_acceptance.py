@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from metis_head.brain import app
 import metis_head.llm_providers as llm_providers
+from metis_head.governance import classify_intent
 from metis_head.leds import resolve_leds
 from metis_head.readiness import calculate_readiness
 from metis_head.reducer import reduce_metis_event, replay_events
@@ -211,6 +212,7 @@ def test_agent_mode_chat_queues_proposal_not_execution(monkeypatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["proposal_queued"] is True
+    assert body["policy"]["action_class"] == "external_action"
     assert body["message"].startswith("Proposal only:")
     assert body["state"]["pending_approval_count"] == 1
     assert body["state"]["external_action_executed"] is False
@@ -275,6 +277,29 @@ def test_llm_health_probe_reports_openai_configuration(monkeypatch) -> None:
     configured = client.post("/metis/llm/health", json={"provider": "openai", "model": "gpt-test"})
     assert configured.json()["configured"] is True
     assert configured.json()["model"] == "gpt-test"
+
+
+def test_governance_classifier_is_deterministic_and_prioritized() -> None:
+    sensitive = classify_intent("Send an email with my password", {"interaction_mode": "agent"})
+    draft = classify_intent("Draft a plan for the enclosure", {"interaction_mode": "human"})
+    observe = classify_intent("What is the current state?", {"interaction_mode": "human"})
+    assert sensitive.action_class == "sensitive_action"
+    assert sensitive.default_decision == "block_by_default"
+    assert sensitive.requires_approval is True
+    assert "Agent Mode can prepare proposals only" in sensitive.reasons
+    assert draft.action_class == "draft"
+    assert draft.default_decision == "allow_draft_only"
+    assert observe.action_class == "observe"
+
+
+def test_governance_classify_endpoint_returns_policy() -> None:
+    client = TestClient(app)
+    response = client.post("/metis/governance/classify", json={"intent": "publish a release note"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["policy_version"] == "metis_governance_policy.v0.1"
+    assert body["policy"]["action_class"] == "external_action"
+    assert body["policy"]["requires_approval"] is True
 
 
 def test_dashboard_contains_virtual_radio_controls() -> None:

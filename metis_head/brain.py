@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
 from .bridge import HARDWARE_PARITY_MANIFEST
+from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
 from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
 from .readiness import calculate_readiness
@@ -62,6 +63,15 @@ def llm_health(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     return probe_llm_provider(config)
 
 
+@app.post("/metis/governance/classify")
+def governance_classify(payload: dict[str, Any]) -> dict[str, Any]:
+    intent = payload.get("intent")
+    if not isinstance(intent, str) or not intent.strip():
+        raise HTTPException(status_code=400, detail="intent is required")
+    policy = classify_intent(intent, STATE)
+    return {"policy_version": POLICY_VERSION, "policy": policy.to_dict()}
+
+
 @app.post("/metis/event")
 def post_event(event: dict[str, Any]) -> dict[str, Any]:
     global STATE
@@ -80,10 +90,11 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="message is required")
     options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
     proposal_queued = False
-    if STATE.get("interaction_mode") == "agent" and _looks_like_external_action(user_message):
+    policy = classify_intent(user_message, STATE)
+    if should_queue_proposal(policy, STATE):
         STATE = reduce_metis_event(
             STATE,
-            {"type": "user_intent", "intent": user_message, "action_class": "external_action"},
+            {"type": "user_intent", "intent": user_message, "action_class": policy.action_class, "policy": policy.to_dict()},
         )
         proposal_queued = True
 
@@ -121,6 +132,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         "model": result.model,
         "proposal_queued": proposal_queued,
         "source_state": source_state,
+        "policy": policy.to_dict(),
         "state": STATE,
         "leds": resolve_leds(STATE),
         "metadata": result.metadata,
@@ -216,9 +228,3 @@ def clear_all_failures() -> dict[str, Any]:
     global STATE
     STATE = clear_failures(STATE)
     return {"state": STATE, "leds": resolve_leds(STATE)}
-
-
-def _looks_like_external_action(text: str) -> bool:
-    lowered = text.lower()
-    action_words = ("send", "publish", "buy", "purchase", "post", "commit", "push", "email", "schedule", "create issue")
-    return any(word in lowered for word in action_words)
