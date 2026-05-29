@@ -7,7 +7,7 @@ Last phase updated: `0A + 0S`
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S UI estimate: `72%` functional for simulation review. Core state/API/scenario panels work, and the virtual radio can emit canonical events. Remaining UI work includes persistence/export controls, bridge replay controls, richer scenario summaries, and provider failure tuning.
+Current Phase 0S UI estimate: `78%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, and event logs can be exported/replayed. Remaining UI work includes bridge replay presets, richer scenario summaries, and provider failure tuning.
 
 ## Phase Commit Checklist
 
@@ -25,6 +25,7 @@ Before committing any phase:
 | `EVENT_SCHEMA_VERSION` | `metis_event.v0.1` | `metis_head.schemas` | Phase 0S mock Brain event envelope version. |
 | `READINESS_CHECKLIST_VERSION` | `metis_readiness.v0.1` | `metis_head.schemas` | Computed readiness checklist version. |
 | `BRIDGE_SCHEMA_VERSION` | `metis_bridge_event.v0.1` | `metis_head.bridge` | Simulated bridge event protocol version. |
+| `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
 
 ## Canonical State Fields
@@ -179,6 +180,19 @@ Before committing any phase:
 | `radioAuthority` | 0S | Virtual authority/source readout. |
 | `radioMic` | 0S | Virtual mic cutoff readout. |
 | `radioCamera` | 0S | Virtual camera cutoff readout. |
+| `replayInput` | 0S | JSON/JSONL event-log replay input. |
+| `replayStatus` | 0S | Export/replay status line. |
+
+## Dashboard Functions
+
+| Function | Current Phase | Purpose |
+|---|---|---|
+| `downloadExport` | 0S | Downloads `/metis/export` response as JSON. |
+| `downloadEvents` | 0S | Downloads current `event_log` as JSON. |
+| `copyEvents` | 0S | Copies current `event_log` JSON to clipboard. |
+| `loadCurrentEvents` | 0S | Loads current `event_log` into replay input. |
+| `replayEvents` | 0S | Posts parsed JSON/JSONL events to `/metis/replay`. |
+| `resetState` | 0S | Posts to `/metis/state/reset`. |
 
 ## API Routes
 
@@ -187,6 +201,9 @@ Before committing any phase:
 | `GET` | `/` | `metis_head.brain` | Static dashboard. |
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
+| `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
+| `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
+| `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |
 | `POST` | `/metis/scenario/run` | `metis_head.brain` | Run one scenario or all scenarios. |
 | `GET` | `/metis/scenario/results` | `metis_head.brain` | Return latest scenario results. |
 | `GET` | `/metis/health` | `metis_head.brain` | Brain health, failures, readiness, parity manifest. |

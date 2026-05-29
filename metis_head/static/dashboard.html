@@ -196,6 +196,28 @@
       font-size: 12px;
       color: #384456;
     }
+    .tool-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      min-height: 130px;
+      resize: vertical;
+      border: 1px solid #b7c0cc;
+      border-radius: 6px;
+      padding: 10px;
+      font-family: Consolas, ui-monospace, monospace;
+      font-size: 12px;
+    }
+    .status-line {
+      min-height: 18px;
+      color: #536173;
+      font-size: 12px;
+    }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
       .span-3, .span-4, .span-5, .span-6, .span-7, .span-12 { grid-column: span 1; }
@@ -292,6 +314,19 @@
       <pre id="scenarios"></pre>
     </section>
     <section class="span-12">
+      <h2>Export and Replay</h2>
+      <div class="tool-row">
+        <button onclick="downloadExport()">Download State Export</button>
+        <button onclick="downloadEvents()">Download Event Log</button>
+        <button onclick="copyEvents()">Copy Event Log</button>
+        <button onclick="loadCurrentEvents()">Load Current Events</button>
+        <button onclick="replayEvents()">Replay Events</button>
+        <button onclick="resetState()">Reset Baseline</button>
+      </div>
+      <textarea id="replayInput" spellcheck="false" placeholder='Paste a JSON array of events or JSONL events here'></textarea>
+      <div id="replayStatus" class="status-line"></div>
+    </section>
+    <section class="span-12">
       <h2>Event Log</h2>
       <pre id="eventLog"></pre>
     </section>
@@ -319,6 +354,66 @@
     }
     function setRadioText(id, value) {
       document.getElementById(id).textContent = value;
+    }
+    function downloadJson(filename, value) {
+      const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+    function parseReplayInput(text) {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return [];
+      }
+      if (trimmed.startsWith('[')) {
+        return JSON.parse(trimmed);
+      }
+      return trimmed.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+    }
+    async function downloadExport() {
+      const data = await fetch('/metis/export').then(r => r.json());
+      downloadJson('metis_state_export.json', data);
+      document.getElementById('replayStatus').textContent = 'Downloaded state export.';
+    }
+    function downloadEvents() {
+      downloadJson('metis_event_log.json', currentState.event_log || []);
+      document.getElementById('replayStatus').textContent = 'Downloaded event log.';
+    }
+    async function copyEvents() {
+      const events = JSON.stringify(currentState.event_log || [], null, 2);
+      await navigator.clipboard.writeText(events);
+      document.getElementById('replayStatus').textContent = 'Copied event log.';
+    }
+    function loadCurrentEvents() {
+      document.getElementById('replayInput').value = JSON.stringify(currentState.event_log || [], null, 2);
+      document.getElementById('replayStatus').textContent = 'Loaded current event log into replay input.';
+    }
+    async function replayEvents() {
+      try {
+        const events = parseReplayInput(document.getElementById('replayInput').value);
+        const response = await fetch('/metis/replay', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({events, reset: true})
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.detail || 'Replay failed');
+        }
+        document.getElementById('replayStatus').textContent = `Replayed ${result.event_count} events from baseline.`;
+        await refresh();
+      } catch (error) {
+        document.getElementById('replayStatus').textContent = String(error);
+      }
+    }
+    async function resetState() {
+      await fetch('/metis/state/reset', {method: 'POST'});
+      document.getElementById('replayStatus').textContent = 'Reset to baseline state.';
+      await refresh();
     }
     async function postEvent(event) {
       await fetch('/metis/event', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(event)});

@@ -151,6 +151,30 @@ def test_mock_brain_endpoints_accept_bridge_events_and_run_scenarios() -> None:
     assert failure_response.json()["state"]["active_failure"] == "stt_failure"
 
 
+def test_mock_brain_exports_resets_and_replays_event_log() -> None:
+    client = TestClient(app)
+    reset_response = client.post("/metis/state/reset")
+    assert reset_response.status_code == 200
+    events = [
+        {"type": "control_change", "control": "initiative", "value": 0.9},
+        {"type": "button_event", "button": "am_fm", "state": "fm"},
+        {"type": "user_intent", "intent": "send_email", "action_class": "external_action"},
+    ]
+    replay_response = client.post("/metis/replay", json={"events": events, "reset": True})
+    assert replay_response.status_code == 200
+    replayed = replay_response.json()
+    assert replayed["event_count"] == 3
+    assert replayed["state"]["initiative_bucket"] == "proactive"
+    assert replayed["state"]["pending_approval_count"] == 1
+    export_response = client.get("/metis/export")
+    assert export_response.status_code == 200
+    exported = export_response.json()
+    assert exported["export_schema"] == "metis_export.v0.1"
+    assert len(exported["event_log"]) == 3
+    assert exported["event_log"][0]["schema_version"] == "metis_event.v0.1"
+    assert exported["event_log"][2]["action_class"] == "external_action"
+
+
 def test_dashboard_contains_virtual_radio_controls() -> None:
     dashboard = Path("metis_head/static/dashboard.html").read_text(encoding="utf-8")
     assert "Virtual Radio" in dashboard
@@ -161,3 +185,7 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "radioAuthorityLed" in dashboard
     assert "toggleMic" in dashboard
     assert "toggleCamera" in dashboard
+    assert "Export and Replay" in dashboard
+    assert "downloadExport" in dashboard
+    assert "replayEvents" in dashboard
+    assert "resetState" in dashboard

@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from .bridge import HARDWARE_PARITY_MANIFEST
 from .leds import resolve_leds
 from .readiness import calculate_readiness
-from .reducer import clear_failures, reduce_metis_event
+from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
 
@@ -29,6 +29,17 @@ def get_state() -> dict[str, Any]:
     return {"state": STATE, "leds": resolve_leds(STATE), "readiness": calculate_readiness()}
 
 
+@app.get("/metis/export")
+def export_state() -> dict[str, Any]:
+    return {
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+        "readiness": calculate_readiness(),
+        "event_log": STATE.get("event_log", []),
+        "export_schema": "metis_export.v0.1",
+    }
+
+
 @app.post("/metis/event")
 def post_event(event: dict[str, Any]) -> dict[str, Any]:
     global STATE
@@ -36,6 +47,28 @@ def post_event(event: dict[str, Any]) -> dict[str, Any]:
         STATE = reduce_metis_event(STATE, event)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"state": STATE, "leds": resolve_leds(STATE)}
+
+
+@app.post("/metis/replay")
+def replay(payload: dict[str, Any]) -> dict[str, Any]:
+    global STATE
+    events = payload.get("events")
+    if not isinstance(events, list):
+        raise HTTPException(status_code=400, detail="events must be a list")
+    initial_state = baseline_state() if payload.get("reset", True) else STATE
+    try:
+        STATE = replay_events(initial_state, events)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"state": STATE, "leds": resolve_leds(STATE), "event_count": len(events)}
+
+
+@app.post("/metis/state/reset")
+def reset_state() -> dict[str, Any]:
+    global STATE, SCENARIO_RESULTS
+    STATE = baseline_state()
+    SCENARIO_RESULTS = []
     return {"state": STATE, "leds": resolve_leds(STATE)}
 
 
