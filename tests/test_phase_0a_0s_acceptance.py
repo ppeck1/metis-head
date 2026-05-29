@@ -243,6 +243,40 @@ def test_ollama_model_options_endpoint_lists_available_models(monkeypatch) -> No
     assert [model["name"] for model in body["ollama"]["models"]] == ["llama3.1:latest", "mistral:latest"]
 
 
+def test_llm_health_probe_reports_mock_ready() -> None:
+    client = TestClient(app)
+    response = client.post("/metis/llm/health", json={"provider": "mock"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "mock"
+    assert body["configured"] is True
+    assert body["reachable"] is True
+
+
+def test_llm_health_probe_reports_ollama_model_availability(monkeypatch) -> None:
+    def fake_get_json(url: str) -> dict:
+        return {"models": [{"name": "llama3.1:latest"}, {"name": "mistral:latest"}]}
+
+    monkeypatch.setattr(llm_providers, "_get_json", fake_get_json)
+    client = TestClient(app)
+    ok = client.post("/metis/llm/health", json={"provider": "ollama", "model": "llama3.1:latest"})
+    missing = client.post("/metis/llm/health", json={"provider": "ollama", "model": "missing:latest"})
+    assert ok.json()["model_available"] is True
+    assert missing.json()["model_available"] is False
+    assert "not found" in missing.json()["error"]
+
+
+def test_llm_health_probe_reports_openai_configuration(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    missing = client.post("/metis/llm/health", json={"provider": "openai"})
+    assert missing.json()["configured"] is False
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    configured = client.post("/metis/llm/health", json={"provider": "openai", "model": "gpt-test"})
+    assert configured.json()["configured"] is True
+    assert configured.json()["model"] == "gpt-test"
+
+
 def test_dashboard_contains_virtual_radio_controls() -> None:
     dashboard = Path("metis_head/static/dashboard.html").read_text(encoding="utf-8")
     assert "Virtual Radio" in dashboard

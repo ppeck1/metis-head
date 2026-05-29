@@ -7,7 +7,7 @@ Last phase updated: `0A + 0S + 0R virtual chat`
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, and the dashboard can select locally available Ollama models. Remaining UI work includes bridge replay presets, richer scenario summaries, provider health controls, and chat transcript export polish.
+Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, and the dashboard can select locally available Ollama models. The UI testing environment is satisfactory for now; next work shifts toward backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -138,6 +138,7 @@ Before committing any phase:
 | `OpenAILLMProvider` | 0R | Calls OpenAI Chat Completions; no tools or retrieval. |
 | `LLMProviderError` | 0R | Provider failure exception converted into visible `llm_failure`. |
 | `list_ollama_models` | 0R | Lists local Ollama models via `/api/tags` for dashboard selection. |
+| `probe_llm_provider` | 0R | Reports provider configuration/reachability without generating chat. |
 
 ## Module Health Keys
 
@@ -244,6 +245,7 @@ Before committing any phase:
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
 | `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
+| `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
 | `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |

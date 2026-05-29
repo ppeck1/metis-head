@@ -12,7 +12,7 @@ Phase scope: `0A + 0S + 0R virtual chat`
 
 Status: initial simulation-first skeleton implemented with a governed Phase 0R LLM router.
 
-Latest patch: the Virtual Chat panel now sits directly under the Virtual Radio so conversation happens next to the simulated control surface. `/metis/chat` routes governed virtual chat through `mock`, `ollama`, or `openai` providers, and the dashboard can refresh locally available Ollama models from `/api/tags`.
+Latest patch: the UI test harness is satisfactory for now, so focus has shifted back to backend readiness. `/metis/llm/health` probes Mock/Ollama/OpenAI configuration and reachability without sending a chat completion.
 
 Functioning UI estimate: about `86%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, governed virtual chat, and Ollama model selection. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
 
@@ -34,6 +34,7 @@ Implemented:
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
 - Dashboard order: Virtual Radio, Virtual Chat, readiness/LED/adapter/state/scenario panels, export/replay, event log.
+- LLM provider health probe for mock readiness, Ollama reachability/model availability, and OpenAI key configuration.
 
 See [docs/project_variable_map.md](docs/project_variable_map.md) for the current and future build variable map.
 
@@ -101,6 +102,7 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 - `GET /metis/llm/options`
 - `POST /metis/event`
 - `POST /metis/chat`
+- `POST /metis/llm/health`
 - `POST /metis/replay`
 - `POST /metis/state/reset`
 - `POST /metis/scenario/run`
@@ -116,7 +118,7 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 Last verified:
 
 ```text
-21 passed under Python 3.11
+24 passed under Python 3.11
 ```
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.

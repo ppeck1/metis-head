@@ -144,6 +144,48 @@ def list_ollama_models(base_url: str) -> dict[str, Any]:
     return {"available": True, "base_url": base_url, "models": models, "error": None}
 
 
+def probe_llm_provider(config: dict[str, Any] | None = None, env: dict[str, str] | None = None) -> dict[str, Any]:
+    config = config or {}
+    env = env or os.environ
+    provider = str(config.get("provider") or env.get("METIS_LLM_PROVIDER", "mock")).lower()
+    if provider == "mock":
+        return {"provider": "mock", "configured": True, "reachable": True, "model": "mock-governed", "error": None}
+    if provider == "ollama":
+        base_url = str(config.get("base_url") or env.get("METIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434"))
+        model = config.get("model") or env.get("METIS_OLLAMA_MODEL")
+        models = list_ollama_models(base_url)
+        available_names = [item["name"] for item in models["models"]]
+        configured = bool(model)
+        reachable = bool(models["available"])
+        model_available = bool(model and model in available_names)
+        error = models["error"]
+        if reachable and not configured:
+            error = "METIS_OLLAMA_MODEL or chat option model is required"
+        elif reachable and configured and not model_available:
+            error = f"Ollama model not found: {model}"
+        return {
+            "provider": "ollama",
+            "configured": configured,
+            "reachable": reachable,
+            "model": model,
+            "model_available": model_available,
+            "base_url": base_url,
+            "available_models": available_names,
+            "error": error,
+        }
+    if provider == "openai":
+        model = str(config.get("model") or env.get("METIS_OPENAI_MODEL", "gpt-4o-mini"))
+        configured = bool(env.get("OPENAI_API_KEY"))
+        return {
+            "provider": "openai",
+            "configured": configured,
+            "reachable": None,
+            "model": model,
+            "error": None if configured else "OPENAI_API_KEY is required",
+        }
+    return {"provider": provider, "configured": False, "reachable": False, "model": None, "error": f"unsupported provider: {provider}"}
+
+
 def governed_messages(user_message: str, state: dict[str, Any], history: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
     history = history or []
     system = (

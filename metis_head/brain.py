@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from .bridge import HARDWARE_PARITY_MANIFEST
 from .leds import resolve_leds
-from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, provider_from_config
+from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
@@ -53,6 +53,13 @@ def llm_options(base_url: str | None = None) -> dict[str, Any]:
         "openai_model": os.environ.get("METIS_OPENAI_MODEL", "gpt-4o-mini"),
         "ollama": list_ollama_models(ollama_base_url),
     }
+
+
+@app.post("/metis/llm/health")
+def llm_health(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    config = payload.get("options") if isinstance(payload.get("options"), dict) else payload
+    return probe_llm_provider(config)
 
 
 @app.post("/metis/event")
