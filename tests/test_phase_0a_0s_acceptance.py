@@ -263,3 +263,4 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "chatProvider" in dashboard
     assert "ollamaModel" in dashboard
     assert "refreshLlmOptions" in dashboard
+    assert dashboard.index("Virtual Radio") < dashboard.index("Virtual Chat") < dashboard.index("Readiness")

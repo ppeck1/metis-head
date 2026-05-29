@@ -12,7 +12,7 @@ Phase scope: `0A + 0S + 0R virtual chat`
 
 Status: initial simulation-first skeleton implemented with a governed Phase 0R LLM router.
 
-Latest patch: `/metis/chat` now routes governed virtual chat through `mock`, `ollama`, or `openai` providers. The dashboard can refresh locally available Ollama models from `/api/tags` and select which model to use for chat. It also includes export/replay controls, virtual radio controls, and virtual chat.
+Latest patch: the Virtual Chat panel now sits directly under the Virtual Radio so conversation happens next to the simulated control surface. `/metis/chat` routes governed virtual chat through `mock`, `ollama`, or `openai` providers, and the dashboard can refresh locally available Ollama models from `/api/tags`.
 
 Functioning UI estimate: about `86%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, governed virtual chat, and Ollama model selection. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
 
@@ -33,6 +33,7 @@ Implemented:
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
+- Dashboard order: Virtual Radio, Virtual Chat, readiness/LED/adapter/state/scenario panels, export/replay, event log.
 
 See [docs/project_variable_map.md](docs/project_variable_map.md) for the current and future build variable map.
 

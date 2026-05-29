@@ -326,6 +326,24 @@
         </div>
       </div>
     </section>
+    <section class="span-12">
+      <h2>Virtual Chat</h2>
+      <div class="tool-row">
+        <select id="chatProvider" onchange="handleProviderChange()">
+          <option value="mock">Mock</option>
+          <option value="ollama">Ollama</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <input id="ollamaBaseUrl" type="text" value="http://127.0.0.1:11434" aria-label="Ollama base URL">
+        <button onclick="refreshLlmOptions()">Refresh Ollama Models</button>
+        <select id="ollamaModel"></select>
+        <button onclick="sendChat()">Send</button>
+        <button onclick="clearChatInput()">Clear Input</button>
+      </div>
+      <div id="chatLog" class="chat-log"></div>
+      <textarea id="chatInput" spellcheck="true" placeholder="Ask Metis a governed virtual-chat question"></textarea>
+      <div id="chatStatus" class="status-line"></div>
+    </section>
     <section class="span-3">
       <h2>Readiness</h2>
       <div class="metric" id="score">--</div>
@@ -364,24 +382,6 @@
       </div>
       <textarea id="replayInput" spellcheck="false" placeholder='Paste a JSON array of events or JSONL events here'></textarea>
       <div id="replayStatus" class="status-line"></div>
-    </section>
-    <section class="span-12">
-      <h2>Virtual Chat</h2>
-      <div class="tool-row">
-        <select id="chatProvider" onchange="handleProviderChange()">
-          <option value="mock">Mock</option>
-          <option value="ollama">Ollama</option>
-          <option value="openai">OpenAI</option>
-        </select>
-        <input id="ollamaBaseUrl" type="text" value="http://127.0.0.1:11434" aria-label="Ollama base URL">
-        <button onclick="refreshLlmOptions()">Refresh Ollama Models</button>
-        <select id="ollamaModel"></select>
-        <button onclick="sendChat()">Send</button>
-        <button onclick="clearChatInput()">Clear Input</button>
-      </div>
-      <div id="chatLog" class="chat-log"></div>
-      <textarea id="chatInput" spellcheck="true" placeholder="Ask Metis a governed virtual-chat question"></textarea>
-      <div id="chatStatus" class="status-line"></div>
     </section>
     <section class="span-12">
       <h2>Event Log</h2>

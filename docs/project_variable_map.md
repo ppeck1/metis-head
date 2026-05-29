@@ -9,6 +9,8 @@ scenario IDs, and future build placeholders reviewable before each phase commit.
 
 Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, and the dashboard can select locally available Ollama models. Remaining UI work includes bridge replay presets, richer scenario summaries, provider health controls, and chat transcript export polish.
 
+Dashboard order: `Virtual Radio` -> `Virtual Chat` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
+
 ## Phase Commit Checklist
 
 Before committing any phase:
