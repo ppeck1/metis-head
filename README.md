@@ -12,6 +12,8 @@ Phase scope: `0A + 0S`
 
 Status: initial simulation-first skeleton implemented.
 
+Latest patch: TTS failure handling now forces simulated speech back to `idle` if the failure arrives while `audio_state` is `speaking`.
+
 Implemented:
 
 - Canonical state schema matching the v0.5 buildspec intent.
@@ -73,7 +75,7 @@ http://127.0.0.1:8787/
 Last verified:
 
 ```text
-13 passed under Python 3.11
+14 passed under Python 3.11
 ```
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.

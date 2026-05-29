@@ -207,6 +207,8 @@ def _set_failure(state: dict[str, Any], failure_id: str | None, reason: str | No
         state["module_health"]["metis_audio"] = "stt_failure"
     elif failure_id == "tts_failure":
         state["module_health"]["metis_audio"] = "tts_failure"
+        if state.get("audio_state") == "speaking":
+            state["audio_state"] = "idle"
     elif failure_id == "vault_unavailable":
         state["module_health"]["metis_memory"] = "unavailable"
     elif failure_id == "camera_failure":

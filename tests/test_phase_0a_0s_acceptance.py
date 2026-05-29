@@ -89,6 +89,19 @@ def test_provider_failures_visible() -> None:
     assert vault["source_state"] == "unsourced"
 
 
+def test_tts_failure_mid_speech_forces_audio_idle() -> None:
+    state = replay_events(
+        baseline_state(),
+        [
+            {"type": "provider_event", "provider": "tts", "status": "speaking"},
+            {"type": "provider_event", "provider": "tts", "status": "failure", "failure_id": "tts_failure"},
+        ],
+    )
+    assert state["active_failure"] == "tts_failure"
+    assert state["audio_state"] == "idle"
+    assert state["module_health"]["metis_audio"] == "tts_failure"
+
+
 def test_adapter_schema_mismatch_disables_adapter() -> None:
     state = run_scenario("adapter_schema_mismatch_disables")["final_state"]
     adapter = state["input_adapters"]["boh_memory"]

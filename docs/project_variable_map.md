@@ -33,7 +33,7 @@ Before committing any phase:
 | `timestamp` | string | 0A | Last state timestamp, UTC-ish ISO string in current mock implementation. |
 | `session_id` | string | 0A | Local simulation session identifier. |
 | `power_state` | enum | 0A | `awake`, `standby`, future `off`/`disconnected`. |
-| `audio_state` | enum | 0A | `idle`, `listening`, `speaking`, `capture_blocked`, `standby_no_listen`. |
+| `audio_state` | enum | 0A | `idle`, `listening`, `speaking`, `capture_blocked`, `standby_no_listen`; `tts_failure` forces `speaking` back to `idle`. |
 | `cognition_state` | enum | 0A | `idle`, `retrieving`, `drafting`, `awaiting_approval`. |
 | `authority_state` | enum | 0A | `local_governed`, `source_grounded`, `awaiting_approval`, `blocked`. |
 | `interaction_mode` | enum | 0A | `human` or `agent`. |
@@ -178,7 +178,7 @@ Before committing any phase:
 | `agent_mode_requires_approval` | Agent Mode queues action instead of executing. |
 | `governance_block_overrides_leds` | Governance block overrides LEDs. |
 | `stt_failure_visible` | STT failure visible. |
-| `tts_failure_visible` | TTS failure visible. |
+| `tts_failure_visible` | TTS failure visible; mid-speech failure must not leave `audio_state` as `speaking`. |
 | `vault_failure_visible` | Vault failure visible. |
 | `adapter_schema_mismatch_disables` | Schema mismatch disables adapter. |
 | `memory_proposal_needs_review` | Memory proposal requires review. |
@@ -204,4 +204,3 @@ Before committing any phase:
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
 | BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Future adapter only, no internal imports. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |
-

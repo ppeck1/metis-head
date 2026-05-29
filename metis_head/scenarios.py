@@ -82,7 +82,10 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     },
     "tts_failure_visible": {
         "name": "TTS failure does not fake successful speech",
-        "events": [{"type": "provider_event", "provider": "tts", "status": "failure", "failure_id": "tts_failure"}],
+        "events": [
+            {"type": "provider_event", "provider": "tts", "status": "speaking"},
+            {"type": "provider_event", "provider": "tts", "status": "failure", "failure_id": "tts_failure"},
+        ],
         "expected": {"active_failure": "tts_failure", "audio_state": "idle", "module_health.metis_audio": "tts_failure"},
     },
     "vault_failure_visible": {
