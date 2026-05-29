@@ -7,6 +7,8 @@ Last phase updated: `0A + 0S`
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
+Current Phase 0S UI estimate: `72%` functional for simulation review. Core state/API/scenario panels work, and the virtual radio can emit canonical events. Remaining UI work includes persistence/export controls, bridge replay controls, richer scenario summaries, and provider failure tuning.
+
 ## Phase Commit Checklist
 
 Before committing any phase:
@@ -148,6 +150,35 @@ Before committing any phase:
 | `authority_led.priority` | Numeric precedence for renderer comparison. |
 | `visualizer.mode` | `active` or `muted`; output mute does not hide listening/logging. |
 | `visualizer.privacy` | Mic/camera hardware cutoff values. |
+
+## Dashboard DOM IDs
+
+| ID | Current Phase | Purpose |
+|---|---|---|
+| `score` | 0S | Readiness score display. |
+| `domain` | 0S | Readiness domain display. |
+| `readiness` | 0S | Readiness JSON panel. |
+| `activityDot` | 0S | Diagnostic activity LED dot. |
+| `authorityDot` | 0S | Diagnostic authority LED dot. |
+| `state` | 0S | Canonical state JSON panel. |
+| `adapters` | 0S | Adapter registry JSON panel. |
+| `scenarios` | 0S | Scenario result JSON panel. |
+| `eventLog` | 0S | Event log JSON panel. |
+| `radioActivityLed` | 0S | Virtual tuning-window activity LED. |
+| `radioAuthorityLed` | 0S | Virtual tuning-window authority LED. |
+| `radioMeter` | 0S | Virtual visualizer bars. |
+| `volumeKnob` | 0S | Virtual top/volume knob. |
+| `depthKnob` | 0S | Virtual middle/depth knob. |
+| `initiativeKnob` | 0S | Virtual large tuning/initiative knob. |
+| `volumeRange` | 0S | Emits `control_change:volume`. |
+| `depthRange` | 0S | Emits `control_change:conversation_depth`. |
+| `initiativeRange` | 0S | Emits `control_change:initiative`. |
+| `radioPower` | 0S | Virtual PWR readout. |
+| `radioAudio` | 0S | Virtual audio-state readout. |
+| `radioMode` | 0S | Virtual human/agent and initiative readout. |
+| `radioAuthority` | 0S | Virtual authority/source readout. |
+| `radioMic` | 0S | Virtual mic cutoff readout. |
+| `radioCamera` | 0S | Virtual camera cutoff readout. |
 
 ## API Routes
 

@@ -12,7 +12,9 @@ Phase scope: `0A + 0S`
 
 Status: initial simulation-first skeleton implemented.
 
-Latest patch: TTS failure handling now forces simulated speech back to `idle` if the failure arrives while `audio_state` is `speaking`.
+Latest patch: the dashboard now includes a lightweight virtual radio view whose knobs and switches emit the same mock Brain events as the future bridge. TTS failure handling also forces simulated speech back to `idle` if the failure arrives while `audio_state` is `speaking`.
+
+Functioning UI estimate: about `72%` for the Phase 0S simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, and now a virtual radio control surface. Remaining UI work is mostly persistence/export controls, richer scenario result summaries, bridge replay controls, and deeper provider failure controls.
 
 Implemented:
 
@@ -26,6 +28,7 @@ Implemented:
 - Adapter base interface with health, capability, and schema-version checks.
 - FastAPI mock Brain with the v0.5 Phase 0S endpoint set.
 - Static dashboard for canonical state, LEDs, adapter health, readiness, scenario results, and event log.
+- Virtual radio view for volume, depth, initiative, PWR, LOUD, AFC, AM/FM, mic cutoff, camera cutoff, LEDs, visualizer, and speaker grille placement.
 
 See [docs/project_variable_map.md](docs/project_variable_map.md) for the current and future build variable map.
 
@@ -75,7 +78,7 @@ http://127.0.0.1:8787/
 Last verified:
 
 ```text
-14 passed under Python 3.11
+15 passed under Python 3.11
 ```
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.

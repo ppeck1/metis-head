@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -148,3 +149,15 @@ def test_mock_brain_endpoints_accept_bridge_events_and_run_scenarios() -> None:
     failure_response = client.post("/metis/failures/stt_failure/trigger", json={})
     assert failure_response.status_code == 200
     assert failure_response.json()["state"]["active_failure"] == "stt_failure"
+
+
+def test_dashboard_contains_virtual_radio_controls() -> None:
+    dashboard = Path("metis_head/static/dashboard.html").read_text(encoding="utf-8")
+    assert "Virtual Radio" in dashboard
+    assert "volumeRange" in dashboard
+    assert "depthRange" in dashboard
+    assert "initiativeRange" in dashboard
+    assert "radioActivityLed" in dashboard
+    assert "radioAuthorityLed" in dashboard
+    assert "toggleMic" in dashboard
+    assert "toggleCamera" in dashboard

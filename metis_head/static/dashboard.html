@@ -36,6 +36,7 @@
       min-width: 0;
     }
     h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: 0; }
+    h3 { font-size: 13px; margin: 0; letter-spacing: 0; }
     pre {
       white-space: pre-wrap;
       overflow: auto;
@@ -56,6 +57,7 @@
     .span-3 { grid-column: span 3; }
     .span-4 { grid-column: span 4; }
     .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
     .span-7 { grid-column: span 7; }
     .span-12 { grid-column: span 12; }
     .metric { font-size: 32px; font-weight: 700; }
@@ -64,9 +66,141 @@
     .led { display: grid; gap: 8px; justify-items: center; }
     .dot { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #7b8795; }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    .radio-shell {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.2fr);
+      gap: 18px;
+      border: 1px solid #8c755d;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6d5541, #92755b 55%, #574535);
+      padding: 16px;
+      color: #f8f5ef;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.12);
+    }
+    .radio-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+    .radio-window {
+      border: 1px solid rgba(255,255,255,0.36);
+      border-radius: 6px;
+      min-height: 126px;
+      background: #19202a;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 16px 1fr 16px;
+      gap: 12px;
+      align-items: stretch;
+    }
+    .radio-status {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.28);
+      min-height: 104px;
+    }
+    .radio-meter {
+      display: grid;
+      grid-template-rows: repeat(9, 1fr);
+      gap: 4px;
+      align-content: stretch;
+    }
+    .meter-bar {
+      border-radius: 4px;
+      background: rgba(255,255,255,0.16);
+    }
+    .meter-bar.active {
+      background: #46b6c9;
+    }
+    .radio-speaker {
+      min-height: 160px;
+      border-radius: 8px;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.16) 0 4px, transparent 4px 12px),
+        #2b2725;
+      border: 1px solid rgba(255,255,255,0.24);
+      position: relative;
+    }
+    .radio-speaker::after {
+      content: "";
+      position: absolute;
+      inset: 28px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.22);
+      background: radial-gradient(circle, rgba(255,255,255,0.10), rgba(0,0,0,0.16));
+    }
+    .radio-controls {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(82px, 1fr));
+      gap: 12px;
+      align-items: start;
+    }
+    .knob-control {
+      display: grid;
+      gap: 8px;
+      justify-items: center;
+    }
+    .knob {
+      width: 64px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: radial-gradient(circle at 38% 34%, #e3ded4, #8f918d 55%, #373a3a);
+      border: 1px solid rgba(255,255,255,0.5);
+      position: relative;
+      transform: rotate(var(--turn, 0deg));
+    }
+    .knob.large {
+      width: 86px;
+    }
+    .knob::after {
+      content: "";
+      position: absolute;
+      top: 8px;
+      left: calc(50% - 2px);
+      width: 4px;
+      height: 19px;
+      border-radius: 3px;
+      background: #22282c;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: #2f6fbe;
+    }
+    .radio-switches {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .radio-switches button {
+      min-height: 38px;
+      color: #1d2430;
+      background: #f6f3ed;
+      overflow-wrap: anywhere;
+    }
+    .radio-readouts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      color: #1d2430;
+    }
+    .readout {
+      background: rgba(255,255,255,0.88);
+      border-radius: 6px;
+      padding: 8px;
+      min-height: 44px;
+    }
+    .readout strong {
+      display: block;
+      font-size: 12px;
+    }
+    .readout span {
+      font-size: 12px;
+      color: #384456;
+    }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
-      .span-3, .span-4, .span-5, .span-7, .span-12 { grid-column: span 1; }
+      .span-3, .span-4, .span-5, .span-6, .span-7, .span-12 { grid-column: span 1; }
+      .radio-shell { grid-template-columns: 1fr; }
+      .radio-controls, .radio-switches, .radio-readouts { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -83,6 +217,54 @@
     </div>
   </header>
   <main>
+    <section class="span-12">
+      <h2>Virtual Radio</h2>
+      <div class="radio-shell">
+        <div class="radio-panel">
+          <div class="radio-window">
+            <div id="radioActivityLed" class="radio-status"></div>
+            <div id="radioMeter" class="radio-meter"></div>
+            <div id="radioAuthorityLed" class="radio-status"></div>
+          </div>
+          <div class="radio-speaker"></div>
+        </div>
+        <div class="radio-panel">
+          <div class="radio-controls">
+            <div class="knob-control">
+              <h3>Volume</h3>
+              <div id="volumeKnob" class="knob"></div>
+              <input id="volumeRange" type="range" min="0" max="100" value="60" oninput="setControl('volume', this.value)">
+            </div>
+            <div class="knob-control">
+              <h3>Depth</h3>
+              <div id="depthKnob" class="knob"></div>
+              <input id="depthRange" type="range" min="0" max="100" value="50" oninput="setControl('conversation_depth', this.value)">
+            </div>
+            <div class="knob-control">
+              <h3>Initiative</h3>
+              <div id="initiativeKnob" class="knob large"></div>
+              <input id="initiativeRange" type="range" min="0" max="100" value="50" oninput="setControl('initiative', this.value)">
+            </div>
+          </div>
+          <div class="radio-switches">
+            <button onclick="togglePower()">PWR</button>
+            <button onclick="toggleOutput()">LOUD</button>
+            <button onclick="toggleAfc()">AFC</button>
+            <button onclick="toggleMode()">AM/FM</button>
+            <button onclick="toggleMic()">Mic Cutoff</button>
+            <button onclick="toggleCamera()">Camera Cutoff</button>
+          </div>
+          <div class="radio-readouts">
+            <div class="readout"><strong>Power</strong><span id="radioPower">--</span></div>
+            <div class="readout"><strong>Audio</strong><span id="radioAudio">--</span></div>
+            <div class="readout"><strong>Mode</strong><span id="radioMode">--</span></div>
+            <div class="readout"><strong>Authority</strong><span id="radioAuthority">--</span></div>
+            <div class="readout"><strong>Mic</strong><span id="radioMic">--</span></div>
+            <div class="readout"><strong>Camera</strong><span id="radioCamera">--</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
     <section class="span-3">
       <h2>Readiness</h2>
       <div class="metric" id="score">--</div>
@@ -115,6 +297,9 @@
     </section>
   </main>
   <script>
+    let currentState = null;
+    let currentLeds = null;
+
     function colorFor(name) {
       return {
         red: '#d63b3b',
@@ -126,17 +311,75 @@
         dim_white: '#c7cbd1'
       }[name] || '#d7dce3';
     }
+    function knobTurn(value) {
+      return `${Math.round((Number(value) - 0.5) * 270)}deg`;
+    }
+    function setKnob(id, value) {
+      document.getElementById(id).style.setProperty('--turn', knobTurn(value));
+    }
+    function setRadioText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
     async function postEvent(event) {
       await fetch('/metis/event', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(event)});
       await refresh();
+    }
+    async function setControl(control, rawValue) {
+      await postEvent({type: 'control_change', control, value: Number(rawValue) / 100});
+    }
+    async function togglePower() {
+      const next = currentState.power_state === 'awake' ? 'standby' : 'awake';
+      await postEvent({type: 'button_event', button: 'pwr', state: next});
+    }
+    async function toggleOutput() {
+      await postEvent({type: 'button_event', button: 'loud', state: currentState.output_muted ? 'on' : 'off'});
+    }
+    async function toggleAfc() {
+      await postEvent({type: 'button_event', button: 'afc', state: !currentState.source_grounding_enabled});
+    }
+    async function toggleMode() {
+      await postEvent({type: 'button_event', button: 'am_fm', state: currentState.interaction_mode === 'agent' ? 'am' : 'fm'});
+    }
+    async function toggleMic() {
+      await postEvent({type: 'hardware_privacy', device: 'mic', enabled: !currentState.mic_hardware_enabled});
+    }
+    async function toggleCamera() {
+      await postEvent({type: 'hardware_privacy', device: 'camera', enabled: !currentState.camera_hardware_enabled});
     }
     async function runAll() {
       const result = await fetch('/metis/scenario/run', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).then(r => r.json());
       document.getElementById('scenarios').textContent = JSON.stringify(result, null, 2);
       await refresh();
     }
+    function updateRadio(state, leds) {
+      setKnob('volumeKnob', state.volume_level);
+      setKnob('depthKnob', state.conversation_depth_level);
+      setKnob('initiativeKnob', state.initiative_level);
+      document.getElementById('volumeRange').value = Math.round(state.volume_level * 100);
+      document.getElementById('depthRange').value = Math.round(state.conversation_depth_level * 100);
+      document.getElementById('initiativeRange').value = Math.round(state.initiative_level * 100);
+      document.getElementById('radioActivityLed').style.background = colorFor(leds.activity_led.color);
+      document.getElementById('radioAuthorityLed').style.background = colorFor(leds.authority_led.color);
+      setRadioText('radioPower', state.power_state);
+      setRadioText('radioAudio', state.audio_state);
+      setRadioText('radioMode', `${state.interaction_mode} / ${state.initiative_bucket}`);
+      setRadioText('radioAuthority', `${state.authority_state} / ${state.source_state}`);
+      setRadioText('radioMic', state.mic_hardware_enabled ? 'enabled' : 'cutoff');
+      setRadioText('radioCamera', state.camera_hardware_enabled ? 'enabled' : 'cutoff');
+
+      const meter = document.getElementById('radioMeter');
+      meter.innerHTML = '';
+      const activeBars = Math.max(1, Math.round((state.volume_level + state.initiative_level) * 4.5));
+      for (let index = 9; index >= 1; index -= 1) {
+        const bar = document.createElement('div');
+        bar.className = index <= activeBars ? 'meter-bar active' : 'meter-bar';
+        meter.appendChild(bar);
+      }
+    }
     async function refresh() {
       const data = await fetch('/metis/state').then(r => r.json());
+      currentState = data.state;
+      currentLeds = data.leds;
       document.getElementById('score').textContent = data.readiness.score + '%';
       document.getElementById('domain').textContent = data.readiness.readiness_domain;
       document.getElementById('readiness').textContent = JSON.stringify(data.readiness, null, 2);
@@ -148,6 +391,7 @@
       document.getElementById('authorityDot').style.background = colorFor(data.leds.authority_led.color);
       document.getElementById('activityText').textContent = data.leds.activity_led.state;
       document.getElementById('authorityText').textContent = data.leds.authority_led.state;
+      updateRadio(data.state, data.leds);
       const existing = await fetch('/metis/scenario/results').then(r => r.json());
       document.getElementById('scenarios').textContent = JSON.stringify(existing, null, 2);
     }
