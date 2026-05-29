@@ -10,7 +10,28 @@ token).
 
 ## Current Phase
 
-Phase scope: `0B` — BOH read-only retrieval bridge (builds on `0A + 0S + 0R virtual chat`).
+Phase scope: `0C` — BOH background link manager (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge`).
+
+Status: a background, read-only poller maintains lightweight awareness of the BOH link
+(connected/degraded/disconnected/auth_failed) and surfaces it on the dashboard and via
+`GET /metis/boh/status`, without copying the BOH corpus. Phase 0B retrieval behavior is
+unchanged; the link manager is opt-in via `METIS_BOH_BACKGROUND_ENABLED`.
+
+Phase 0C implemented:
+
+- `metis_head/boh_link.py`: env/option config, a daemon-thread poller, a pure
+  `probe_boh_once()` cycle (health + retrieve/status + a `limit=1` retrieve probe), link-state
+  transition detection, and token-free status serialization.
+- FastAPI lifespan starts the poller only when `METIS_BOH_BACKGROUND_ENABLED=true`; otherwise the
+  link state stays `disabled`.
+- `GET /metis/boh/status` exposes the safe link state (no token, no operator token, no Authorization,
+  error strings scrubbed). Dashboard shows a BOH Library badge, state, last checked/connected, probe
+  count, last error, and transition messages.
+- When the background link reports `auth_failed`, `/metis/chat` skips the per-message live retrieval
+  and labels the answer `degraded` instead of repeatedly hammering BOH.
+- Boundary: Metis only reads from BOH (`/api/health`, `/api/retrieve/status`, `/api/retrieve`), never
+  mutates it, never holds or sends BOH's operator token, and never copies/mirrors the BOH corpus —
+  BOH remains the source of truth for library/index/chunks/citations.
 
 Status: governed virtual chat can retrieve read-only context packs from a running BOH
 instance when source grounding (AFC) is on; otherwise behavior is unchanged.
@@ -132,10 +153,29 @@ BOH, and never sends BOH's operator token. If BOH is unreachable, the answer is 
 Tools, Atlas, hardware, mic, camera, and autonomous execution remain disabled. Agent Mode chat
 can queue proposals only and never mutates BOH.
 
+### Background Link Manager (Phase 0C)
+
+The background link manager is opt-in and read-only. When `METIS_BOH_BACKGROUND_ENABLED=true`, a
+daemon-thread poller maintains lightweight awareness of the BOH link and exposes it via
+`GET /metis/boh/status` and the dashboard's BOH Library panel.
+
+```powershell
+$env:METIS_BOH_BACKGROUND_ENABLED="true"
+$env:METIS_BOH_POLL_SECONDS="15"            # clamped 5-3600; auth_failed backs off to >= 60s
+$env:METIS_BOH_PROBE_QUERY="__metis_connection_probe__"
+```
+
+It reuses `METIS_BOH_BASE_URL` / `METIS_BOH_RETRIEVAL_TOKEN` / `METIS_BOH_RETRIEVAL_MODE` /
+`METIS_BOH_LIMIT`. It polls `/api/health`, `/api/retrieve/status`, and a `limit=1` `/api/retrieve`
+probe; link states are `disabled`, `connecting`, `connected`, `degraded`, `disconnected`,
+`auth_failed`. The status response never includes any token, and the corpus is never copied into
+Metis — BOH remains the source of truth.
+
 ## API
 
 - `GET /metis/state`
 - `GET /metis/export`
+- `GET /metis/boh/status`
 - `GET /metis/llm/options`
 - `POST /metis/event`
 - `POST /metis/chat`
@@ -157,14 +197,14 @@ can queue proposals only and never mutates BOH.
 Last verified:
 
 ```text
-36 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests)
+48 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests and 12 Phase 0C link-manager tests)
 ```
 
-Phase 0B tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json`), so no running
-BOH instance is required to verify the suite.
+Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
+`metis_head.boh_link._request`), so no running BOH instance is required to verify the suite.
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.
 
 ## Boundaries
 
-Phase 0A/0S/0R does not implement real hardware, microphone, camera, Project Atlas integration, external tools, or autonomous execution. As of Phase 0B the only live external integration is the read-only BOH retrieval bridge (`/api/retrieve`); it is opt-in via `METIS_BOH_ENABLED`, never mutates BOH, and never holds BOH's operator token. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R does not implement real hardware, microphone, camera, Project Atlas integration, external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Other reference repositories remain pattern donors only.

@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-from .boh_retrieval import boh_config_from_env, render_context, retrieve_boh_context
+from .boh_link import (
+    LINK_AUTH_FAILED,
+    get_link_state,
+    start_background_link,
+    stop_background_link,
+)
+from .boh_retrieval import BOHRetrievalResult, boh_config_from_env, render_context, retrieve_boh_context
 from .bridge import HARDWARE_PARITY_MANIFEST
 from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
@@ -17,7 +24,16 @@ from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
 
 
-app = FastAPI(title="Metis Head Mock Brain", version="0.0.1")
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    start_background_link()
+    try:
+        yield
+    finally:
+        stop_background_link()
+
+
+app = FastAPI(title="Metis Head Mock Brain", version="0.0.1", lifespan=_lifespan)
 STATE = baseline_state()
 SCENARIO_RESULTS: list[dict[str, Any]] = []
 
@@ -25,6 +41,11 @@ SCENARIO_RESULTS: list[dict[str, Any]] = []
 @app.get("/")
 def dashboard() -> FileResponse:
     return FileResponse(Path(__file__).parent / "static" / "dashboard.html")
+
+
+@app.get("/metis/boh/status")
+def boh_status() -> dict[str, Any]:
+    return get_link_state().to_dict()
 
 
 @app.get("/metis/state")
@@ -107,7 +128,22 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     retrieval = None
     retrieval_context = None
     if STATE.get("source_grounding_enabled"):
-        retrieval = retrieve_boh_context(boh_config_from_env(options=options), user_message)
+        config = boh_config_from_env(options=options)
+        link = get_link_state()
+        if config.enabled and link.enabled and link.state == LINK_AUTH_FAILED:
+            # The background manager already established that BOH rejects our
+            # read-only token. Don't repeatedly hammer BOH per message; surface
+            # a visible degraded state instead of a silent failure.
+            retrieval = BOHRetrievalResult(
+                enabled=True,
+                attempted=False,
+                ok=False,
+                source_state="degraded",
+                mode=config.mode,
+                error="BOH background link reports auth_failed; check the read-only retrieval token.",
+            )
+        else:
+            retrieval = retrieve_boh_context(config, user_message)
         retrieval_context = render_context(retrieval)
 
     messages = governed_messages(user_message, STATE, STATE.get("chat_history", []), retrieval_context)
@@ -123,10 +159,8 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     assistant_message = result.text
     if not STATE.get("source_grounding_enabled"):
         source_state = STATE.get("source_state", "unsourced")
-    elif retrieval and retrieval.attempted and not retrieval.ok:
-        source_state = "degraded"
-    elif retrieval and retrieval.ok and retrieval.count > 0:
-        source_state = "sourced"
+    elif retrieval is not None:
+        source_state = retrieval.source_state
     else:
         source_state = "unsourced"
     if proposal_queued and not assistant_message.lower().startswith("proposal only"):

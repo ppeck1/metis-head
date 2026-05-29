@@ -257,6 +257,23 @@
       font-size: 12px;
       margin-bottom: 4px;
     }
+    .boh-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid #9aa7b8;
+      color: #1d2430;
+      background: #e7ebf0;
+    }
+    .boh-badge.connected { background: #d7f0e2; border-color: #2d9b67; color: #1c5e3f; }
+    .boh-badge.connecting { background: #dbe7f6; border-color: #2f6fbe; color: #214a80; }
+    .boh-badge.degraded { background: #f7eccf; border-color: #d89a22; color: #7a5710; }
+    .boh-badge.disconnected { background: #f6dada; border-color: #d63b3b; color: #7d1f1f; }
+    .boh-badge.auth_failed { background: #f6d6e2; border-color: #c2326a; color: #7a1540; }
+    .boh-badge.disabled { background: #e7ebf0; border-color: #9aa7b8; color: #536173; }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
       .span-3, .span-4, .span-5, .span-6, .span-7, .span-12 { grid-column: span 1; }
@@ -344,6 +361,22 @@
       <textarea id="chatInput" spellcheck="true" placeholder="Ask Metis a governed virtual-chat question"></textarea>
       <div id="chatStatus" class="status-line"></div>
     </section>
+    <section class="span-12">
+      <h2>BOH Library Link</h2>
+      <div class="tool-row">
+        <span id="bohBadge" class="boh-badge">disabled</span>
+        <button onclick="refreshBohStatus()">Refresh BOH Status</button>
+      </div>
+      <div class="radio-readouts">
+        <div class="readout"><strong>State</strong><span id="bohState">--</span></div>
+        <div class="readout"><strong>Base URL</strong><span id="bohBaseUrl">--</span></div>
+        <div class="readout"><strong>Last Checked</strong><span id="bohLastChecked">--</span></div>
+        <div class="readout"><strong>Last Connected</strong><span id="bohLastConnected">--</span></div>
+        <div class="readout"><strong>Probe Count</strong><span id="bohProbeCount">--</span></div>
+        <div class="readout"><strong>Last Error</strong><span id="bohLastError">--</span></div>
+      </div>
+      <div id="bohTransitions" class="status-line"></div>
+    </section>
     <section class="span-3">
       <h2>Readiness</h2>
       <div class="metric" id="score">--</div>
@@ -391,6 +424,45 @@
   <script>
     let currentState = null;
     let currentLeds = null;
+    let bohSeenTransitions = 0;
+
+    const BOH_TRANSITION_MESSAGES = {
+      connected: 'BOH library connected. Read-only retrieval available.',
+      degraded: 'BOH library degraded. Source grounding may be incomplete.',
+      disconnected: 'BOH library unavailable. Source grounding will degrade until reconnected.',
+      auth_failed: 'BOH library auth failed. Check the read-only retrieval token.'
+    };
+
+    function fmtTime(epoch) {
+      if (!epoch) return '--';
+      return new Date(epoch * 1000).toLocaleTimeString();
+    }
+    async function refreshBohStatus() {
+      let data;
+      try {
+        data = await fetch('/metis/boh/status').then(r => r.json());
+      } catch (error) {
+        document.getElementById('bohState').textContent = 'status unavailable';
+        return;
+      }
+      const badge = document.getElementById('bohBadge');
+      badge.textContent = data.state;
+      badge.className = `boh-badge ${data.state}`;
+      document.getElementById('bohState').textContent = data.enabled ? data.state : `${data.state} (background off)`;
+      document.getElementById('bohBaseUrl').textContent = data.base_url || '--';
+      document.getElementById('bohLastChecked').textContent = fmtTime(data.last_checked_at);
+      document.getElementById('bohLastConnected').textContent = fmtTime(data.last_connected_at);
+      document.getElementById('bohProbeCount').textContent = data.last_probe_count == null ? '--' : data.last_probe_count;
+      document.getElementById('bohLastError').textContent = data.last_error || '--';
+      const events = data.transition_events || [];
+      if (events.length > bohSeenTransitions) {
+        for (const event of events.slice(bohSeenTransitions)) {
+          const message = BOH_TRANSITION_MESSAGES[event.to] || `BOH library: ${event.from} -> ${event.to}.`;
+          document.getElementById('bohTransitions').textContent = message;
+        }
+      }
+      bohSeenTransitions = events.length;
+    }
 
     function colorFor(name) {
       return {
@@ -649,6 +721,8 @@
     }
     refresh();
     refreshLlmOptions();
+    refreshBohStatus();
+    setInterval(refreshBohStatus, 10000);
   </script>
 </body>
 </html>

@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0B` (BOH read-only retrieval bridge; builds on `0A + 0S + 0R virtual chat`)
+Last phase updated: `0C` (BOH background link manager; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -149,6 +149,27 @@ failing silently. BOH `gate_result`, warnings, citations, `do_not_treat_as_canon
 source spans are preserved in the chat response under `metadata.boh` / `retrieval`. Owner:
 `metis_head.boh_retrieval`.
 
+## BOH Background Link Manager Environment (Phase 0C)
+
+| Variable | Values | Default | Purpose |
+|---|---|---|---|
+| `METIS_BOH_BACKGROUND_ENABLED` | bool | `false` | Enables the background read-only link poller. When false the link state stays `disabled`. |
+| `METIS_BOH_POLL_SECONDS` | integer | `15` | Poll interval (clamped 5-3600). Auth-failed state backs off to at least 60s. |
+| `METIS_BOH_PROBE_QUERY` | string | `__metis_connection_probe__` | Query used for the tiny `limit=1` read-only liveness probe. |
+
+The manager also reuses `METIS_BOH_BASE_URL`, `METIS_BOH_RETRIEVAL_TOKEN`, `METIS_BOH_RETRIEVAL_MODE`,
+and `METIS_BOH_LIMIT` from the Phase 0B bridge. It polls `GET /api/health`, `GET /api/retrieve/status`,
+and a `limit=1` `POST /api/retrieve` probe; it never mutates BOH, never sends the operator token, and
+never copies the BOH corpus into Metis (BOH remains the source of truth for library/index/chunks/
+citations). Link state enum: `disabled`, `connecting`, `connected`, `degraded`, `disconnected`,
+`auth_failed`. Transition rules: health reachable + probe 200 -> `connected`; probe/health 401/403 ->
+`auth_failed`; health connection-refused/timeout -> `disconnected`; health reachable but 5xx or probe
+network error -> `degraded`. Transition events are recorded only on actual change (bounded to ~20).
+`GET /metis/boh/status` returns the safe serialized state (no token, no operator token, no Authorization,
+error strings scrubbed of the token). Chat: when the background link reports `auth_failed`, `/metis/chat`
+skips the per-message live retrieval and labels the answer `degraded` instead of repeatedly hammering BOH.
+Owner: `metis_head.boh_link`.
+
 ## LLM Provider Classes
 
 | Class | Current Phase | Purpose |
@@ -288,6 +309,7 @@ source spans are preserved in the chat response under `metadata.boh` / `retrieva
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
 | `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. When source grounding is on and BOH enabled (0B), retrieves read-only context first; response adds `source_state`, `metadata.boh`, and `retrieval`. |
+| `GET` | `/metis/boh/status` | `metis_head.brain` | Safe BOH background link state (0C): state enum, last checked/connected, last error (token-scrubbed), probe count, bounded transition events. Never exposes any token. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |
 | `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
