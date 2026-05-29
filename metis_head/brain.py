@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+from .boh_retrieval import boh_config_from_env, render_context, retrieve_boh_context
 from .bridge import HARDWARE_PARITY_MANIFEST
 from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
@@ -103,7 +104,13 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         )
         proposal_queued = True
 
-    messages = governed_messages(user_message, STATE, STATE.get("chat_history", []))
+    retrieval = None
+    retrieval_context = None
+    if STATE.get("source_grounding_enabled"):
+        retrieval = retrieve_boh_context(boh_config_from_env(options=options), user_message)
+        retrieval_context = render_context(retrieval)
+
+    messages = governed_messages(user_message, STATE, STATE.get("chat_history", []), retrieval_context)
     try:
         result = provider_from_config(options).generate(messages, STATE, options)
     except LLMProviderError as exc:
@@ -114,11 +121,29 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     assistant_message = result.text
-    source_state = "unsourced" if STATE.get("source_grounding_enabled") else STATE.get("source_state", "unsourced")
+    if not STATE.get("source_grounding_enabled"):
+        source_state = STATE.get("source_state", "unsourced")
+    elif retrieval and retrieval.attempted and not retrieval.ok:
+        source_state = "degraded"
+    elif retrieval and retrieval.ok and retrieval.count > 0:
+        source_state = "sourced"
+    else:
+        source_state = "unsourced"
     if proposal_queued and not assistant_message.lower().startswith("proposal only"):
         assistant_message = f"Proposal only: {assistant_message}"
-    if STATE.get("source_grounding_enabled") and "unsourced" not in assistant_message.lower():
-        assistant_message = f"{assistant_message}\n\nSource label: unsourced; retrieval is not enabled in Phase 0R."
+    if STATE.get("source_grounding_enabled"):
+        if source_state == "sourced" and "source label" not in assistant_message.lower():
+            assistant_message = (
+                f"{assistant_message}\n\nSource label: sourced; grounded on "
+                f"{retrieval.count} BOH context pack(s) via mode '{retrieval.mode}'."
+            )
+        elif source_state == "degraded":
+            assistant_message = (
+                f"{assistant_message}\n\nSource label: degraded; BOH retrieval was requested but "
+                f"unavailable ({retrieval.error}). Treat the above as unsourced."
+            )
+        elif source_state == "unsourced" and "unsourced" not in assistant_message.lower():
+            assistant_message = f"{assistant_message}\n\nSource label: unsourced; no adequate retrieved source was available."
     STATE = reduce_metis_event(
         STATE,
         {
@@ -131,6 +156,9 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "source_state": source_state,
         },
     )
+    metadata = dict(result.metadata)
+    if retrieval is not None:
+        metadata["boh"] = retrieval.to_metadata()
     return {
         "message": assistant_message,
         "provider": result.provider,
@@ -140,7 +168,8 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         "policy": policy.to_dict(),
         "state": STATE,
         "leds": resolve_leds(STATE),
-        "metadata": result.metadata,
+        "metadata": metadata,
+        "retrieval": retrieval.to_metadata() if retrieval is not None else None,
     }
 
 

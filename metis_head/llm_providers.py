@@ -186,7 +186,12 @@ def probe_llm_provider(config: dict[str, Any] | None = None, env: dict[str, str]
     return {"provider": provider, "configured": False, "reachable": False, "model": None, "error": f"unsupported provider: {provider}"}
 
 
-def governed_messages(user_message: str, state: dict[str, Any], history: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
+def governed_messages(
+    user_message: str,
+    state: dict[str, Any],
+    history: list[dict[str, str]] | None = None,
+    retrieval_context: str | None = None,
+) -> list[dict[str, str]]:
     history = history or []
     system = (
         "You are Metis Head's governed virtual chat router. "
@@ -198,8 +203,13 @@ def governed_messages(user_message: str, state: dict[str, Any], history: list[di
     if state.get("interaction_mode") == "agent":
         system += "In Agent Mode, provide proposals only and never claim execution. "
     if state.get("source_grounding_enabled"):
-        system += "Retrieval is unavailable in Phase 0R, so label unsupported claims as unsourced. "
+        if retrieval_context:
+            system += "Source grounding is on; use the provided governed retrieval context and cite it. "
+        else:
+            system += "Source grounding is on, but no adequate retrieved source is available, so label unsupported claims as unsourced. "
     messages = [{"role": "system", "content": system}]
+    if retrieval_context:
+        messages.append({"role": "system", "content": retrieval_context})
     messages.extend(_clean_history(history))
     messages.append({"role": "user", "content": user_message})
     return messages

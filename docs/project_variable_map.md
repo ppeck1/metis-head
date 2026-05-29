@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0A + 0S + 0R virtual chat`
+Last phase updated: `0B` (BOH read-only retrieval bridge; builds on `0A + 0S + 0R virtual chat`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -56,7 +56,7 @@ Before committing any phase:
 | `logging_state` | enum | 0A | Current session logging display state. |
 | `vision_state` | enum | 0A | `disabled`, `idle`, `capture_blocked`. |
 | `source_grounding_enabled` | boolean | 0A | AFC/source grounding control state. |
-| `source_state` | enum | 0A | `sourced`, `inferred`, `unsourced`, `stale`, `conflicted`, `blocked`. |
+| `source_state` | enum | 0A (`degraded` added 0B) | `sourced`, `inferred`, `unsourced`, `stale`, `conflicted`, `blocked`, `degraded`. `degraded` = source grounding requested but BOH unreachable. |
 | `active_failure` | nullable string | 0A | Current visible failure ID. |
 | `pending_approval_count` | integer | 0A | Governed action or memory proposals awaiting review. |
 | `memory_proposal_count` | integer | 0A | Memory proposals awaiting review. |
@@ -130,6 +130,24 @@ Before committing any phase:
 | `METIS_OLLAMA_MODEL` | model name | none | Required when `METIS_LLM_PROVIDER=ollama`. |
 | `OPENAI_API_KEY` | secret | none | Required when `METIS_LLM_PROVIDER=openai`. |
 | `METIS_OPENAI_MODEL` | model name | `gpt-4o-mini` | OpenAI chat model. |
+
+## BOH Retrieval Bridge Environment (Phase 0B)
+
+| Variable | Values | Default | Purpose |
+|---|---|---|---|
+| `METIS_BOH_ENABLED` | bool | `false` | Enables the read-only BOH retrieval bridge. |
+| `METIS_BOH_BASE_URL` | URL | `http://127.0.0.1:8000` | BOH instance base URL. |
+| `METIS_BOH_RETRIEVAL_TOKEN` | secret | none | Sent as `X-BOH-Retrieval-Token`. Read-only retrieval token only; the BOH operator token is never held or sent. |
+| `METIS_BOH_RETRIEVAL_MODE` | `exploration`, `strict_answer`, `canon_review`, `audit_provenance`, `low_b_worker_context` | `exploration` | BOH retrieval mode. |
+| `METIS_BOH_LIMIT` | integer | `5` | Max context packs requested per retrieval (clamped 1-50). |
+
+Each variable can be overridden per chat request via `options.boh` (`enabled`, `base_url`,
+`token`, `mode`, `limit`). Boundary: Metis calls only `POST {base_url}/api/retrieve` (read-only),
+never mutates BOH, and never sends BOH's operator token. When source grounding is on and BOH is
+unreachable, `source_state` becomes `degraded` and the answer is labeled unsourced rather than
+failing silently. BOH `gate_result`, warnings, citations, `do_not_treat_as_canonical` flags, and
+source spans are preserved in the chat response under `metadata.boh` / `retrieval`. Owner:
+`metis_head.boh_retrieval`.
 
 ## LLM Provider Classes
 
@@ -269,7 +287,7 @@ Before committing any phase:
 | `GET` | `/` | `metis_head.brain` | Static dashboard. |
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
-| `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. |
+| `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. When source grounding is on and BOH enabled (0B), retrieves read-only context first; response adds `source_state`, `metadata.boh`, and `retrieval`. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |
 | `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
@@ -323,5 +341,5 @@ Before committing any phase:
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
 | External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | No execution without governance approval. |
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
-| BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Future adapter only, no internal imports. |
+| BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B (`metis_head.boh_retrieval`); deeper adapter wiring still future. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |

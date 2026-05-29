@@ -2,15 +2,31 @@
 
 Simulation-first skeleton for the v0.5 Metis Head buildspec.
 
-This repo intentionally contains no real hardware, microphone, camera, BOH, Atlas,
-tool, or provider integrations. External systems are represented only by versioned
-adapters and deterministic mock providers.
+This repo intentionally contains no real hardware, microphone, camera, Atlas, or
+tool integrations. External systems are represented by versioned adapters and
+deterministic mock providers. As of Phase 0B the one live external integration is a
+read-only BOH retrieval bridge (opt-in, never mutates BOH, never holds BOH's operator
+token).
 
 ## Current Phase
 
-Phase scope: `0A + 0S + 0R virtual chat`
+Phase scope: `0B` — BOH read-only retrieval bridge (builds on `0A + 0S + 0R virtual chat`).
 
-Status: initial simulation-first skeleton implemented with a governed Phase 0R LLM router.
+Status: governed virtual chat can retrieve read-only context packs from a running BOH
+instance when source grounding (AFC) is on; otherwise behavior is unchanged.
+
+Phase 0B implemented:
+
+- `metis_head/boh_retrieval.py`: env/option config and a read-only client that calls
+  `POST {METIS_BOH_BASE_URL}/api/retrieve` with the `X-BOH-Retrieval-Token` header.
+- `/metis/chat` retrieves before LLM generation when `source_grounding_enabled` and BOH is
+  enabled, injects context packs into the governed prompt, and labels the answer
+  `sourced` / `unsourced` / `degraded`.
+- BOH `gate_result`, warnings, citations, `do_not_treat_as_canonical` flags, and source spans
+  are preserved in the chat response (`metadata.boh` / `retrieval`).
+- BOH unreachable yields a visible `degraded` source state instead of failing silently.
+- Boundary: Metis only reads from BOH (`/api/retrieve`), never mutates it, and never holds or
+  sends BOH's operator token. With BOH disabled, chat behavior is unchanged.
 
 Latest patch: the UI test harness is satisfactory for now, so focus has shifted back to backend readiness. Agent Mode and memory review now create structured proposal records in canonical state instead of only incrementing counters.
 
@@ -95,7 +111,26 @@ $env:OPENAI_API_KEY="..."
 $env:METIS_OPENAI_MODEL="gpt-4o-mini"
 ```
 
-Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or autonomous execution. Agent Mode chat can queue proposals only.
+## BOH Retrieval Bridge Config (Phase 0B)
+
+The BOH bridge is opt-in and read-only. When `METIS_BOH_ENABLED=true` and source grounding
+(AFC) is on, `/metis/chat` retrieves governed context from BOH before LLM generation.
+
+```powershell
+$env:METIS_BOH_ENABLED="true"
+$env:METIS_BOH_BASE_URL="http://127.0.0.1:8000"
+$env:METIS_BOH_RETRIEVAL_TOKEN="..."   # read-only retrieval token only; never the operator token
+$env:METIS_BOH_RETRIEVAL_MODE="exploration"   # or strict_answer, canon_review, audit_provenance, low_b_worker_context
+$env:METIS_BOH_LIMIT="5"
+```
+
+These can also be supplied per request via the chat `options.boh` object (UI override; does not
+change your shell environment). Metis calls only `POST {base_url}/api/retrieve`, never mutates
+BOH, and never sends BOH's operator token. If BOH is unreachable, the answer is labeled
+`degraded`/unsourced rather than failing silently.
+
+Tools, Atlas, hardware, mic, camera, and autonomous execution remain disabled. Agent Mode chat
+can queue proposals only and never mutates BOH.
 
 ## API
 
@@ -122,11 +157,14 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 Last verified:
 
 ```text
-28 passed under Python 3.11
+36 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests)
 ```
+
+Phase 0B tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json`), so no running
+BOH instance is required to verify the suite.
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.
 
 ## Boundaries
 
-Phase 0A/0S/0R does not implement real hardware, microphone, camera, BOH retrieval, Project Atlas integration, external tools, or autonomous execution. Reference repositories remain pattern donors only.
+Phase 0A/0S/0R does not implement real hardware, microphone, camera, Project Atlas integration, external tools, or autonomous execution. As of Phase 0B the only live external integration is the read-only BOH retrieval bridge (`/api/retrieve`); it is opt-in via `METIS_BOH_ENABLED`, never mutates BOH, and never holds BOH's operator token. Other reference repositories remain pattern donors only.
