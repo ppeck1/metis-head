@@ -132,6 +132,7 @@ def baseline_state(*, adapters_enabled: bool = False, timestamp: str = "2026-05-
         "pending_approval_count": 0,
         "memory_proposal_count": 0,
         "tool_queue_count": 0,
+        "approval_queue": [],
         "module_health": {
             "metis_head_bridge": "ok",
             "metis_core": "ok",

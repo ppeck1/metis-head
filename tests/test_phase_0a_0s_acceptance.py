@@ -71,6 +71,8 @@ def test_agent_mode_queues_external_action_and_does_not_execute() -> None:
     assert state["pending_approval_count"] == 1
     assert state["tool_queue_count"] == 1
     assert state["external_action_executed"] is False
+    assert state["approval_queue"][0]["action_class"] == "external_action"
+    assert state["approval_queue"][0]["execution_allowed"] is False
 
 
 def test_governance_block_overrides_leds() -> None:
@@ -118,6 +120,8 @@ def test_memory_proposal_requires_review() -> None:
     assert state["memory_proposal_count"] == 1
     assert state["pending_approval_count"] == 1
     assert state["memory_promoted"] is False
+    assert state["approval_queue"][0]["proposal_type"] == "memory"
+    assert state["approval_queue"][0]["status"] == "pending_review"
 
 
 def test_same_event_replay_produces_same_final_state() -> None:
@@ -216,6 +220,10 @@ def test_agent_mode_chat_queues_proposal_not_execution(monkeypatch) -> None:
     assert body["message"].startswith("Proposal only:")
     assert body["state"]["pending_approval_count"] == 1
     assert body["state"]["external_action_executed"] is False
+    proposal = body["state"]["approval_queue"][0]
+    assert proposal["proposal_type"] == "action"
+    assert proposal["status"] == "pending_review"
+    assert proposal["execution_allowed"] is False
 
 
 def test_source_grounded_chat_labels_unsourced_without_retrieval(monkeypatch) -> None:
@@ -300,6 +308,30 @@ def test_governance_classify_endpoint_returns_policy() -> None:
     assert body["policy_version"] == "metis_governance_policy.v0.1"
     assert body["policy"]["action_class"] == "external_action"
     assert body["policy"]["requires_approval"] is True
+
+
+def test_proposal_queue_endpoint_exposes_pending_records(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = TestClient(app)
+    client.post("/metis/state/reset")
+    client.post("/metis/event", json={"type": "button_event", "button": "am_fm", "state": "fm"})
+    client.post("/metis/chat", json={"message": "Send an email"})
+    response = client.get("/metis/proposals")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pending_approval_count"] == 1
+    assert body["proposals"][0]["action_class"] == "external_action"
+    assert body["proposals"][0]["proposal_id"].startswith("proposal_0001_")
+
+
+def test_proposal_ids_are_deterministic_on_replay() -> None:
+    events = [
+        {"type": "button_event", "button": "am_fm", "state": "fm"},
+        {"type": "user_intent", "intent": "send an email", "action_class": "external_action"},
+    ]
+    first = replay_events(baseline_state(), events)
+    second = replay_events(baseline_state(), events)
+    assert first["approval_queue"] == second["approval_queue"]
 
 
 def test_dashboard_contains_virtual_radio_controls() -> None:

@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from .governance import classify_intent
+from .proposals import build_proposal, pending_count
 from .schemas import FAILURE_TABLE, SUPPORTED_ADAPTER_SCHEMAS, validate_event
 
 
@@ -164,8 +165,16 @@ def _reduce_intent(state: dict[str, Any], event: dict[str, Any]) -> None:
     if action_class is None:
         action_class = policy["action_class"]
     if state.get("interaction_mode") == "agent" and action_class in {"external_action", "modify_local", "sensitive_action", "actuator_action"}:
-        state["pending_approval_count"] += 1
-        state["tool_queue_count"] += 1
+        proposal = build_proposal(
+            queue_index=len(state.setdefault("approval_queue", [])),
+            intent=intent,
+            action_class=action_class,
+            policy=policy,
+            proposal_type="action",
+        )
+        state["approval_queue"].append(proposal)
+        state["pending_approval_count"] = pending_count(state["approval_queue"])
+        state["tool_queue_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "action"])
         state["cognition_state"] = "awaiting_approval"
         state["authority_state"] = "awaiting_approval"
         state["external_action_executed"] = False
@@ -180,8 +189,21 @@ def _reduce_intent(state: dict[str, Any], event: dict[str, Any]) -> None:
 def _reduce_memory(state: dict[str, Any], event: dict[str, Any]) -> None:
     operation = event.get("operation")
     if operation == "propose":
-        state["memory_proposal_count"] += 1
-        state["pending_approval_count"] += 1
+        policy = {
+            "requires_approval": True,
+            "default_decision": "queue_for_review",
+            "reasons": ["memory proposal requires review"],
+        }
+        proposal = build_proposal(
+            queue_index=len(state.setdefault("approval_queue", [])),
+            intent=str(event.get("memory_id") or "memory proposal"),
+            action_class="propose_memory",
+            policy=policy,
+            proposal_type="memory",
+        )
+        state["approval_queue"].append(proposal)
+        state["memory_proposal_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "memory"])
+        state["pending_approval_count"] = pending_count(state["approval_queue"])
         state["authority_state"] = "awaiting_approval"
         state["memory_promoted"] = False
     elif operation == "delete":

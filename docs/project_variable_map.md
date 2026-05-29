@@ -30,6 +30,7 @@ Before committing any phase:
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
+| `PROPOSAL_SCHEMA_VERSION` | `metis_proposal.v0.1` | `metis_head.proposals` | Structured approval/memory proposal record version. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
 
 ## Canonical State Fields
@@ -60,6 +61,7 @@ Before committing any phase:
 | `pending_approval_count` | integer | 0A | Governed action or memory proposals awaiting review. |
 | `memory_proposal_count` | integer | 0A | Memory proposals awaiting review. |
 | `tool_queue_count` | integer | 0A | Tool/action proposals queued, not executed. |
+| `approval_queue` | array | 0R | Structured pending proposal records; no execution path in Phase 0R. |
 | `module_health` | object | 0A | High-level module status map. |
 | `input_adapters` | object | 0A | Versioned adapter registry. |
 | `event_log` | array | 0S | In-memory event log for replay/testing. |
@@ -149,6 +151,20 @@ Before committing any phase:
 | `classify_intent` | 0R | Deterministically maps intent text to an action policy. |
 | `should_queue_proposal` | 0R | Checks whether Agent Mode should queue a proposal instead of acting. |
 | `POLICY_VERSION` | 0R | Current governance policy schema/version label. |
+
+## Proposal Queue
+
+| Field | Current Phase | Purpose |
+|---|---|---|
+| `proposal_id` | 0R | Deterministic ID derived from queue index, action class, and intent. |
+| `proposal_type` | 0R | `action` or `memory`. |
+| `status` | 0R | `pending_review`; no approval/execution lifecycle yet. |
+| `intent` | 0R | Original user intent or memory proposal label. |
+| `action_class` | 0R | Governance action class. |
+| `requires_approval` | 0R | Whether the policy requires review/approval. |
+| `default_decision` | 0R | Policy default decision. |
+| `reasons` | 0R | Human-readable policy reasons. |
+| `execution_allowed` | 0R | Always `false` in this phase. |
 
 ## Module Health Keys
 
@@ -257,6 +273,7 @@ Before committing any phase:
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |
 | `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
+| `GET` | `/metis/proposals` | `metis_head.brain` | Return structured approval queue records. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
 | `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |

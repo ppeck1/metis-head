@@ -42,6 +42,11 @@ def export_state() -> dict[str, Any]:
     }
 
 
+@app.get("/metis/proposals")
+def proposals() -> dict[str, Any]:
+    return {"proposals": STATE.get("approval_queue", []), "pending_approval_count": STATE.get("pending_approval_count", 0)}
+
+
 @app.get("/metis/llm/options")
 def llm_options(base_url: str | None = None) -> dict[str, Any]:
     import os
