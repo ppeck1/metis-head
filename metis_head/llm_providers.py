@@ -35,15 +35,24 @@ class MockLLMProvider(BaseLLMProvider):
         detail = state.get("conversation_depth_bucket", "rationale")
         initiative = state.get("initiative_bucket", "helpful")
         mode = state.get("interaction_mode", "human")
-        grounding = "unsourced" if state.get("source_grounding_enabled") else "local"
+        has_retrieved_context = any(
+            message.get("role") == "system" and "retrieval context from boh" in str(message.get("content", "")).lower()
+            for message in messages
+        )
+        if not state.get("source_grounding_enabled"):
+            grounding = "local"
+        elif has_retrieved_context:
+            grounding = "sourced"
+        else:
+            grounding = "unsourced"
         lead = "Proposal only: " if mode == "agent" else ""
         text = f"{lead}Mock response to: {user_text}"
         if detail in {"rationale", "systems"}:
             text += f"\n\nRationale: using {detail} depth with {initiative} initiative."
         if detail == "systems":
             text += "\n\nSystems note: no tools, memory, hardware, or external actions were executed."
-        if grounding == "unsourced":
-            text += "\n\nSource label: unsourced; retrieval is not enabled in Phase 0R."
+        # The Metis brain owns the authoritative source label (sourced/unsourced/degraded);
+        # the provider must not emit its own, or it will contradict the real source_state.
         return LLMResult(
             text=text,
             provider=self.provider_id,

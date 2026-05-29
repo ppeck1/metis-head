@@ -147,7 +147,10 @@ def test_source_grounded_marks_sourced_with_preserved_metadata(monkeypatch) -> N
     body = response.json()
     assert body["source_state"] == "sourced"
     assert body["state"]["source_state"] == "sourced"
-    assert "sourced" in body["message"].lower()
+    message_lower = body["message"].lower()
+    # Must carry the authoritative sourced label and must NOT leak a stale unsourced label.
+    assert "source label: sourced" in message_lower
+    assert "unsourced" not in message_lower
     boh = body["metadata"]["boh"]
     assert boh["ok"] is True
     assert boh["count"] == 2
