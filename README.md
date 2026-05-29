@@ -65,12 +65,12 @@ Implemented:
 - Adapter base interface with health, capability, and schema-version checks.
 - FastAPI mock Brain with the v0.5 Phase 0S endpoint set.
 - Static dashboard for canonical state, LEDs, adapter health, readiness, scenario results, and event log.
-- Virtual radio view for volume, depth, initiative, PWR, LOUD, AFC, AM/FM, mic cutoff, camera cutoff, LEDs, visualizer, and speaker grille placement.
+- Virtual radio view rebuilt as a 3-zone instrument: an inert speaker grille, a thin vertical LED/visualizer status strip, and a right control stack (Volume + Depth dials, PWR/LOUD/AFC/AM-FM buttons, large Tuning/Initiative dial). Radio status readouts (power/audio/mode/authority) and mic/camera cutoff controls live in a separate Radio Status panel below.
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
-- Dashboard order: Virtual Radio, Virtual Chat, readiness/LED/adapter/state/scenario panels, export/replay, event log.
+- Dashboard order: Virtual Radio, Virtual Chat (Send attached to the composer; Enter sends, Shift+Enter newlines), Radio Status, BOH Library Link, readiness/LED/adapter/state/scenario panels, export/replay, event log.
 - LLM provider health probe for mock readiness, Ollama reachability/model availability, and OpenAI key configuration.
 - Deterministic governance classifier for observe/retrieve/draft/propose-memory/local-modify/external/sensitive/actuator intents.
 - Structured `approval_queue` records with deterministic proposal IDs, action class, reasons, review status, and `execution_allowed=false`.

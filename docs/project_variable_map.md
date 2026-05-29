@@ -9,7 +9,9 @@ scenario IDs, and future build placeholders reviewable before each phase commit.
 
 Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, and the dashboard can select locally available Ollama models. The UI testing environment is satisfactory for now; next work shifts toward backend/provider/governance readiness.
 
-Dashboard order: `Virtual Radio` -> `Virtual Chat` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
+Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
+
+Virtual Radio is a 3-zone instrument (`grid-template-columns: 68% 9% 23%`): an inert `radio-speaker` grille (visual only), a thin vertical `radio-strip` carrying the activity LED, authority LED, and vertical `radio-meter` visualizer, and a right `radio-controls` stack (Volume + Depth knobs, PWR/LOUD/AFC/AM-FM `radio-switches`, and the large Tuning/Initiative knob). Power/audio/mode/authority readouts and the mic/camera cutoff buttons were moved out of the radio face into the `Radio Status` panel. Virtual Chat's Send button is attached to the composer textarea (Enter sends, Shift+Enter inserts a newline, Send disables while generating); Clear Input is a secondary action. Control meanings are unchanged.
 
 ## Phase Commit Checklist
 
@@ -295,8 +297,10 @@ Owner: `metis_head.boh_link`.
 | `loadCurrentEvents` | 0S | Loads current `event_log` into replay input. |
 | `replayEvents` | 0S | Posts parsed JSON/JSONL events to `/metis/replay`. |
 | `resetState` | 0S | Posts to `/metis/state/reset`. |
-| `sendChat` | 0R | Posts chat input to `/metis/chat`. |
+| `sendChat` | 0R | Posts chat input to `/metis/chat`; disables the Send button while generating. |
+| `handleChatKeydown` | 0C | Enter sends the message; Shift+Enter inserts a newline in the composer. |
 | `clearChatInput` | 0R | Clears unsent chat input. |
+| `refreshBohStatus` | 0C | Polls `/metis/boh/status` for the BOH Library panel and surfaces link transitions. |
 | `refreshLlmOptions` | 0R | Refreshes provider defaults and Ollama model list. |
 | `handleProviderChange` | 0R | Enables/disables Ollama controls based on selected provider. |
 | `chatOptions` | 0R | Builds provider/model/base URL options for `/metis/chat`. |
