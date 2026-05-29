@@ -7,7 +7,7 @@ Last phase updated: `0A + 0S + 0R virtual chat`
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R UI estimate: `84%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, and virtual chat can call a governed LLM router. Remaining UI work includes bridge replay presets, richer scenario summaries, provider health controls, and chat transcript export polish.
+Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, and the dashboard can select locally available Ollama models. Remaining UI work includes bridge replay presets, richer scenario summaries, provider health controls, and chat transcript export polish.
 
 ## Phase Commit Checklist
 
@@ -135,6 +135,7 @@ Before committing any phase:
 | `OllamaLLMProvider` | 0R | Calls local Ollama `/api/chat`; no tools or retrieval. |
 | `OpenAILLMProvider` | 0R | Calls OpenAI Chat Completions; no tools or retrieval. |
 | `LLMProviderError` | 0R | Provider failure exception converted into visible `llm_failure`. |
+| `list_ollama_models` | 0R | Lists local Ollama models via `/api/tags` for dashboard selection. |
 
 ## Module Health Keys
 
@@ -212,6 +213,9 @@ Before committing any phase:
 | `chatLog` | 0R | Virtual chat transcript display. |
 | `chatInput` | 0R | Governed virtual chat input. |
 | `chatStatus` | 0R | Provider/proposal/source/failure status line. |
+| `chatProvider` | 0R | UI provider selector: `mock`, `ollama`, or `openai`. |
+| `ollamaBaseUrl` | 0R | UI override for local Ollama base URL. |
+| `ollamaModel` | 0R | UI model selector populated from Ollama `/api/tags`. |
 
 ## Dashboard Functions
 
@@ -225,6 +229,9 @@ Before committing any phase:
 | `resetState` | 0S | Posts to `/metis/state/reset`. |
 | `sendChat` | 0R | Posts chat input to `/metis/chat`. |
 | `clearChatInput` | 0R | Clears unsent chat input. |
+| `refreshLlmOptions` | 0R | Refreshes provider defaults and Ollama model list. |
+| `handleProviderChange` | 0R | Enables/disables Ollama controls based on selected provider. |
+| `chatOptions` | 0R | Builds provider/model/base URL options for `/metis/chat`. |
 
 ## API Routes
 
@@ -234,6 +241,7 @@ Before committing any phase:
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
 | `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. |
+| `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
 | `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |

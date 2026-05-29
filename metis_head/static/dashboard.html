@@ -213,6 +213,16 @@
       font-family: Consolas, ui-monospace, monospace;
       font-size: 12px;
     }
+    select,
+    input[type="text"] {
+      box-sizing: border-box;
+      min-height: 36px;
+      border: 1px solid #b7c0cc;
+      border-radius: 6px;
+      padding: 7px 9px;
+      background: #ffffff;
+      color: #1d2430;
+    }
     .status-line {
       min-height: 18px;
       color: #536173;
@@ -358,6 +368,14 @@
     <section class="span-12">
       <h2>Virtual Chat</h2>
       <div class="tool-row">
+        <select id="chatProvider" onchange="handleProviderChange()">
+          <option value="mock">Mock</option>
+          <option value="ollama">Ollama</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <input id="ollamaBaseUrl" type="text" value="http://127.0.0.1:11434" aria-label="Ollama base URL">
+        <button onclick="refreshLlmOptions()">Refresh Ollama Models</button>
+        <select id="ollamaModel"></select>
         <button onclick="sendChat()">Send</button>
         <button onclick="clearChatInput()">Clear Input</button>
       </div>
@@ -477,6 +495,49 @@
       document.getElementById('replayStatus').textContent = 'Reset to baseline state.';
       await refresh();
     }
+    async function refreshLlmOptions() {
+      const status = document.getElementById('chatStatus');
+      status.textContent = 'Refreshing Ollama models...';
+      const baseUrl = document.getElementById('ollamaBaseUrl').value.trim() || 'http://127.0.0.1:11434';
+      const data = await fetch(`/metis/llm/options?base_url=${encodeURIComponent(baseUrl)}`).then(r => r.json());
+      document.getElementById('chatProvider').value = data.selected_provider || 'mock';
+      document.getElementById('ollamaBaseUrl').value = data.ollama_base_url || baseUrl;
+      const modelSelect = document.getElementById('ollamaModel');
+      modelSelect.innerHTML = '';
+      for (const model of data.ollama.models || []) {
+        const option = document.createElement('option');
+        option.value = model.name;
+        option.textContent = model.name;
+        modelSelect.appendChild(option);
+      }
+      if (data.ollama_model && ![...modelSelect.options].some(option => option.value === data.ollama_model)) {
+        const option = document.createElement('option');
+        option.value = data.ollama_model;
+        option.textContent = data.ollama_model;
+        modelSelect.appendChild(option);
+      }
+      if (data.ollama_model) {
+        modelSelect.value = data.ollama_model;
+      }
+      const count = (data.ollama.models || []).length;
+      status.textContent = data.ollama.available ? `Ollama available: ${count} model(s).` : `Ollama unavailable: ${data.ollama.error}`;
+      handleProviderChange();
+    }
+    function handleProviderChange() {
+      const provider = document.getElementById('chatProvider').value;
+      const ollamaOnly = provider === 'ollama';
+      document.getElementById('ollamaBaseUrl').disabled = !ollamaOnly;
+      document.getElementById('ollamaModel').disabled = !ollamaOnly;
+    }
+    function chatOptions() {
+      const provider = document.getElementById('chatProvider').value;
+      const options = {provider};
+      if (provider === 'ollama') {
+        options.base_url = document.getElementById('ollamaBaseUrl').value.trim() || 'http://127.0.0.1:11434';
+        options.model = document.getElementById('ollamaModel').value;
+      }
+      return options;
+    }
     async function sendChat() {
       const input = document.getElementById('chatInput');
       const message = input.value.trim();
@@ -489,7 +550,7 @@
         const response = await fetch('/metis/chat', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({message})
+          body: JSON.stringify({message, options: chatOptions()})
         });
         const result = await response.json();
         if (!response.ok) {
@@ -587,6 +648,7 @@
       document.getElementById('scenarios').textContent = JSON.stringify(existing, null, 2);
     }
     refresh();
+    refreshLlmOptions();
   </script>
 </body>
 </html>

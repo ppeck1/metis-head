@@ -102,18 +102,46 @@ class OpenAILLMProvider(BaseLLMProvider):
 
 def provider_from_env(env: dict[str, str] | None = None) -> BaseLLMProvider:
     env = env or os.environ
-    provider = env.get("METIS_LLM_PROVIDER", "mock").lower()
+    return provider_from_config({}, env)
+
+
+def provider_from_config(config: dict[str, Any] | None = None, env: dict[str, str] | None = None) -> BaseLLMProvider:
+    config = config or {}
+    env = env or os.environ
+    provider = str(config.get("provider") or env.get("METIS_LLM_PROVIDER", "mock")).lower()
     if provider == "mock":
         return MockLLMProvider()
     if provider == "ollama":
-        model = env.get("METIS_OLLAMA_MODEL")
+        model = config.get("model") or env.get("METIS_OLLAMA_MODEL")
         if not model:
             raise LLMProviderError("METIS_OLLAMA_MODEL is required for METIS_LLM_PROVIDER=ollama")
-        return OllamaLLMProvider(env.get("METIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434"), model)
+        base_url = config.get("base_url") or env.get("METIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        return OllamaLLMProvider(str(base_url), str(model))
     if provider == "openai":
-        model = env.get("METIS_OPENAI_MODEL", "gpt-4o-mini")
-        return OpenAILLMProvider(env.get("OPENAI_API_KEY", ""), model)
+        model = config.get("model") or env.get("METIS_OPENAI_MODEL", "gpt-4o-mini")
+        return OpenAILLMProvider(env.get("OPENAI_API_KEY", ""), str(model))
     raise LLMProviderError(f"unsupported METIS_LLM_PROVIDER: {provider}")
+
+
+def list_ollama_models(base_url: str) -> dict[str, Any]:
+    url = f"{base_url.rstrip('/')}/api/tags"
+    try:
+        response = _get_json(url)
+    except LLMProviderError as exc:
+        return {"available": False, "base_url": base_url, "models": [], "error": str(exc)}
+    models = []
+    for model in response.get("models", []):
+        name = model.get("name")
+        if isinstance(name, str):
+            models.append(
+                {
+                    "name": name,
+                    "modified_at": model.get("modified_at"),
+                    "size": model.get("size"),
+                    "details": model.get("details", {}),
+                }
+            )
+    return {"available": True, "base_url": base_url, "models": models, "error": None}
 
 
 def governed_messages(user_message: str, state: dict[str, Any], history: list[dict[str, str]] | None = None) -> list[dict[str, str]]:
@@ -158,6 +186,19 @@ def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> di
     req = request.Request(url, data=body, headers=all_headers, method="POST")
     try:
         with request.urlopen(req, timeout=45) as response:
+            data = response.read().decode("utf-8")
+    except error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise LLMProviderError(f"HTTP {exc.code}: {detail}") from exc
+    except OSError as exc:
+        raise LLMProviderError(str(exc)) from exc
+    return json.loads(data)
+
+
+def _get_json(url: str) -> dict[str, Any]:
+    req = request.Request(url, headers={"Content-Type": "application/json"}, method="GET")
+    try:
+        with request.urlopen(req, timeout=8) as response:
             data = response.read().decode("utf-8")
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")

@@ -12,9 +12,9 @@ Phase scope: `0A + 0S + 0R virtual chat`
 
 Status: initial simulation-first skeleton implemented with a governed Phase 0R LLM router.
 
-Latest patch: `/metis/chat` now routes governed virtual chat through `mock`, `ollama`, or `openai` providers. The dashboard includes export/replay controls, virtual radio controls, and virtual chat. TTS failure handling also forces simulated speech back to `idle` if the failure arrives while `audio_state` is `speaking`.
+Latest patch: `/metis/chat` now routes governed virtual chat through `mock`, `ollama`, or `openai` providers. The dashboard can refresh locally available Ollama models from `/api/tags` and select which model to use for chat. It also includes export/replay controls, virtual radio controls, and virtual chat.
 
-Functioning UI estimate: about `84%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, and governed virtual chat. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
+Functioning UI estimate: about `86%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, governed virtual chat, and Ollama model selection. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
 
 Implemented:
 
@@ -32,6 +32,7 @@ Implemented:
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
+- Ollama model selector that reads locally available models from the configured Ollama base URL.
 
 See [docs/project_variable_map.md](docs/project_variable_map.md) for the current and future build variable map.
 
@@ -80,6 +81,8 @@ $env:METIS_OLLAMA_BASE_URL="http://127.0.0.1:11434"
 $env:METIS_OLLAMA_MODEL="llama3.1"
 ```
 
+The dashboard can also select `Ollama` in the Virtual Chat panel, refresh models from the configured base URL, and send the selected model in the chat request. This is a UI override; it does not change your shell environment.
+
 OpenAI:
 
 ```powershell
@@ -94,6 +97,7 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 
 - `GET /metis/state`
 - `GET /metis/export`
+- `GET /metis/llm/options`
 - `POST /metis/event`
 - `POST /metis/chat`
 - `POST /metis/replay`
@@ -111,7 +115,7 @@ Phase 0R does not enable tools, retrieval, BOH, Atlas, hardware, mic, camera, or
 Last verified:
 
 ```text
-20 passed under Python 3.11
+21 passed under Python 3.11
 ```
 
 Known environment note: Python 3.13 is present on this machine but did not have `pytest` installed during Phase 0A/0S verification.

@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from metis_head.brain import app
+import metis_head.llm_providers as llm_providers
 from metis_head.leds import resolve_leds
 from metis_head.readiness import calculate_readiness
 from metis_head.reducer import reduce_metis_event, replay_events
@@ -228,6 +229,20 @@ def test_source_grounded_chat_labels_unsourced_without_retrieval(monkeypatch) ->
     assert body["state"]["source_state"] == "unsourced"
 
 
+def test_ollama_model_options_endpoint_lists_available_models(monkeypatch) -> None:
+    def fake_get_json(url: str) -> dict:
+        assert url == "http://127.0.0.1:11434/api/tags"
+        return {"models": [{"name": "llama3.1:latest", "size": 123}, {"name": "mistral:latest", "size": 456}]}
+
+    monkeypatch.setattr(llm_providers, "_get_json", fake_get_json)
+    client = TestClient(app)
+    response = client.get("/metis/llm/options?base_url=http://127.0.0.1:11434")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ollama"]["available"] is True
+    assert [model["name"] for model in body["ollama"]["models"]] == ["llama3.1:latest", "mistral:latest"]
+
+
 def test_dashboard_contains_virtual_radio_controls() -> None:
     dashboard = Path("metis_head/static/dashboard.html").read_text(encoding="utf-8")
     assert "Virtual Radio" in dashboard
@@ -245,3 +260,6 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "Virtual Chat" in dashboard
     assert "chatInput" in dashboard
     assert "sendChat" in dashboard
+    assert "chatProvider" in dashboard
+    assert "ollamaModel" in dashboard
+    assert "refreshLlmOptions" in dashboard

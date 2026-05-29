@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from .bridge import HARDWARE_PARITY_MANIFEST
 from .leds import resolve_leds
-from .llm_providers import LLMProviderError, governed_messages, provider_from_env
+from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, provider_from_config
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
@@ -41,6 +41,20 @@ def export_state() -> dict[str, Any]:
     }
 
 
+@app.get("/metis/llm/options")
+def llm_options(base_url: str | None = None) -> dict[str, Any]:
+    import os
+
+    ollama_base_url = base_url or os.environ.get("METIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    return {
+        "selected_provider": os.environ.get("METIS_LLM_PROVIDER", "mock"),
+        "ollama_base_url": ollama_base_url,
+        "ollama_model": os.environ.get("METIS_OLLAMA_MODEL"),
+        "openai_model": os.environ.get("METIS_OPENAI_MODEL", "gpt-4o-mini"),
+        "ollama": list_ollama_models(ollama_base_url),
+    }
+
+
 @app.post("/metis/event")
 def post_event(event: dict[str, Any]) -> dict[str, Any]:
     global STATE
@@ -68,7 +82,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
 
     messages = governed_messages(user_message, STATE, STATE.get("chat_history", []))
     try:
-        result = provider_from_env().generate(messages, STATE, options)
+        result = provider_from_config(options).generate(messages, STATE, options)
     except LLMProviderError as exc:
         STATE = reduce_metis_event(
             STATE,
