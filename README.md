@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0S/S4` — bridge emulator CLI/library (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link`).
+Phase scope: `0S/S3` — mock provider harness (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator`).
 
-Status: the simulator now includes a backend bridge emulator that emits the same event schema as
+Status: the simulator now includes a backend provider harness for deterministic mock STT, TTS,
+vision, BOH memory, vault, tools, Atlas, LLM router, and robot safety operations. Provider
+operations return event payloads and the mock Brain can reduce those events into canonical state.
+
+Phase 0S/S3 implemented:
+
+- `metis_head/provider_harness.py`: provider catalog, operation metadata, deterministic operation
+  invocation, and event extraction.
+- `GET /metis/providers` lists available mock provider operations.
+- `POST /metis/providers/{operation_id}/invoke` invokes a mock provider operation, applies emitted
+  events through the reducer, and returns state/LEDs.
+- Tests proving visible provider failures, TTS event sequencing, Agent Mode proposal queuing, and
+  robot-safety classification staying non-mutating.
+
+Previous Phase 0S/S4 status: the simulator includes a backend bridge emulator that emits the same event schema as
 future hardware controls. It can create control/button/privacy/heartbeat events, replay JSONL
 event logs locally through the reducer, or post events to the mock Brain at `/metis/event`.
 
@@ -79,6 +93,7 @@ Implemented:
 - Adapter base interface with health, capability, and schema-version checks.
 - FastAPI mock Brain with the v0.5 Phase 0S endpoint set.
 - Static dashboard for canonical state, LEDs, adapter health, readiness, scenario results, and event log.
+- Provider harness for deterministic mock STT/TTS/vision/memory/tool/Atlas/LLM/safety operations.
 - Virtual radio view rebuilt as a 3-zone instrument: an inert speaker grille, a thin vertical LED/visualizer status strip, and a right control stack (Volume + Depth dials, PWR/LOUD/AFC/AM-FM buttons, large Tuning/Initiative dial). Radio status readouts (power/audio/mode/authority) and mic/camera cutoff controls live in a separate Radio Status panel below.
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
@@ -230,6 +245,8 @@ Metis — BOH remains the source of truth.
 - `GET /metis/scenario/results`
 - `GET /metis/health`
 - `GET /metis/adapters`
+- `GET /metis/providers`
+- `POST /metis/providers/{operation_id}/invoke`
 - `POST /metis/adapters/{adapter_id}/set_health`
 - `POST /metis/failures/{failure_id}/trigger`
 - `POST /metis/failures/clear`
@@ -239,7 +256,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-55 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, and 5 Phase 0S/S4 bridge-emulator tests)
+61 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, and 6 Phase 0S/S3 provider-harness tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

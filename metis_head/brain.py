@@ -18,6 +18,7 @@ from .bridge import HARDWARE_PARITY_MANIFEST
 from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
 from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
+from .provider_harness import ProviderHarnessError, invoke_provider, provider_catalog
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
@@ -263,6 +264,25 @@ def health() -> dict[str, Any]:
 @app.get("/metis/adapters")
 def adapters() -> dict[str, Any]:
     return {"adapters": STATE["input_adapters"]}
+
+
+@app.get("/metis/providers")
+def providers() -> dict[str, Any]:
+    return provider_catalog()
+
+
+@app.post("/metis/providers/{operation_id}/invoke")
+def provider_invoke(operation_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    try:
+        result = invoke_provider(operation_id, payload)
+    except ProviderHarnessError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    applied: list[dict[str, Any]] = []
+    for event in result["events"]:
+        STATE = reduce_metis_event(STATE, event)
+        applied.append(event)
+    return {**result, "applied_events": applied, "state": STATE, "leds": resolve_leds(STATE)}
 
 
 @app.post("/metis/adapters/{adapter_id}/set_health")

@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0S/S4` (bridge emulator CLI/library; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link`)
+Last phase updated: `0S/S3` (mock provider harness; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -30,6 +30,7 @@ Before committing any phase:
 | `READINESS_CHECKLIST_VERSION` | `metis_readiness.v0.1` | `metis_head.schemas` | Computed readiness checklist version. |
 | `BRIDGE_SCHEMA_VERSION` | `metis_bridge_event.v0.1` | `metis_head.bridge` | Simulated bridge event protocol version. |
 | `BRIDGE_EMULATOR_VERSION` | `metis_bridge_emulator.v0.1` | `metis_head.bridge_emulator` | CLI/library wrapper for simulator bridge event emission and replay. |
+| `PROVIDER_HARNESS_VERSION` | `metis_provider_harness.v0.1` | `metis_head.provider_harness` | Mock provider catalog/invocation harness version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
@@ -140,6 +141,29 @@ invalid JSON or unsupported event types. All emitted events include `bridge_sche
 | `project_atlas` | task lifecycle provider | `atlas_adapter.v0.1` | disabled mock | future adapter only |
 | `boh_memory` | memory vault provider | `boh_adapter.v0.1` | disabled mock | future BOH adapter only |
 | `robot_safety` | safety pattern provider | `robot_safety_adapter.v0.1` | disabled mock | future safety doctrine adapter |
+
+## Provider Harness
+
+| Operation ID | Current Phase | Emits Events? | Purpose |
+|---|---|---:|---|
+| `stt.noop.transcribe` | 0S/S3 | yes | Empty transcript event. |
+| `stt.fake.transcribe` | 0S/S3 | yes | Deterministic transcript event. |
+| `stt.failed.transcribe` | 0S/S3 | yes | Visible `stt_failure`. |
+| `tts.fake.speak` | 0S/S3 | yes | `speaking` then `complete` events without audio. |
+| `tts.failed.speak` | 0S/S3 | yes | Visible `tts_failure`. |
+| `vision.noop.capture` | 0S/S3 | yes | Camera capture request. |
+| `vision.fake.capture` | 0S/S3 | yes | Synthetic camera capture request. |
+| `vision.blocked.capture` | 0S/S3 | yes | Visible `camera_failure`. |
+| `boh_memory.fake.retrieve` | 0S/S3 | yes | Synthetic cited BOH retrieval event. |
+| `vault.failed.retrieve` | 0S/S3 | yes | Visible `vault_unavailable`. |
+| `tools.fake.queue` | 0S/S3 | yes | Governed tool proposal event. |
+| `tools.blocked.queue` | 0S/S3 | yes | Visible `tool_blocked`. |
+| `project_atlas.fake.propose_task` | 0S/S3 | yes | Governed Atlas task proposal event. |
+| `llm_router.fake.route` | 0S/S3 | no | Canned routing result only. |
+| `robot_safety.fake.classify` | 0S/S3 | no | Denied actuator-action classification only. |
+
+Provider events are applied through the same reducer used by `/metis/event`. Non-event provider
+results are returned for inspection but do not mutate canonical state.
 
 ## LLM Provider Environment
 
@@ -344,6 +368,8 @@ Owner: `metis_head.boh_link`.
 | `GET` | `/metis/scenario/results` | `metis_head.brain` | Return latest scenario results. |
 | `GET` | `/metis/health` | `metis_head.brain` | Brain health, failures, readiness, parity manifest. |
 | `GET` | `/metis/adapters` | `metis_head.brain` | Current adapter registry. |
+| `GET` | `/metis/providers` | `metis_head.brain` | Mock provider harness catalog grouped by provider. |
+| `POST` | `/metis/providers/{operation_id}/invoke` | `metis_head.brain` | Invoke a deterministic mock provider operation and reduce any emitted events. |
 | `POST` | `/metis/adapters/{adapter_id}/set_health` | `metis_head.brain` | Mutate mock adapter health. |
 | `POST` | `/metis/failures/{failure_id}/trigger` | `metis_head.brain` | Trigger visible failure. |
 | `POST` | `/metis/failures/clear` | `metis_head.brain` | Clear active failure state. |
