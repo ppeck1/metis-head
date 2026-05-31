@@ -8,6 +8,9 @@ dependencies = [
   "uvicorn>=0.27",
 ]
 
+[project.scripts]
+metis-bridge-emulator = "metis_head.bridge_emulator:run_cli"
+
 [project.optional-dependencies]
 test = [
   "pytest>=8",

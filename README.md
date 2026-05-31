@@ -10,9 +10,21 @@ token).
 
 ## Current Phase
 
-Phase scope: `0C` — BOH background link manager (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge`).
+Phase scope: `0S/S4` — bridge emulator CLI/library (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link`).
 
-Status: a background, read-only poller maintains lightweight awareness of the BOH link
+Status: the simulator now includes a backend bridge emulator that emits the same event schema as
+future hardware controls. It can create control/button/privacy/heartbeat events, replay JSONL
+event logs locally through the reducer, or post events to the mock Brain at `/metis/event`.
+
+Phase 0S/S4 implemented:
+
+- `metis_head/bridge_emulator.py`: canonical event builders for virtual bridge controls,
+  JSONL parsing/serialization, local reducer replay, and optional HTTP posting to a mock Brain.
+- CLI entry point: `python -m metis_head.bridge_emulator ...` or installed script
+  `metis-bridge-emulator`.
+- Tests proving bridge-schema parity, JSONL round trip, local replay, and parser diagnostics.
+
+Previous Phase 0C status: a background, read-only poller maintains lightweight awareness of the BOH link
 (connected/degraded/disconnected/auth_failed) and surfaces it on the dashboard and via
 `GET /metis/boh/status`, without copying the BOH corpus. Phase 0B retrieval behavior is
 unchanged; the link manager is opt-in via `METIS_BOH_BACKGROUND_ENABLED`.
@@ -155,6 +167,32 @@ BOH, and never sends BOH's operator token. If BOH is unreachable, the answer is 
 Tools, Atlas, hardware, mic, camera, and autonomous execution remain disabled. Agent Mode chat
 can queue proposals only and never mutates BOH.
 
+## Bridge Emulator (Phase 0S/S4)
+
+Emit one canonical bridge event as JSON:
+
+```powershell
+C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator control initiative 0.82 --raw 839
+```
+
+Post an event directly to a running mock Brain:
+
+```powershell
+C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator --post http://127.0.0.1:8787 button am_fm fm
+```
+
+Replay a JSONL bridge log locally through the deterministic reducer:
+
+```powershell
+C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator replay .\events.jsonl --local-final-state
+```
+
+Replay JSONL into the mock Brain:
+
+```powershell
+C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator --post http://127.0.0.1:8787 replay .\events.jsonl
+```
+
 ### Background Link Manager (Phase 0C)
 
 The background link manager is opt-in and read-only. When `METIS_BOH_BACKGROUND_ENABLED=true`, a
@@ -201,7 +239,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-50 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests and 14 Phase 0C link-manager tests)
+55 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, and 5 Phase 0S/S4 bridge-emulator tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

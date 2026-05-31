@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0C` (BOH background link manager; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge`)
+Last phase updated: `0S/S4` (bridge emulator CLI/library; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -29,6 +29,7 @@ Before committing any phase:
 | `EVENT_SCHEMA_VERSION` | `metis_event.v0.1` | `metis_head.schemas` | Phase 0S mock Brain event envelope version. |
 | `READINESS_CHECKLIST_VERSION` | `metis_readiness.v0.1` | `metis_head.schemas` | Computed readiness checklist version. |
 | `BRIDGE_SCHEMA_VERSION` | `metis_bridge_event.v0.1` | `metis_head.bridge` | Simulated bridge event protocol version. |
+| `BRIDGE_EMULATOR_VERSION` | `metis_bridge_emulator.v0.1` | `metis_head.bridge_emulator` | CLI/library wrapper for simulator bridge event emission and replay. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
@@ -108,6 +109,23 @@ Before committing any phase:
 | `am_fm` | button | `interaction_mode` |
 | `mic` | hardware privacy device | `mic_hardware_enabled`, `audio_state` |
 | `camera` | hardware privacy device | `camera_hardware_enabled`, `vision_state` |
+
+## Bridge Emulator
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `metis_head.bridge_emulator` | 0S/S4 | Library and CLI for emitting canonical bridge events without hardware. |
+| `metis-bridge-emulator` | 0S/S4 | Optional installed console script entry point. |
+| `python -m metis_head.bridge_emulator control <control> <value>` | 0S/S4 | Emit a `control_change` event for `volume`, `conversation_depth`, or `initiative`. |
+| `python -m metis_head.bridge_emulator button <button> <state>` | 0S/S4 | Emit a `button_event` for `pwr`, `loud`, `afc`, or `am_fm`. |
+| `python -m metis_head.bridge_emulator privacy <device> <enabled>` | 0S/S4 | Emit a `hardware_privacy` event for `mic` or `camera`. |
+| `python -m metis_head.bridge_emulator heartbeat` | 0S/S4 | Emit a bridge heartbeat event. |
+| `python -m metis_head.bridge_emulator replay <path>` | 0S/S4 | Parse JSONL bridge events and replay them through the deterministic local reducer. |
+| `--post <base_url>` | 0S/S4 | Posts emitted/replayed events to `<base_url>/metis/event` using blocking `urllib`. |
+
+Bridge emulator JSONL lines must be one event object per line. The parser reports line numbers for
+invalid JSON or unsupported event types. All emitted events include `bridge_schema` and
+`emulator_version`, then pass through the same event validator used by the mock Brain.
 
 ## Adapter IDs
 
@@ -329,6 +347,13 @@ Owner: `metis_head.boh_link`.
 | `POST` | `/metis/adapters/{adapter_id}/set_health` | `metis_head.brain` | Mutate mock adapter health. |
 | `POST` | `/metis/failures/{failure_id}/trigger` | `metis_head.brain` | Trigger visible failure. |
 | `POST` | `/metis/failures/clear` | `metis_head.brain` | Clear active failure state. |
+
+## CLI Entry Points
+
+| Command | Owner | Purpose |
+|---|---|---|
+| `python -m metis_head.bridge_emulator` | `metis_head.bridge_emulator` | Emit or replay simulator bridge events as JSON, local reducer state, or mock-Brain POSTs. |
+| `metis-bridge-emulator` | `pyproject.toml` | Installed console-script alias for the bridge emulator. |
 
 ## Scenario IDs
 
