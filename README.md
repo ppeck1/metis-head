@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0S/S3` — mock provider harness (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator`).
+Phase scope: `0P` — Metis personality constitution layer (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness`).
 
-Status: the simulator now includes a backend provider harness for deterministic mock STT, TTS,
+Status: Metis now has a runtime personality constitution based on `METIS_PERSONALITY_CONSTITUTION_v1_0`.
+The constitution is exposed as structured data, served as a static console, and injected into the
+governed chat system prompt for mock, Ollama, and OpenAI providers.
+
+Phase 0P implemented:
+
+- `docs/METIS_PERSONALITY_CONSTITUTION_v1_0.md`: canonical personality constitution source.
+- `metis_head/static/personality_console.html`: supplied personality console served by FastAPI.
+- `metis_head/personality.py`: structured profile, 27 quantified traits, non-negotiable invariants,
+  mode modifiers, weighted profile export, and short system-prompt form.
+- `GET /metis/personality` returns the active personality profile.
+- `GET /metis/personality/console` serves the visual personality console.
+- Governed LLM messages now include the Metis constitution and active personality mode.
+
+Previous Phase 0S/S3 status: the simulator includes a backend provider harness for deterministic mock STT, TTS,
 vision, BOH memory, vault, tools, Atlas, LLM router, and robot safety operations. Provider
 operations return event payloads and the mock Brain can reduce those events into canonical state.
 
@@ -97,6 +111,7 @@ Implemented:
 - Virtual radio view rebuilt as a 3-zone instrument: an inert speaker grille, a thin vertical LED/visualizer status strip, and a right control stack (Volume + Depth dials, PWR/LOUD/AFC/AM-FM buttons, large Tuning/Initiative dial). Radio status readouts (power/audio/mode/authority) and mic/camera cutoff controls live in a separate Radio Status panel below.
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
+- Metis personality constitution injected into governed chat prompts.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
 - Dashboard order: Virtual Radio, Virtual Chat (Send attached to the composer; Enter sends, Shift+Enter newlines), Radio Status, BOH Library Link, readiness/LED/adapter/state/scenario panels, export/replay, event log.
@@ -236,6 +251,8 @@ Metis — BOH remains the source of truth.
 - `GET /metis/llm/options`
 - `POST /metis/event`
 - `POST /metis/chat`
+- `GET /metis/personality`
+- `GET /metis/personality/console`
 - `POST /metis/llm/health`
 - `POST /metis/governance/classify`
 - `GET /metis/proposals`
@@ -256,7 +273,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-61 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, and 6 Phase 0S/S3 provider-harness tests)
+65 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, and 4 Phase 0P personality-layer tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

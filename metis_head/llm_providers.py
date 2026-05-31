@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib import error, request
 
+from .personality import PERSONALITY_VERSION, personality_system_prompt
+
 
 @dataclass
 class LLMResult:
@@ -202,12 +204,15 @@ def governed_messages(
     retrieval_context: str | None = None,
 ) -> list[dict[str, str]]:
     history = history or []
+    personality_mode = "agent" if state.get("interaction_mode") == "agent" else "counsel"
     system = (
+        f"{personality_system_prompt(personality_mode)}\n\n"
         "You are Metis Head's governed virtual chat router. "
         "Do not execute tools, hardware, BOH, Project Atlas, microphone, camera, or external actions. "
         f"Conversation depth is {state.get('conversation_depth_bucket')}. "
         f"Initiative is {state.get('initiative_bucket')}. "
         f"Interaction mode is {state.get('interaction_mode')}. "
+        f"Personality version is {PERSONALITY_VERSION}. "
     )
     if state.get("interaction_mode") == "agent":
         system += "In Agent Mode, provide proposals only and never claim execution. "

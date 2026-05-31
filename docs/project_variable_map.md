@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0S/S3` (mock provider harness; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator`)
+Last phase updated: `0P` (Metis personality constitution layer; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -31,6 +31,7 @@ Before committing any phase:
 | `BRIDGE_SCHEMA_VERSION` | `metis_bridge_event.v0.1` | `metis_head.bridge` | Simulated bridge event protocol version. |
 | `BRIDGE_EMULATOR_VERSION` | `metis_bridge_emulator.v0.1` | `metis_head.bridge_emulator` | CLI/library wrapper for simulator bridge event emission and replay. |
 | `PROVIDER_HARNESS_VERSION` | `metis_provider_harness.v0.1` | `metis_head.provider_harness` | Mock provider catalog/invocation harness version. |
+| `PERSONALITY_VERSION` | `metis_personality.v1.0` | `metis_head.personality` | Structured Metis personality constitution version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
@@ -227,6 +228,24 @@ Owner: `metis_head.boh_link`.
 | `list_ollama_models` | 0R | Lists local Ollama models via `/api/tags` for dashboard selection. |
 | `probe_llm_provider` | 0R | Reports provider configuration/reachability without generating chat. |
 
+## Personality Constitution
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `docs/METIS_PERSONALITY_CONSTITUTION_v1_0.md` | 0P | Canonical supplied Metis personality constitution. |
+| `metis_head/static/personality_console.html` | 0P | Supplied visual personality console served by FastAPI. |
+| `metis_head.personality` | 0P | Structured profile, trait matrix, mode modifiers, invariants, and system prompt. |
+| `PERSONALITY_VERSION` | 0P | `metis_personality.v1.0`. |
+| `PERSONALITY_ARCHETYPE` | 0P | `Wise counsel with governed agency`. |
+| `SHORT_PERSONALITY_PROMPT` | 0P | Short system-prompt form injected into governed chat messages. |
+| `NON_NEGOTIABLE_INVARIANTS` | 0P | Human authority, approval boundaries, epistemic honesty, provenance, fail-closed restraint, privacy/logging visibility, operator load awareness, and memory humility. |
+| `MODE_MODIFIERS` | 0P | Counsel, builder/explorer, governor, and agent trait modulation rules. |
+| `personality_profile(mode)` | 0P | Returns weighted active profile and all 27 traits. |
+| `personality_system_prompt(mode)` | 0P | Runtime prompt text used by the LLM router path. |
+
+Personality is now a runtime governance/behavior layer, not a decorative dashboard-only asset.
+`governed_messages()` includes `metis_personality.v1.0` for mock, Ollama, and OpenAI providers.
+
 ## Governance Policy
 
 | Name | Current Phase | Purpose |
@@ -356,6 +375,8 @@ Owner: `metis_head.boh_link`.
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
 | `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. When source grounding is on and BOH enabled (0B), retrieves read-only context first; response adds `source_state`, `metadata.boh`, and `retrieval`. |
+| `GET` | `/metis/personality` | `metis_head.brain` | Return active Metis personality constitution profile and trait matrix. |
+| `GET` | `/metis/personality/console` | `metis_head.brain` | Serve the supplied personality console HTML. |
 | `GET` | `/metis/boh/status` | `metis_head.brain` | Safe BOH background link state (0C): state enum, last checked/connected, last error (token-scrubbed), probe count, bounded transition events. Never exposes any token. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |

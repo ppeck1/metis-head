@@ -18,6 +18,7 @@ from .bridge import HARDWARE_PARITY_MANIFEST
 from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
 from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
+from .personality import personality_profile
 from .provider_harness import ProviderHarnessError, invoke_provider, provider_catalog
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
@@ -42,6 +43,18 @@ SCENARIO_RESULTS: list[dict[str, Any]] = []
 @app.get("/")
 def dashboard() -> FileResponse:
     return FileResponse(Path(__file__).parent / "static" / "dashboard.html")
+
+
+@app.get("/metis/personality/console")
+def personality_console() -> FileResponse:
+    return FileResponse(Path(__file__).parent / "static" / "personality_console.html")
+
+
+@app.get("/metis/personality")
+def personality(mode: str | None = None) -> dict[str, Any]:
+    if mode is None:
+        mode = "agent" if STATE.get("interaction_mode") == "agent" else "counsel"
+    return personality_profile(mode)
 
 
 @app.get("/metis/boh/status")
