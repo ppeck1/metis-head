@@ -76,6 +76,17 @@ def _scrub(text: str | None, token: str) -> str | None:
     return text
 
 
+def _scrub_value(value: Any, token: str) -> Any:
+    """Recursively scrub the read-only retrieval token from surfaced payloads."""
+    if isinstance(value, str):
+        return _scrub(value, token)
+    if isinstance(value, list):
+        return [_scrub_value(item, token) for item in value]
+    if isinstance(value, dict):
+        return {key: _scrub_value(item, token) for key, item in value.items()}
+    return value
+
+
 @dataclass(frozen=True)
 class BOHLinkConfig:
     enabled: bool
@@ -190,15 +201,19 @@ def probe_boh_once(config: BOHLinkConfig, state: BOHLinkState) -> BOHLinkState:
         state.health = None
         _set_state(state, LINK_AUTH_FAILED)
         return state
-    state.health = health.body
+    state.health = _scrub_value(health.body, config.token)
     if health.status is None or health.status >= 500:
         state.last_error = f"BOH health returned status {health.status}"
         _set_state(state, LINK_DEGRADED)
         return state
 
     status = _request(f"{config.base_url}/api/retrieve/status", "GET", None, {}, _PROBE_TIMEOUT)
+    if status.status in (401, 403):
+        state.last_error = f"BOH retrieval status returned {status.status}"
+        _set_state(state, LINK_AUTH_FAILED)
+        return state
     if status.status not in (401, 403) and status.network_error is None and status.body is not None:
-        state.retrieval_status = status.body
+        state.retrieval_status = _scrub_value(status.body, config.token)
 
     probe = _request(
         f"{config.base_url}/api/retrieve",

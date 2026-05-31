@@ -118,6 +118,23 @@ def test_auth_rejection_on_probe_yields_auth_failed(monkeypatch) -> None:
     assert state.state == LINK_AUTH_FAILED
 
 
+def test_auth_rejection_on_retrieve_status_yields_auth_failed(monkeypatch) -> None:
+    monkeypatch.setattr(
+        boh_link,
+        "_request",
+        _route(
+            {
+                "/api/health": _resp(200, {"status": "ok"}),
+                "/api/retrieve/status": _resp(401),
+            }
+        ),
+    )
+    state = BOHLinkState()
+    probe_boh_once(_config(), state)
+    assert state.state == LINK_AUTH_FAILED
+    assert "401" in state.last_error
+
+
 def test_health_ok_but_probe_network_error_yields_degraded(monkeypatch) -> None:
     monkeypatch.setattr(
         boh_link,
@@ -196,6 +213,25 @@ def test_probe_scrubs_token_from_network_error(monkeypatch) -> None:
     state = BOHLinkState()
     probe_boh_once(_config(), state)
     assert SECRET_TOKEN not in json.dumps(state.to_dict())
+
+
+def test_probe_scrubs_token_from_surfaced_payloads(monkeypatch) -> None:
+    monkeypatch.setattr(
+        boh_link,
+        "_request",
+        _route(
+            {
+                "/api/health": _resp(200, {"echo": SECRET_TOKEN}),
+                "/api/retrieve/status": _resp(200, {"nested": {"echo": SECRET_TOKEN}}),
+                "/api/retrieve": _resp(200, {"count": 1}),
+            }
+        ),
+    )
+    state = BOHLinkState()
+    probe_boh_once(_config(), state)
+    serialized = json.dumps(state.to_dict())
+    assert SECRET_TOKEN not in serialized
+    assert "***" in serialized
 
 
 def test_chat_auth_failed_skips_live_retrieval(monkeypatch) -> None:

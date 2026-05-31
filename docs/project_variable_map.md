@@ -164,11 +164,12 @@ and `METIS_BOH_LIMIT` from the Phase 0B bridge. It polls `GET /api/health`, `GET
 and a `limit=1` `POST /api/retrieve` probe; it never mutates BOH, never sends the operator token, and
 never copies the BOH corpus into Metis (BOH remains the source of truth for library/index/chunks/
 citations). Link state enum: `disabled`, `connecting`, `connected`, `degraded`, `disconnected`,
-`auth_failed`. Transition rules: health reachable + probe 200 -> `connected`; probe/health 401/403 ->
-`auth_failed`; health connection-refused/timeout -> `disconnected`; health reachable but 5xx or probe
-network error -> `degraded`. Transition events are recorded only on actual change (bounded to ~20).
-`GET /metis/boh/status` returns the safe serialized state (no token, no operator token, no Authorization,
-error strings scrubbed of the token). Chat: when the background link reports `auth_failed`, `/metis/chat`
+`auth_failed`. Transition rules: health reachable + probe 200 -> `connected`; health, retrieve/status,
+or retrieve-probe 401/403 -> `auth_failed`; health connection-refused/timeout -> `disconnected`;
+health reachable but 5xx or probe network error -> `degraded`. Transition events are recorded only
+on actual change (bounded to ~20). `GET /metis/boh/status` returns the safe serialized state (no token,
+no operator token, no Authorization, error strings and surfaced payload values scrubbed of the token).
+Chat: when the background link reports `auth_failed`, `/metis/chat`
 skips the per-message live retrieval and labels the answer `degraded` instead of repeatedly hammering BOH.
 Owner: `metis_head.boh_link`.
 

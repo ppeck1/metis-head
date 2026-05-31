@@ -21,7 +21,9 @@ Phase 0C implemented:
 
 - `metis_head/boh_link.py`: env/option config, a daemon-thread poller, a pure
   `probe_boh_once()` cycle (health + retrieve/status + a `limit=1` retrieve probe), link-state
-  transition detection, and token-free status serialization.
+  transition detection, and token-free status serialization. Auth rejection from any probe layer
+  maps to `auth_failed`, and surfaced BOH payloads are recursively scrubbed of the read-only
+  retrieval token.
 - FastAPI lifespan starts the poller only when `METIS_BOH_BACKGROUND_ENABLED=true`; otherwise the
   link state stays `disabled`.
 - `GET /metis/boh/status` exposes the safe link state (no token, no operator token, no Authorization,
@@ -168,7 +170,9 @@ $env:METIS_BOH_PROBE_QUERY="__metis_connection_probe__"
 It reuses `METIS_BOH_BASE_URL` / `METIS_BOH_RETRIEVAL_TOKEN` / `METIS_BOH_RETRIEVAL_MODE` /
 `METIS_BOH_LIMIT`. It polls `/api/health`, `/api/retrieve/status`, and a `limit=1` `/api/retrieve`
 probe; link states are `disabled`, `connecting`, `connected`, `degraded`, `disconnected`,
-`auth_failed`. The status response never includes any token, and the corpus is never copied into
+`auth_failed`. A 401/403 from health, retrieve/status, or the retrieve probe maps to
+`auth_failed`; health connection refusal maps to `disconnected`; health 5xx or probe network
+error maps to `degraded`. The status response never includes any token, and the corpus is never copied into
 Metis — BOH remains the source of truth.
 
 ## API
@@ -197,7 +201,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-48 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests and 12 Phase 0C link-manager tests)
+50 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests and 14 Phase 0C link-manager tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
