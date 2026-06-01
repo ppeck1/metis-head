@@ -112,6 +112,49 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
     assert calls[0]["kwargs"]["input"] == "Piper local voice check."
 
 
+def test_piper_speak_normalizes_markdown_for_audible_output(monkeypatch, tmp_path) -> None:
+    piper_exe = tmp_path / "piper.exe"
+    piper_model = tmp_path / "voice.onnx"
+    piper_exe.write_text("stub", encoding="utf-8")
+    piper_model.write_text("stub", encoding="utf-8")
+    monkeypatch.setenv("METIS_PIPER_EXE", str(piper_exe))
+    monkeypatch.setenv("METIS_PIPER_MODEL", str(piper_model))
+    monkeypatch.setenv("METIS_VOICE_ALLOW_PIPER", "true")
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(command: list[str], **kwargs: Any) -> object:
+        calls.append({"command": command, "kwargs": kwargs})
+        return object()
+
+    monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(voice_module, "_play_wav_file", lambda wav_path, strategy="soundplayer": None)
+    client = _client()
+    raw_text = "**Current Capabilities:**\n- Text-based analysis\n- `code-ish` syntax\n\n**Tools Available:**\n- None directly accessible"
+
+    response = client.post(
+        "/metis/voice/speak",
+        json={"text": raw_text, "provider": "piper", "voice_id": "piper-local", "allow_piper": True},
+    )
+
+    assert response.status_code == 200
+    spoken_input = calls[0]["kwargs"]["input"]
+    assert "*" not in spoken_input
+    assert "`" not in spoken_input
+    assert "- Text" not in spoken_input
+    assert "Current Capabilities:" in spoken_input
+    assert "Text-based analysis" in spoken_input
+    event = response.json()["events"][0]
+    assert event["normalized_text"] is True
+    assert event["source_text_len"] == len(raw_text)
+    assert event["source_text_hash"]
+
+
+def test_normalize_spoken_text_removes_markdown_noise() -> None:
+    text = voice_module.normalize_spoken_text("**Tools:**\n- `alpha_beta`\n1. [Link](https://example.com)")
+
+    assert text == "Tools:\nalpha beta\nLink"
+
+
 def test_winsound_playback_uses_available_sync_default(monkeypatch, tmp_path) -> None:
     wav_path = tmp_path / "voice.wav"
     wav_path.write_bytes(b"RIFF")

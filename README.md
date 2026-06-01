@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO2` - Piper playback reliability (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring`).
+Phase scope: `0V/AUDIO3` - spoken-text normalization for TTS (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability`).
 
-Status: Piper playback now defaults to Windows `Media.SoundPlayer` through a PowerShell subprocess,
+Status: Piper now receives a normalized spoken form of chat text rather than the display Markdown.
+The dashboard can still show headings, bullets, links, and code formatting, but the voice path strips
+or converts formatting markers that sound bad when read aloud.
+
+Phase 0V/AUDIO3 implemented:
+
+- Added `normalize_spoken_text()` for TTS input.
+- Piper speaks the normalized text while screen chat keeps the original assistant message.
+- Markdown headings, bullets, links, inline code marks, asterisks, block quotes, and table pipes are
+  removed or converted for audibility.
+- Voice events include redacted source text length/hash and normalized text metadata; raw spoken
+  text is still not persisted.
+- Piper synthesis timeout now scales up for longer normalized responses.
+
+Previous Phase 0V/AUDIO2 status: Piper playback now defaults to Windows `Media.SoundPlayer` through a PowerShell subprocess,
 with `winsound` still available as an explicit fallback strategy. This fixes the previous
 `winsound.SND_SYNC` playback bug on this machine and makes endpoint playback less dependent on
 uvicorn's Python audio session.
@@ -321,6 +335,7 @@ $env:METIS_PIPER_MODEL="B:\path\to\voice.onnx"
 $env:METIS_PIPER_CONFIG="B:\path\to\voice.onnx.json"   # optional
 $env:METIS_PIPER_PLAYBACK="true"
 $env:METIS_PIPER_PLAYBACK_STRATEGY="soundplayer"       # soundplayer or winsound
+$env:METIS_VOICE_NORMALIZE_TEXT="true"
 ```
 
 Default local Piper paths are auto-detected when installed/downloaded:
@@ -447,7 +462,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-87 passed under Python 3.11 (includes Piper provider and dashboard audio-visualizer coverage)
+91 passed under Python 3.11 (includes spoken-text normalization and Piper playback coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

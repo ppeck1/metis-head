@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import re
 import shutil
 import subprocess
 import sysconfig
@@ -84,6 +85,7 @@ class VoiceConfig:
     piper_config: str | None = None
     piper_playback: bool = True
     piper_playback_strategy: str = "soundplayer"
+    normalize_text: bool = True
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -97,6 +99,7 @@ class VoiceConfig:
             "allow_piper": self.allow_piper,
             "piper_configured": bool(self.piper_exe and self.piper_model),
             "piper_playback_strategy": self.piper_playback_strategy,
+            "normalize_text": self.normalize_text,
             "providers": ["mock", "system", "piper"],
         }
 
@@ -208,6 +211,7 @@ class PiperVoiceProvider(BaseVoiceProvider):
     provider_id = "piper"
 
     def speak(self, text: str, config: VoiceConfig) -> list[dict[str, Any]]:
+        spoken_text = normalize_spoken_text(text) if config.normalize_text else text
         if not config.allow_piper:
             raise VoiceProviderError("Piper TTS is disabled; set METIS_VOICE_ALLOW_PIPER=true to allow local speech")
         if not config.piper_exe:
@@ -221,7 +225,7 @@ class PiperVoiceProvider(BaseVoiceProvider):
         if not piper_model.exists():
             raise VoiceProviderError(f"Piper TTS model not found: {piper_model}")
 
-        metadata = _text_metadata(text)
+        metadata = _text_metadata(spoken_text)
         base = {
             **metadata,
             "type": "provider_event",
@@ -233,6 +237,9 @@ class PiperVoiceProvider(BaseVoiceProvider):
             "rate": config.rate,
             "playback": bool(config.piper_playback),
             "playback_strategy": config.piper_playback_strategy,
+            "normalized_text": config.normalize_text,
+            "source_text_len": len(text),
+            "source_text_hash": _text_hash(text),
         }
         events = [
             {**base, "status": "queued"},
@@ -246,10 +253,10 @@ class PiperVoiceProvider(BaseVoiceProvider):
                 command.extend(["--config", str(config.piper_config)])
             subprocess.run(
                 command,
-                input=text,
+                input=spoken_text,
                 text=True,
                 capture_output=True,
-                timeout=90,
+                timeout=_piper_timeout_seconds(spoken_text),
                 check=True,
             )
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
@@ -288,6 +295,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
     piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG"))) or _default_piper_config()
     piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "true")))
     piper_playback_strategy = _playback_strategy(voice_options.get("piper_playback_strategy", env.get("METIS_PIPER_PLAYBACK_STRATEGY", "soundplayer")))
+    normalize_text = _as_bool(voice_options.get("normalize_text", env.get("METIS_VOICE_NORMALIZE_TEXT", "true")))
     if provider not in {"mock", "system", "piper", "failed"}:
         provider = "mock"
     return VoiceConfig(
@@ -303,6 +311,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
         piper_config=piper_config,
         piper_playback=piper_playback,
         piper_playback_strategy=piper_playback_strategy,
+        normalize_text=normalize_text,
     )
 
 
@@ -471,8 +480,56 @@ def _clamp_float(value: Any, low: float, high: float, default: float) -> float:
 
 
 def _text_metadata(text: str) -> dict[str, Any]:
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-    return {"text_len": len(text), "text_hash": digest, "text_redacted": True}
+    return {"text_len": len(text), "text_hash": _text_hash(text), "text_redacted": True}
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def normalize_spoken_text(text: str) -> str:
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    normalized = re.sub(r"```.*?```", " ", normalized, flags=re.DOTALL)
+    normalized = re.sub(r"`([^`]+)`", r"\1", normalized)
+    normalized = re.sub(r"!\[[^\]]*\]\([^)]+\)", " ", normalized)
+    normalized = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", normalized)
+    lines: list[str] = []
+    for raw_line in normalized.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            lines.append("")
+            continue
+        line = re.sub(r"^#{1,6}\s+", "", line)
+        line = re.sub(r"^>\s*", "", line)
+        line = re.sub(r"^[-*+]\s+", "", line)
+        line = re.sub(r"^\d+[.)]\s+", "", line)
+        line = re.sub(r"^\|?(.*?)\|?$", r"\1", line) if "|" in line else line
+        line = line.replace("|", ", ")
+        lines.append(line)
+    normalized = "\n".join(lines)
+    replacements = {
+        "**": "",
+        "__": "",
+        "*": "",
+        "_": " ",
+        "~~": "",
+        "#": "",
+        ">": "",
+        "•": "",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+    }
+    for old, new in replacements.items():
+        normalized = normalized.replace(old, new)
+    normalized = re.sub(r"\s+[-–—]\s+", ". ", normalized)
+    normalized = re.sub(r"[ \t]+", " ", normalized)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    normalized = re.sub(r"\s+([.,;:!?])", r"\1", normalized)
+    normalized = re.sub(r"([.!?]){2,}", r"\1", normalized)
+    normalized = normalized.strip()
+    return normalized or "No spoken content."
 
 
 def _optional_str(value: Any) -> str | None:
@@ -524,6 +581,10 @@ def _playback_strategy(value: Any) -> str:
     if strategy not in {"soundplayer", "winsound"}:
         return "soundplayer"
     return strategy
+
+
+def _piper_timeout_seconds(text: str) -> int:
+    return max(90, min(240, 60 + (len(text) // 10)))
 
 
 def _play_wav_file(wav_path: Path, strategy: str = "soundplayer") -> None:
