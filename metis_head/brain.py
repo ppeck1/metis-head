@@ -24,6 +24,7 @@ from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
+from .voice import VoiceResult, speak_text, stop_voice, voice_profile
 
 
 @asynccontextmanager
@@ -123,6 +124,12 @@ def post_event(event: dict[str, Any]) -> dict[str, Any]:
     return {"state": STATE, "leds": resolve_leds(STATE)}
 
 
+def _apply_voice_result(result: VoiceResult) -> None:
+    global STATE
+    for event in result.events:
+        STATE = reduce_metis_event(STATE, event)
+
+
 @app.post("/metis/chat")
 def chat(payload: dict[str, Any]) -> dict[str, Any]:
     global STATE
@@ -204,6 +211,13 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "source_state": source_state,
         },
     )
+    voice = None
+    voice_options = options.get("voice") if isinstance(options.get("voice"), dict) else {}
+    if voice_options.get("speak_response"):
+        speak_options = {"voice": {**voice_options, "enabled": True}}
+        voice_result = speak_text(assistant_message, STATE, speak_options)
+        _apply_voice_result(voice_result)
+        voice = _voice_response_payload(voice_result)
     metadata = dict(result.metadata)
     if retrieval is not None:
         metadata["boh"] = retrieval.to_metadata()
@@ -218,7 +232,64 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         "leds": resolve_leds(STATE),
         "metadata": metadata,
         "retrieval": retrieval.to_metadata() if retrieval is not None else None,
+        "voice": voice,
     }
+
+
+@app.get("/metis/voice")
+def voice() -> dict[str, Any]:
+    profile = voice_profile(STATE)
+    return {
+        **profile,
+        "selected_provider": profile["provider"],
+        "profile": {
+            "id": profile["voice_id"],
+            "provider": profile["provider"],
+            "can_speak": not profile["output_muted"],
+            "boundary": profile["boundary"],
+        },
+    }
+
+
+@app.post("/metis/voice/speak")
+def voice_speak(payload: dict[str, Any]) -> dict[str, Any]:
+    text = payload.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise HTTPException(status_code=400, detail="text is required")
+    options = {"voice": {**payload, "enabled": payload.get("enabled", True)}}
+    result = speak_text(text, STATE, options)
+    _apply_voice_result(result)
+    response = {**_voice_response_payload(result), "state": STATE, "leds": resolve_leds(STATE)}
+    if not result.ok:
+        raise HTTPException(status_code=502, detail=response)
+    return response
+
+
+@app.post("/metis/voice/stop")
+def voice_stop(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    result = stop_voice(STATE, {"voice": payload or {}})
+    _apply_voice_result(result)
+    return {**_voice_response_payload(result), "state": STATE, "leds": resolve_leds(STATE)}
+
+
+@app.post("/metis/voice/preview")
+def voice_preview(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    text = str(payload.get("text") or "Metis voice preview.")
+    options = {"voice": {**payload, "enabled": payload.get("enabled", True)}}
+    result = speak_text(text, STATE, options)
+    _apply_voice_result(result)
+    response = {**_voice_response_payload(result), "state": STATE, "leds": resolve_leds(STATE)}
+    if not result.ok:
+        raise HTTPException(status_code=502, detail=response)
+    return response
+
+
+def _voice_response_payload(result: VoiceResult) -> dict[str, Any]:
+    payload = result.to_dict()
+    payload["speech_blocked"] = bool(result.blocked_reason)
+    payload["block_reason"] = result.blocked_reason.replace(" ", "_") if result.blocked_reason else None
+    return payload
 
 
 @app.post("/metis/replay")

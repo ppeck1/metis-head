@@ -1,0 +1,300 @@
+from __future__ import annotations
+
+import os
+import hashlib
+from dataclasses import dataclass, field
+from typing import Any
+
+
+VOICE_SCHEMA_VERSION = "metis_voice.v0.1"
+
+
+class VoiceProviderError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class VoiceConfig:
+    enabled: bool
+    provider: str
+    voice_id: str
+    rate: float
+    volume: float
+    allow_system_tts: bool = False
+
+    def to_public_dict(self) -> dict[str, Any]:
+        return {
+            "voice_schema": VOICE_SCHEMA_VERSION,
+            "enabled": self.enabled,
+            "provider": self.provider,
+            "voice_id": self.voice_id,
+            "rate": self.rate,
+            "volume": self.volume,
+            "allow_system_tts": self.allow_system_tts,
+            "providers": ["mock", "system"],
+        }
+
+
+@dataclass
+class VoiceResult:
+    ok: bool
+    spoken: bool
+    provider: str
+    voice_id: str
+    blocked_reason: str | None = None
+    events: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "voice_schema": VOICE_SCHEMA_VERSION,
+            "ok": self.ok,
+            "spoken": self.spoken,
+            "provider": self.provider,
+            "voice_id": self.voice_id,
+            "blocked_reason": self.blocked_reason,
+            "events": self.events,
+            "event_count": len(self.events),
+            "metadata": self.metadata,
+        }
+
+
+class BaseVoiceProvider:
+    provider_id = "base"
+
+    def speak(self, text: str, config: VoiceConfig) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+
+class MockVoiceProvider(BaseVoiceProvider):
+    provider_id = "mock"
+
+    def speak(self, text: str, config: VoiceConfig) -> list[dict[str, Any]]:
+        metadata = _text_metadata(text)
+        base = {
+            **metadata,
+            "provider": "tts",
+            "voice_provider": self.provider_id,
+            "voice_id": config.voice_id,
+            "voice_schema": VOICE_SCHEMA_VERSION,
+            "volume": config.volume,
+            "rate": config.rate,
+        }
+        return [
+            {
+                "type": "provider_event",
+                **base,
+                "status": "queued",
+            },
+            {
+                "type": "provider_event",
+                **base,
+                "status": "synthesizing",
+            },
+            {
+                "type": "provider_event",
+                **base,
+                "status": "speaking",
+            },
+            {
+                "type": "provider_event",
+                **base,
+                "status": "complete",
+            },
+        ]
+
+
+class FailedVoiceProvider(BaseVoiceProvider):
+    provider_id = "failed"
+
+    def speak(self, text: str, config: VoiceConfig) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "provider_event",
+                "provider": "tts",
+                "status": "failure",
+                "failure_id": "tts_failure",
+                "reason": "voice provider failure",
+                **_text_metadata(text),
+                "voice_provider": self.provider_id,
+                "voice_id": config.voice_id,
+                "voice_schema": VOICE_SCHEMA_VERSION,
+            }
+        ]
+
+
+class SystemVoiceProvider(MockVoiceProvider):
+    provider_id = "system"
+
+    def speak(self, text: str, config: VoiceConfig) -> list[dict[str, Any]]:
+        if not config.allow_system_tts:
+            raise VoiceProviderError("system TTS is present but disabled; set METIS_VOICE_ALLOW_SYSTEM_TTS=true to allow real OS speech")
+        # Phase 0V keeps real OS speech behind this explicit gate. The emitted
+        # events are the contract; a later provider can add actual synthesis.
+        events = super().speak(text, config)
+        for event in events:
+            event["voice_provider"] = self.provider_id
+            event["system_tts_allowed"] = True
+        return events
+
+
+def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, Any] | None = None, state: dict[str, Any] | None = None) -> VoiceConfig:
+    env = env or os.environ
+    options = options or {}
+    voice_options = options.get("voice") if isinstance(options.get("voice"), dict) else options
+    enabled = _as_bool(voice_options.get("enabled", env.get("METIS_VOICE_ENABLED", "false")))
+    provider = str(voice_options.get("provider") or env.get("METIS_VOICE_PROVIDER", "mock")).lower()
+    voice_id = str(voice_options.get("voice_id") or env.get("METIS_VOICE_ID", "metis-counsel-mock"))
+    rate = _clamp_float(voice_options.get("rate", env.get("METIS_VOICE_RATE", "1.0")), 0.5, 2.0, 1.0)
+    state_volume = state.get("volume_level") if isinstance(state, dict) else None
+    volume_default = state_volume if state_volume is not None else env.get("METIS_VOICE_VOLUME", "0.6")
+    volume = _clamp_float(voice_options.get("volume", volume_default), 0.0, 1.0, 0.6)
+    allow_system_tts = _as_bool(voice_options.get("allow_system_tts", env.get("METIS_VOICE_ALLOW_SYSTEM_TTS", "false")))
+    if provider not in {"mock", "system", "failed"}:
+        provider = "mock"
+    return VoiceConfig(enabled=enabled, provider=provider, voice_id=voice_id, rate=rate, volume=volume, allow_system_tts=allow_system_tts)
+
+
+def voice_provider_from_config(config: VoiceConfig) -> BaseVoiceProvider:
+    if config.provider == "mock":
+        return MockVoiceProvider()
+    if config.provider == "system":
+        return SystemVoiceProvider()
+    if config.provider == "failed":
+        return FailedVoiceProvider()
+    raise VoiceProviderError(f"unsupported voice provider: {config.provider}")
+
+
+def speak_text(text: str, state: dict[str, Any], options: dict[str, Any] | None = None) -> VoiceResult:
+    config = voice_config_from_env(options=options, state=state)
+    if not config.enabled:
+        return VoiceResult(ok=True, spoken=False, provider=config.provider, voice_id=config.voice_id, blocked_reason="voice output disabled")
+    if state.get("output_muted"):
+        return VoiceResult(
+            ok=True,
+            spoken=False,
+            provider=config.provider,
+            voice_id=config.voice_id,
+            blocked_reason="output muted",
+            events=[
+                {
+                    "type": "provider_event",
+                    "provider": "tts",
+                    "status": "muted",
+                    "reason": "output muted",
+                    **_text_metadata(text),
+                    "voice_provider": config.provider,
+                    "voice_id": config.voice_id,
+                    "voice_schema": VOICE_SCHEMA_VERSION,
+                }
+            ],
+        )
+    if state.get("power_state") != "awake":
+        return VoiceResult(
+            ok=True,
+            spoken=False,
+            provider=config.provider,
+            voice_id=config.voice_id,
+            blocked_reason="standby blocks voice output",
+            events=[
+                {
+                    "type": "provider_event",
+                    "provider": "tts",
+                    "status": "muted",
+                    "reason": "standby blocks voice output",
+                    **_text_metadata(text),
+                    "voice_provider": config.provider,
+                    "voice_id": config.voice_id,
+                    "voice_schema": VOICE_SCHEMA_VERSION,
+                }
+            ],
+        )
+    if not text.strip():
+        return VoiceResult(ok=False, spoken=False, provider=config.provider, voice_id=config.voice_id, blocked_reason="text is required")
+    try:
+        events = voice_provider_from_config(config).speak(text, config)
+    except VoiceProviderError as exc:
+        return VoiceResult(
+            ok=False,
+            spoken=False,
+            provider=config.provider,
+            voice_id=config.voice_id,
+            blocked_reason=str(exc),
+            events=[
+                {
+                    "type": "provider_event",
+                    "provider": "tts",
+                    "status": "failure",
+                    "failure_id": "tts_failure",
+                    "reason": str(exc),
+                    "voice_provider": config.provider,
+                    "voice_id": config.voice_id,
+                    "voice_schema": VOICE_SCHEMA_VERSION,
+                }
+            ],
+        )
+    spoken = any(event.get("provider") == "tts" and event.get("status") == "speaking" for event in events)
+    failed = any(event.get("provider") == "tts" and event.get("status") == "failure" for event in events)
+    return VoiceResult(
+        ok=not failed,
+        spoken=spoken,
+        provider=config.provider,
+        voice_id=config.voice_id,
+        blocked_reason="voice provider failure" if failed else None,
+        events=events,
+        metadata={"rate": config.rate, "volume": config.volume},
+    )
+
+
+def stop_voice(state: dict[str, Any], options: dict[str, Any] | None = None) -> VoiceResult:
+    config = voice_config_from_env(options=options, state=state)
+    return VoiceResult(
+        ok=True,
+        spoken=False,
+        provider=config.provider,
+        voice_id=config.voice_id,
+        blocked_reason="cancelled",
+        events=[
+            {
+                "type": "provider_event",
+                "provider": "tts",
+                "status": "cancelled",
+                "voice_provider": config.provider,
+                "voice_id": config.voice_id,
+                "voice_schema": VOICE_SCHEMA_VERSION,
+            }
+        ],
+    )
+
+
+def voice_profile(state: dict[str, Any], options: dict[str, Any] | None = None) -> dict[str, Any]:
+    config = voice_config_from_env(options=options, state=state)
+    return {
+        **config.to_public_dict(),
+        "output_muted": bool(state.get("output_muted")),
+        "volume_level": state.get("volume_level"),
+        "audio_state": state.get("audio_state"),
+        "can_speak_now": bool(config.enabled and not state.get("output_muted")),
+        "boundary": "TTS output only; does not imply microphone capture, listening, or privacy state changes.",
+    }
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+    return bool(value)
+
+
+def _clamp_float(value: Any, low: float, high: float, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(low, min(high, parsed))
+
+
+def _text_metadata(text: str) -> dict[str, Any]:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    return {"text_len": len(text), "text_hash": digest, "text_redacted": True}

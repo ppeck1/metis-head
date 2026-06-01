@@ -116,15 +116,51 @@ def _reduce_provider(state: dict[str, Any], event: dict[str, Any]) -> None:
     provider = event.get("provider")
     status = event.get("status")
     if status == "failure":
+        if provider == "tts":
+            state["voice_output_state"] = "failed"
+            state["tts_failure_count"] = state.get("tts_failure_count", 0) + 1
+            state["last_tts_error"] = event.get("reason") or "tts failure"
+            _remember_tts_event(state, event)
+            adapter = state["input_adapters"].get("tts")
+            if adapter:
+                adapter["enabled"] = False
+                adapter["health"] = "unavailable"
+                adapter["mode"] = "disabled"
         failure_id = event.get("failure_id") or f"{provider}_failure"
         _set_failure(state, failure_id, event.get("reason"))
     elif provider == "stt" and status == "transcript":
         if state.get("mic_hardware_enabled"):
             state["audio_state"] = "listening"
+    elif provider == "tts" and status in {"queued", "synthesizing"}:
+        state["voice_output_state"] = status
+        _remember_tts_event(state, event)
     elif provider == "tts" and status == "speaking":
-        state["audio_state"] = "idle" if state.get("output_muted") else "speaking"
+        _remember_tts_event(state, event)
+        if state.get("output_muted"):
+            state["voice_output_state"] = "muted"
+            state["tts_muted_drop_count"] = state.get("tts_muted_drop_count", 0) + 1
+            state["last_block_reason"] = "output muted blocks voice output"
+            state["audio_state"] = "idle" if state.get("audio_state") == "speaking" else state.get("audio_state", "idle")
+        elif state.get("power_state") != "awake":
+            state["voice_output_state"] = "muted"
+            state["last_block_reason"] = "standby blocks voice output"
+        else:
+            state["voice_output_state"] = "speaking"
+            state["tts_output_count"] = state.get("tts_output_count", 0) + 1
+            state["audio_state"] = "speaking"
     elif provider == "tts" and status == "complete":
-        state["audio_state"] = "idle"
+        _remember_tts_event(state, event)
+        state["voice_output_state"] = "complete"
+        state["last_tts_error"] = None
+        if state.get("audio_state") == "speaking":
+            state["audio_state"] = "idle"
+    elif provider == "tts" and status in {"muted", "cancelled"}:
+        _remember_tts_event(state, event)
+        state["voice_output_state"] = status
+        if status == "muted":
+            state["tts_muted_drop_count"] = state.get("tts_muted_drop_count", 0) + 1
+        if state.get("audio_state") == "speaking":
+            state["audio_state"] = "idle"
     elif provider in {"vault", "memory", "boh_memory"} and status == "retrieved":
         state["cognition_state"] = "idle"
         state["source_state"] = "sourced"
@@ -259,6 +295,7 @@ def _set_failure(state: dict[str, Any], failure_id: str | None, reason: str | No
         state["module_health"]["metis_audio"] = "stt_failure"
     elif failure_id == "tts_failure":
         state["module_health"]["metis_audio"] = "tts_failure"
+        state["voice_output_state"] = "failed"
         if state.get("audio_state") == "speaking":
             state["audio_state"] = "idle"
     elif failure_id == "vault_unavailable":
@@ -287,3 +324,9 @@ def clear_failures(state: dict[str, Any]) -> dict[str, Any]:
     if next_state.get("authority_state") == "blocked":
         next_state["authority_state"] = "local_governed"
     return next_state
+
+
+def _remember_tts_event(state: dict[str, Any], event: dict[str, Any]) -> None:
+    state["last_tts_request_id"] = event.get("request_id", state.get("last_tts_request_id"))
+    state["last_tts_provider"] = event.get("voice_provider") or event.get("provider")
+    state["last_tts_voice"] = event.get("voice_id", state.get("last_tts_voice"))

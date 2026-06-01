@@ -10,9 +10,25 @@ token).
 
 ## Current Phase
 
-Phase scope: `0P` — Metis personality constitution layer (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness`).
+Phase scope: `0V` — governed voice output harness (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality`).
 
-Status: Metis now has a runtime personality constitution based on `METIS_PERSONALITY_CONSTITUTION_v1_0`.
+Status: Metis now has a simulation-first voice output harness. It supports mock voice output,
+explicitly gated system-TTS shape, voice status, speak/preview/stop endpoints, chat response speech,
+output-mute blocking, visible TTS failures, and redacted speech metadata in the event log.
+
+Phase 0V implemented:
+
+- `metis_head/voice.py`: `BaseVoiceProvider`, `MockVoiceProvider`, gated `SystemVoiceProvider`,
+  `FailedVoiceProvider`, `VoiceConfig`, and `VoiceResult`.
+- `GET /metis/voice`, `POST /metis/voice/speak`, `POST /metis/voice/preview`, and
+  `POST /metis/voice/stop`.
+- `options.voice.speak_response=true` on `/metis/chat` speaks the completed chat response through
+  the governed voice path.
+- `output_muted=true` blocks voice output without changing mic/camera/logging privacy state.
+- Voice events store `text_len`, `text_hash`, and `text_redacted=true`; raw spoken text is not
+  persisted into the event log.
+
+Previous Phase 0P status: Metis has a runtime personality constitution based on `METIS_PERSONALITY_CONSTITUTION_v1_0`.
 The constitution is exposed as structured data, served as a static console, and injected into the
 governed chat system prompt for mock, Ollama, and OpenAI providers.
 
@@ -112,6 +128,7 @@ Implemented:
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
 - Metis personality constitution injected into governed chat prompts.
+- Governed voice output harness for mock/system-shaped TTS, with output mute enforcement.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
 - Dashboard order: Virtual Radio, Virtual Chat (Send attached to the composer; Enter sends, Shift+Enter newlines), Radio Status, BOH Library Link, readiness/LED/adapter/state/scenario panels, export/replay, event log.
@@ -175,6 +192,24 @@ $env:METIS_LLM_PROVIDER="openai"
 $env:OPENAI_API_KEY="..."
 $env:METIS_OPENAI_MODEL="gpt-4o-mini"
 ```
+
+## Voice Output Config (Phase 0V)
+
+Voice output is opt-in. Phase 0V does not open a microphone, camera, or autonomous listening path.
+It only converts completed text responses into governed TTS events.
+
+```powershell
+$env:METIS_VOICE_ENABLED="false"
+$env:METIS_VOICE_PROVIDER="mock"       # mock or system
+$env:METIS_VOICE_ID="metis-counsel-mock"
+$env:METIS_VOICE_RATE="1.0"
+$env:METIS_VOICE_VOLUME="0.6"
+$env:METIS_VOICE_ALLOW_SYSTEM_TTS="false"
+```
+
+`system` is present as a gated provider shape only. Real OS speech remains disabled unless
+`METIS_VOICE_ALLOW_SYSTEM_TTS=true`; the default `mock` provider emits deterministic TTS events
+without audio.
 
 ## BOH Retrieval Bridge Config (Phase 0B)
 
@@ -251,6 +286,10 @@ Metis — BOH remains the source of truth.
 - `GET /metis/llm/options`
 - `POST /metis/event`
 - `POST /metis/chat`
+- `GET /metis/voice`
+- `POST /metis/voice/speak`
+- `POST /metis/voice/preview`
+- `POST /metis/voice/stop`
 - `GET /metis/personality`
 - `GET /metis/personality/console`
 - `POST /metis/llm/health`
@@ -273,7 +312,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-65 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, and 4 Phase 0P personality-layer tests)
+71 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, 4 Phase 0P personality-layer tests, and 6 Phase 0V voice-harness tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

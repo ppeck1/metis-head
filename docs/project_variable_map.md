@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0P` (Metis personality constitution layer; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness`)
+Last phase updated: `0V` (governed voice output harness; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -32,6 +32,7 @@ Before committing any phase:
 | `BRIDGE_EMULATOR_VERSION` | `metis_bridge_emulator.v0.1` | `metis_head.bridge_emulator` | CLI/library wrapper for simulator bridge event emission and replay. |
 | `PROVIDER_HARNESS_VERSION` | `metis_provider_harness.v0.1` | `metis_head.provider_harness` | Mock provider catalog/invocation harness version. |
 | `PERSONALITY_VERSION` | `metis_personality.v1.0` | `metis_head.personality` | Structured Metis personality constitution version. |
+| `VOICE_SCHEMA_VERSION` | `metis_voice.v0.1` | `metis_head.voice` | Governed voice output provider/result schema version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
@@ -47,6 +48,7 @@ Before committing any phase:
 | `session_id` | string | 0A | Local simulation session identifier. |
 | `power_state` | enum | 0A | `awake`, `standby`, future `off`/`disconnected`. |
 | `audio_state` | enum | 0A | `idle`, `listening`, `speaking`, `capture_blocked`, `standby_no_listen`; `tts_failure` forces `speaking` back to `idle`. |
+| `voice_output_state` | enum | 0V | `idle`, `queued`, `synthesizing`, `speaking`, `muted`, `complete`, `cancelled`, `failed`. |
 | `cognition_state` | enum | 0A | `idle`, `retrieving`, `drafting`, `awaiting_approval`. |
 | `authority_state` | enum | 0A | `local_governed`, `source_grounded`, `awaiting_approval`, `blocked`. |
 | `interaction_mode` | enum | 0A | `human` or `agent`. |
@@ -77,6 +79,13 @@ Before committing any phase:
 | `memory_promoted` | boolean | 0S | Assertion field proving memory promotion requires approval. |
 | `blocked_capture_count` | integer | 0S | Count of capture attempts blocked by hardware cutoff. |
 | `capture_count` | integer | 0S | Count of allowed simulated captures. |
+| `tts_output_count` | integer | 0V | Count of voice speaking events allowed by output controls. |
+| `tts_muted_drop_count` | integer | 0V | Count of voice outputs blocked by output mute/standby. |
+| `tts_failure_count` | integer | 0V | Count of visible TTS provider failures. |
+| `last_tts_request_id` | nullable string | 0V | Last TTS request identifier when available. |
+| `last_tts_provider` | nullable string | 0V | Last voice provider that emitted a TTS event. |
+| `last_tts_voice` | nullable string | 0V | Last voice ID used by the voice harness. |
+| `last_tts_error` | nullable string | 0V | Last TTS provider/blocking error. |
 | `last_block_reason` | nullable string | 0S | Human-readable reason for last block/failure. |
 | `spec_traceability` | object | 0S | Buildspec section anchors for dashboard/API review. |
 
@@ -90,6 +99,7 @@ Before committing any phase:
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
 | `chat_event` | 0R | `status`, `provider`, `model`, `user_message`, `assistant_message`, `source_state` | Governed virtual chat completion/failure. |
+| `provider_event` (`tts`) | 0V | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted` | Voice output events; raw spoken text is not persisted. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
@@ -176,6 +186,22 @@ results are returned for inspection but do not mutate canonical state.
 | `OPENAI_API_KEY` | secret | none | Required when `METIS_LLM_PROVIDER=openai`. |
 | `METIS_OPENAI_MODEL` | model name | `gpt-4o-mini` | OpenAI chat model. |
 
+## Voice Output Environment (Phase 0V)
+
+| Variable | Values | Default | Purpose |
+|---|---|---|---|
+| `METIS_VOICE_ENABLED` | bool | `false` | Enables automatic voice output when used by config/env. Direct speak endpoints opt in per request. |
+| `METIS_VOICE_PROVIDER` | `mock`, `system` | `mock` | Selects the voice provider shape. |
+| `METIS_VOICE_ID` | voice id | `metis-counsel-mock` | Voice profile identifier. |
+| `METIS_VOICE_RATE` | float `0.5-2.0` | `1.0` | Speech rate metadata. |
+| `METIS_VOICE_VOLUME` | float `0.0-1.0` | state `volume_level` or `0.6` | Voice volume metadata. |
+| `METIS_VOICE_ALLOW_SYSTEM_TTS` | bool | `false` | Explicit gate for future real OS speech. |
+
+Boundary: Phase 0V is output-only TTS. It does not imply microphone capture, camera capture,
+listening, wake-word detection, or privacy mode. `output_muted=true` blocks speech but does not
+change mic/camera/logging state. Spoken text is represented in TTS events as `text_len`,
+`text_hash`, and `text_redacted=true`; raw spoken content is not stored in the event log.
+
 ## BOH Retrieval Bridge Environment (Phase 0B)
 
 | Variable | Values | Default | Purpose |
@@ -245,6 +271,20 @@ Owner: `metis_head.boh_link`.
 
 Personality is now a runtime governance/behavior layer, not a decorative dashboard-only asset.
 `governed_messages()` includes `metis_personality.v1.0` for mock, Ollama, and OpenAI providers.
+
+## Voice Provider Classes
+
+| Class | Current Phase | Purpose |
+|---|---|---|
+| `VoiceConfig` | 0V | Environment/request-derived voice config. |
+| `VoiceResult` | 0V | Provider-neutral voice result envelope with events and block reason. |
+| `BaseVoiceProvider` | 0V | Interface with `speak(text, config) -> events`. |
+| `MockVoiceProvider` | 0V | Deterministic no-audio TTS event provider. |
+| `SystemVoiceProvider` | 0V | Gated system-TTS shape; real OS speech remains disabled unless explicitly allowed. |
+| `FailedVoiceProvider` | 0V | Deterministic visible TTS failure provider for tests. |
+| `speak_text` | 0V | Applies output-mute/standby gates and returns redacted TTS events. |
+| `stop_voice` | 0V | Emits a deterministic cancelled TTS event. |
+| `voice_profile` | 0V | Returns current voice config/status boundary. |
 
 ## Governance Policy
 
@@ -375,6 +415,10 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
 | `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider. When source grounding is on and BOH enabled (0B), retrieves read-only context first; response adds `source_state`, `metadata.boh`, and `retrieval`. |
+| `GET` | `/metis/voice` | `metis_head.brain` | Current voice config/status and output-only boundary. |
+| `POST` | `/metis/voice/speak` | `metis_head.brain` | Speak supplied text through the governed voice harness and reduce emitted TTS events. |
+| `POST` | `/metis/voice/preview` | `metis_head.brain` | Speak a preview phrase through the governed voice harness. |
+| `POST` | `/metis/voice/stop` | `metis_head.brain` | Emit a deterministic voice cancellation event. |
 | `GET` | `/metis/personality` | `metis_head.brain` | Return active Metis personality constitution profile and trait matrix. |
 | `GET` | `/metis/personality/console` | `metis_head.brain` | Serve the supplied personality console HTML. |
 | `GET` | `/metis/boh/status` | `metis_head.brain` | Safe BOH background link state (0C): state enum, last checked/connected, last error (token-scrubbed), probe count, bounded transition events. Never exposes any token. |
