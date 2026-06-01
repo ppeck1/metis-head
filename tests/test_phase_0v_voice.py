@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -92,7 +93,7 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
         return object()
 
     monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
-    monkeypatch.setattr(voice_module, "_play_wav_file", lambda wav_path: None)
+    monkeypatch.setattr(voice_module, "_play_wav_file", lambda wav_path, strategy="soundplayer": None)
     client = _client()
 
     response = client.post(
@@ -109,6 +110,49 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
     assert body["state"]["audio_state"] == "idle"
     assert calls[0]["command"][0] == str(piper_exe)
     assert calls[0]["kwargs"]["input"] == "Piper local voice check."
+
+
+def test_winsound_playback_uses_available_sync_default(monkeypatch, tmp_path) -> None:
+    wav_path = tmp_path / "voice.wav"
+    wav_path.write_bytes(b"RIFF")
+    calls: list[tuple[str, int]] = []
+
+    class FakeWinsound:
+        SND_FILENAME = 131072
+
+        @staticmethod
+        def PlaySound(path: str, flags: int) -> None:
+            calls.append((path, flags))
+
+    original_import = builtins.__import__
+
+    def fake_import(name: str, *args: Any, **kwargs: Any) -> object:
+        if name == "winsound":
+            return FakeWinsound
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    voice_module._play_wav_file(wav_path, "winsound")
+
+    assert calls == [(str(wav_path), FakeWinsound.SND_FILENAME)]
+
+
+def test_soundplayer_playback_uses_powershell_env_path(monkeypatch, tmp_path) -> None:
+    wav_path = tmp_path / "voice.wav"
+    wav_path.write_bytes(b"RIFF")
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(command: list[str], **kwargs: Any) -> object:
+        calls.append({"command": command, "kwargs": kwargs})
+        return object()
+
+    monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
+
+    voice_module._play_wav_file(wav_path, "soundplayer")
+
+    assert calls[0]["command"][:3] == ["powershell.exe", "-NoProfile", "-Command"]
+    assert calls[0]["kwargs"]["env"]["METIS_PIPER_WAV"] == str(wav_path)
 
 
 def test_mock_speak_returns_events_and_final_idle_state() -> None:

@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO+` - installed Piper voice model wiring (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider`).
+Phase scope: `0V/AUDIO2` - Piper playback reliability (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring`).
 
-Status: Piper is installed in the Python 3.11 runtime used by the mock Brain, and the requested
+Status: Piper playback now defaults to Windows `Media.SoundPlayer` through a PowerShell subprocess,
+with `winsound` still available as an explicit fallback strategy. This fixes the previous
+`winsound.SND_SYNC` playback bug on this machine and makes endpoint playback less dependent on
+uvicorn's Python audio session.
+
+Phase 0V/AUDIO2 implemented:
+
+- Replaced invalid `winsound.SND_SYNC` usage.
+- Added configurable Piper playback strategy: `soundplayer` or `winsound`.
+- Dashboard Piper requests now use `soundplayer`.
+- Voice events include the effective playback strategy.
+- Tests cover both playback paths.
+- Subagent review confirmed the main failure mode was playback, not Piper synthesis.
+
+Previous Phase 0V/AUDIO+ status: Piper is installed in the Python 3.11 runtime used by the mock Brain, and the requested
 `rhasspy/piper-voices` `en_US/hfc_female/medium` model is downloaded locally under `models/`
 (ignored by git). The backend auto-detects the local Piper executable and this default model/config
 when present, while the dashboard still allows per-request overrides.
@@ -306,6 +320,7 @@ $env:METIS_PIPER_EXE="B:\path\to\piper.exe"
 $env:METIS_PIPER_MODEL="B:\path\to\voice.onnx"
 $env:METIS_PIPER_CONFIG="B:\path\to\voice.onnx.json"   # optional
 $env:METIS_PIPER_PLAYBACK="true"
+$env:METIS_PIPER_PLAYBACK_STRATEGY="soundplayer"       # soundplayer or winsound
 ```
 
 Default local Piper paths are auto-detected when installed/downloaded:

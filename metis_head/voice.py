@@ -83,6 +83,7 @@ class VoiceConfig:
     piper_model: str | None = None
     piper_config: str | None = None
     piper_playback: bool = True
+    piper_playback_strategy: str = "soundplayer"
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -95,6 +96,7 @@ class VoiceConfig:
             "allow_system_tts": self.allow_system_tts,
             "allow_piper": self.allow_piper,
             "piper_configured": bool(self.piper_exe and self.piper_model),
+            "piper_playback_strategy": self.piper_playback_strategy,
             "providers": ["mock", "system", "piper"],
         }
 
@@ -230,6 +232,7 @@ class PiperVoiceProvider(BaseVoiceProvider):
             "volume": config.volume,
             "rate": config.rate,
             "playback": bool(config.piper_playback),
+            "playback_strategy": config.piper_playback_strategy,
         }
         events = [
             {**base, "status": "queued"},
@@ -251,7 +254,7 @@ class PiperVoiceProvider(BaseVoiceProvider):
             )
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
-                _play_wav_file(wav_path)
+                _play_wav_file(wav_path, config.piper_playback_strategy)
             events.append({**base, "status": "complete", "audio_file": "local_temp_wav"})
         except subprocess.TimeoutExpired as exc:
             raise VoiceProviderError("Piper TTS timed out") from exc
@@ -284,6 +287,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
     piper_model = _optional_str(voice_options.get("piper_model", env.get("METIS_PIPER_MODEL"))) or _default_piper_model()
     piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG"))) or _default_piper_config()
     piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "true")))
+    piper_playback_strategy = _playback_strategy(voice_options.get("piper_playback_strategy", env.get("METIS_PIPER_PLAYBACK_STRATEGY", "soundplayer")))
     if provider not in {"mock", "system", "piper", "failed"}:
         provider = "mock"
     return VoiceConfig(
@@ -298,6 +302,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
         piper_model=piper_model,
         piper_config=piper_config,
         piper_playback=piper_playback,
+        piper_playback_strategy=piper_playback_strategy,
     )
 
 
@@ -442,6 +447,7 @@ def voice_options(state: dict[str, Any]) -> dict[str, Any]:
             "model": config.piper_model,
             "config": config.piper_config,
             "playback": config.piper_playback,
+            "playback_strategy": config.piper_playback_strategy,
             "configured": bool(config.piper_exe and config.piper_model),
         },
         "options": options,
@@ -513,9 +519,41 @@ def _default_piper_config() -> str | None:
     return str(DEFAULT_PIPER_CONFIG) if DEFAULT_PIPER_CONFIG.exists() else None
 
 
-def _play_wav_file(wav_path: Path) -> None:
+def _playback_strategy(value: Any) -> str:
+    strategy = str(value or "soundplayer").strip().lower()
+    if strategy not in {"soundplayer", "winsound"}:
+        return "soundplayer"
+    return strategy
+
+
+def _play_wav_file(wav_path: Path, strategy: str = "soundplayer") -> None:
+    if strategy == "winsound":
+        _play_wav_with_winsound(wav_path)
+        return
+    _play_wav_with_soundplayer(wav_path)
+
+
+def _play_wav_with_soundplayer(wav_path: Path) -> None:
+    env = dict(os.environ)
+    env["METIS_PIPER_WAV"] = str(wav_path)
+    subprocess.run(
+        [
+            "powershell.exe",
+            "-NoProfile",
+            "-Command",
+            "(New-Object Media.SoundPlayer $env:METIS_PIPER_WAV).PlaySync()",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=90,
+        check=True,
+    )
+
+
+def _play_wav_with_winsound(wav_path: Path) -> None:
     try:
         import winsound
     except ImportError as exc:
         raise VoiceProviderError("local WAV playback is only implemented on Windows in this phase") from exc
-    winsound.PlaySound(str(wav_path), winsound.SND_FILENAME | winsound.SND_SYNC)
+    winsound.PlaySound(str(wav_path), winsound.SND_FILENAME)
