@@ -751,6 +751,7 @@
         options.piper_model = document.getElementById('piperModel').value.trim();
         options.piper_config = document.getElementById('piperConfig').value.trim();
         options.piper_playback_strategy = 'soundplayer';
+        options.piper_playback_mode = 'async';
       }
       return options;
     }
@@ -765,6 +766,9 @@
       document.getElementById('voiceStatus').textContent = response.ok
         ? `${result.provider}:${result.voice_id} / ${result.spoken ? 'spoken' : result.block_reason || 'not spoken'}`
         : String(result.detail || 'Voice preview failed');
+      if (response.ok && result.voice_schema) {
+        pulseRadioFromVoice(result);
+      }
       await refresh();
     }
     function chatOptions() {
@@ -803,6 +807,15 @@
         if (result.voice) labels.push(result.voice.spoken ? 'voice queued' : result.voice.block_reason || 'voice off');
         document.getElementById('chatStatus').textContent = labels.join(' / ');
         input.value = '';
+        if (result.state && result.leds) {
+          currentState = result.state;
+          currentLeds = result.leds;
+          renderChat(result.state.chat_history);
+          updateRadio(result.state, result.leds);
+        }
+        if (result.voice) {
+          pulseRadioFromVoice(result.voice);
+        }
         await refresh();
       } catch (error) {
         document.getElementById('chatStatus').textContent = String(error);
@@ -896,6 +909,15 @@
         meter.classList.remove('voice-active');
         strip.classList.remove('voice-active');
       }, durationMs);
+    }
+    function pulseRadioFromVoice(voice) {
+      if (!voice || !voice.spoken) return;
+      const events = voice.events || [];
+      const speaking = events.find(event => event.status === 'speaking') || events[events.length - 1] || {};
+      const hinted = Number(speaking.audio_visualization_hint_ms || 0);
+      const textLen = Number(speaking.text_len || 0);
+      const duration = hinted || Math.max(2200, Math.min(30000, 900 + (textLen * 70)));
+      pulseRadioAudio(duration);
     }
     async function refresh() {
       const data = await fetch('/metis/state').then(r => r.json());

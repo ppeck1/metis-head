@@ -93,7 +93,8 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
         return object()
 
     monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
-    monkeypatch.setattr(voice_module, "_play_wav_file", lambda wav_path, strategy="soundplayer": None)
+    playback_calls: list[tuple[Any, str]] = []
+    monkeypatch.setattr(voice_module, "_play_wav_file_async", lambda wav_path, strategy="soundplayer": playback_calls.append((wav_path, strategy)))
     client = _client()
 
     response = client.post(
@@ -110,6 +111,9 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
     assert body["state"]["audio_state"] == "idle"
     assert calls[0]["command"][0] == str(piper_exe)
     assert calls[0]["kwargs"]["input"] == "Piper local voice check."
+    assert body["events"][0]["playback_mode"] == "async"
+    assert body["events"][0]["audio_visualization_hint_ms"] >= 2200
+    assert playback_calls
 
 
 def test_piper_speak_normalizes_markdown_for_audible_output(monkeypatch, tmp_path) -> None:
@@ -127,7 +131,7 @@ def test_piper_speak_normalizes_markdown_for_audible_output(monkeypatch, tmp_pat
         return object()
 
     monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
-    monkeypatch.setattr(voice_module, "_play_wav_file", lambda wav_path, strategy="soundplayer": None)
+    monkeypatch.setattr(voice_module, "_play_wav_file_async", lambda wav_path, strategy="soundplayer": None)
     client = _client()
     raw_text = "**Current Capabilities:**\n- Text-based analysis\n- `code-ish` syntax\n\n**Tools Available:**\n- None directly accessible"
 
@@ -196,6 +200,32 @@ def test_soundplayer_playback_uses_powershell_env_path(monkeypatch, tmp_path) ->
 
     assert calls[0]["command"][:3] == ["powershell.exe", "-NoProfile", "-Command"]
     assert calls[0]["kwargs"]["env"]["METIS_PIPER_WAV"] == str(wav_path)
+
+
+def test_async_playback_runs_in_background_and_cleans_up(monkeypatch, tmp_path) -> None:
+    wav_path = tmp_path / "voice.wav"
+    wav_path.write_bytes(b"RIFF")
+    calls: list[tuple[Any, str]] = []
+
+    def fake_play(path: Any, strategy: str) -> None:
+        calls.append((path, strategy))
+
+    class ImmediateThread:
+        def __init__(self, target: Any, args: tuple[Any, ...], daemon: bool) -> None:
+            self.target = target
+            self.args = args
+            self.daemon = daemon
+
+        def start(self) -> None:
+            self.target(*self.args)
+
+    monkeypatch.setattr(voice_module, "_play_wav_file", fake_play)
+    monkeypatch.setattr(voice_module.threading, "Thread", ImmediateThread)
+
+    voice_module._play_wav_file_async(wav_path, "soundplayer")
+
+    assert calls == [(wav_path, "soundplayer")]
+    assert not wav_path.exists()
 
 
 def test_mock_speak_returns_events_and_final_idle_state() -> None:

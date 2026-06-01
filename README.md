@@ -10,9 +10,21 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO3` - spoken-text normalization for TTS (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability`).
+Phase scope: `0V/AUDIO4` - async Piper playback and radio alignment (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization`).
 
-Status: Piper now receives a normalized spoken form of chat text rather than the display Markdown.
+Status: Piper playback now launches asynchronously after synthesis, so the mock Brain can return the
+chat response while audio is playing instead of after playback finishes. The dashboard uses the TTS
+event metadata to pulse the virtual radio strip for an estimated speech duration.
+
+Phase 0V/AUDIO4 implemented:
+
+- Piper playback mode defaults to `async`.
+- Temporary WAV cleanup happens after background playback completes.
+- Voice events include `playback_mode` and `audio_visualization_hint_ms`.
+- Dashboard chat rendering updates from the returned state before the follow-up refresh.
+- The virtual radio strip pulses from the returned voice event duration hint.
+
+Previous Phase 0V/AUDIO3 status: Piper receives a normalized spoken form of chat text rather than the display Markdown.
 The dashboard can still show headings, bullets, links, and code formatting, but the voice path strips
 or converts formatting markers that sound bad when read aloud.
 
@@ -335,6 +347,7 @@ $env:METIS_PIPER_MODEL="B:\path\to\voice.onnx"
 $env:METIS_PIPER_CONFIG="B:\path\to\voice.onnx.json"   # optional
 $env:METIS_PIPER_PLAYBACK="true"
 $env:METIS_PIPER_PLAYBACK_STRATEGY="soundplayer"       # soundplayer or winsound
+$env:METIS_PIPER_PLAYBACK_MODE="async"                 # async or sync
 $env:METIS_VOICE_NORMALIZE_TEXT="true"
 ```
 
@@ -462,7 +475,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-91 passed under Python 3.11 (includes spoken-text normalization and Piper playback coverage)
+92 passed under Python 3.11 (includes async Piper playback, spoken-text normalization, and radio pulse coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

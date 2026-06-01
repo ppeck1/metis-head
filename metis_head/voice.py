@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sysconfig
 import tempfile
+import threading
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
@@ -85,6 +86,7 @@ class VoiceConfig:
     piper_config: str | None = None
     piper_playback: bool = True
     piper_playback_strategy: str = "soundplayer"
+    piper_playback_mode: str = "async"
     normalize_text: bool = True
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -99,6 +101,7 @@ class VoiceConfig:
             "allow_piper": self.allow_piper,
             "piper_configured": bool(self.piper_exe and self.piper_model),
             "piper_playback_strategy": self.piper_playback_strategy,
+            "piper_playback_mode": self.piper_playback_mode,
             "normalize_text": self.normalize_text,
             "providers": ["mock", "system", "piper"],
         }
@@ -237,9 +240,11 @@ class PiperVoiceProvider(BaseVoiceProvider):
             "rate": config.rate,
             "playback": bool(config.piper_playback),
             "playback_strategy": config.piper_playback_strategy,
+            "playback_mode": config.piper_playback_mode,
             "normalized_text": config.normalize_text,
             "source_text_len": len(text),
             "source_text_hash": _text_hash(text),
+            "audio_visualization_hint_ms": _audio_visualization_hint_ms(spoken_text),
         }
         events = [
             {**base, "status": "queued"},
@@ -247,6 +252,7 @@ class PiperVoiceProvider(BaseVoiceProvider):
         ]
         with tempfile.NamedTemporaryFile(prefix="metis_piper_", suffix=".wav", delete=False) as wav_file:
             wav_path = Path(wav_file.name)
+        cleanup_wav = True
         try:
             command = [str(piper_exe), "--model", str(piper_model), "--output-file", str(wav_path), "--volume", str(config.volume)]
             if config.piper_config:
@@ -261,7 +267,11 @@ class PiperVoiceProvider(BaseVoiceProvider):
             )
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
-                _play_wav_file(wav_path, config.piper_playback_strategy)
+                if config.piper_playback_mode == "async":
+                    cleanup_wav = False
+                    _play_wav_file_async(wav_path, config.piper_playback_strategy)
+                else:
+                    _play_wav_file(wav_path, config.piper_playback_strategy)
             events.append({**base, "status": "complete", "audio_file": "local_temp_wav"})
         except subprocess.TimeoutExpired as exc:
             raise VoiceProviderError("Piper TTS timed out") from exc
@@ -270,10 +280,11 @@ class PiperVoiceProvider(BaseVoiceProvider):
             detail = f"Piper TTS failed: {stderr}" if stderr else "Piper TTS failed"
             raise VoiceProviderError(detail) from exc
         finally:
-            try:
-                wav_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+            if cleanup_wav:
+                try:
+                    wav_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
         return events
 
 
@@ -295,6 +306,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
     piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG"))) or _default_piper_config()
     piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "true")))
     piper_playback_strategy = _playback_strategy(voice_options.get("piper_playback_strategy", env.get("METIS_PIPER_PLAYBACK_STRATEGY", "soundplayer")))
+    piper_playback_mode = _playback_mode(voice_options.get("piper_playback_mode", env.get("METIS_PIPER_PLAYBACK_MODE", "async")))
     normalize_text = _as_bool(voice_options.get("normalize_text", env.get("METIS_VOICE_NORMALIZE_TEXT", "true")))
     if provider not in {"mock", "system", "piper", "failed"}:
         provider = "mock"
@@ -311,6 +323,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
         piper_config=piper_config,
         piper_playback=piper_playback,
         piper_playback_strategy=piper_playback_strategy,
+        piper_playback_mode=piper_playback_mode,
         normalize_text=normalize_text,
     )
 
@@ -457,6 +470,7 @@ def voice_options(state: dict[str, Any]) -> dict[str, Any]:
             "config": config.piper_config,
             "playback": config.piper_playback,
             "playback_strategy": config.piper_playback_strategy,
+            "playback_mode": config.piper_playback_mode,
             "configured": bool(config.piper_exe and config.piper_model),
         },
         "options": options,
@@ -583,8 +597,34 @@ def _playback_strategy(value: Any) -> str:
     return strategy
 
 
+def _playback_mode(value: Any) -> str:
+    mode = str(value or "async").strip().lower()
+    if mode not in {"async", "sync"}:
+        return "async"
+    return mode
+
+
 def _piper_timeout_seconds(text: str) -> int:
     return max(90, min(240, 60 + (len(text) // 10)))
+
+
+def _audio_visualization_hint_ms(text: str) -> int:
+    return max(2200, min(30000, 900 + (len(text) * 70)))
+
+
+def _play_wav_file_async(wav_path: Path, strategy: str = "soundplayer") -> None:
+    thread = threading.Thread(target=_play_wav_file_and_cleanup, args=(wav_path, strategy), daemon=True)
+    thread.start()
+
+
+def _play_wav_file_and_cleanup(wav_path: Path, strategy: str) -> None:
+    try:
+        _play_wav_file(wav_path, strategy)
+    finally:
+        try:
+            wav_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _play_wav_file(wav_path: Path, strategy: str = "soundplayer") -> None:

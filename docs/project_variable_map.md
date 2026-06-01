@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO3` (spoken-text normalization for TTS; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability`)
+Last phase updated: `0V/AUDIO4` (async Piper playback and radio alignment; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -102,7 +102,7 @@ Before committing any phase:
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
 | `chat_event` | 0R | `status`, `provider`, `model`, `user_message`, `assistant_message`, `source_state` | Governed virtual chat completion/failure. |
-| `provider_event` (`tts`) | 0V/AUDIO3 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text and concrete temp paths are not persisted. |
+| `provider_event` (`tts`) | 0V/AUDIO4 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text and concrete temp paths are not persisted. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
@@ -218,6 +218,7 @@ results are returned for inspection but do not mutate canonical state.
 | `METIS_PIPER_CONFIG` | filesystem path | none | Optional Piper model config path. |
 | `METIS_PIPER_PLAYBACK` | bool | `true` | Plays the generated temporary WAV through Windows audio when true. |
 | `METIS_PIPER_PLAYBACK_STRATEGY` | `soundplayer`, `winsound` | `soundplayer` | Windows playback strategy for generated Piper WAV files. |
+| `METIS_PIPER_PLAYBACK_MODE` | `async`, `sync` | `async` | Launches playback in the background by default so chat text and radio pulse can align with speech. |
 | `METIS_VOICE_NORMALIZE_TEXT` | bool | `true` | Sends audibility-normalized text to TTS while preserving display Markdown in chat history. |
 
 Default local Piper assets when present:
@@ -313,7 +314,7 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 | `BaseVoiceProvider` | 0V | Interface with `speak(text, config) -> events`. |
 | `MockVoiceProvider` | 0V | Deterministic no-audio TTS event provider. |
 | `SystemVoiceProvider` | 0V | Gated system-TTS shape; real OS speech remains disabled unless explicitly allowed. |
-| `PiperVoiceProvider` | 0V/AUDIO2 | Invokes local Piper CLI, writes a temporary WAV, and optionally plays it through Windows `Media.SoundPlayer` or `winsound`. |
+| `PiperVoiceProvider` | 0V/AUDIO4 | Invokes local Piper CLI, writes a temporary WAV, and optionally plays it through Windows `Media.SoundPlayer` or `winsound` in async or sync mode. |
 | `normalize_spoken_text` | 0V/AUDIO3 | Removes or converts Markdown/control punctuation before text is sent to TTS. |
 | `FailedVoiceProvider` | 0V | Deterministic visible TTS failure provider for tests. |
 | `speak_text` | 0V | Applies output-mute/standby gates and returns redacted TTS events. |
@@ -492,6 +493,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
 | `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
 | `pulseRadioAudio` | 0V/AUDIO | Pulses the virtual radio meter/strip when TTS output is active or newly completed. |
+| `pulseRadioFromVoice` | 0V/AUDIO4 | Pulses the radio strip from returned voice event metadata, using `audio_visualization_hint_ms` when available. |
 
 ## API Routes
 
