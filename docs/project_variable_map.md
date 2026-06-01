@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO5` (PCM-derived vertical radio waveform; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment`)
+Last phase updated: `0V/AUDIO6` (old-school scope waveform styling and reset; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -11,7 +11,7 @@ Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core st
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
-Virtual Radio is a 3-zone instrument (`grid-template-columns: 68% 9% 23%`): an inert `radio-speaker` grille (visual only), a thin vertical `radio-strip` carrying the activity LED, authority LED, and vertical `radio-meter` visualizer, and a right `radio-controls` stack (Volume + Depth knobs, PWR/LOUD/AFC/AM-FM `radio-switches`, and the large Tuning/Initiative knob). Power/audio/mode/authority readouts and the mic/camera cutoff buttons were moved out of the radio face into the `Radio Status` panel. Virtual Chat's Send button is attached to the composer textarea (Enter sends, Shift+Enter inserts a newline, Send disables while generating); Clear Input is a secondary action. Control meanings are unchanged.
+Virtual Radio is a 3-zone instrument (`grid-template-columns: 58% 19% 23%`): an inert `radio-speaker` grille (visual only), a tuning-window `radio-strip` carrying the activity LED, authority LED, and old-school horizontal two-sided `radio-meter` scope visualizer, and a right `radio-controls` stack (Volume + Depth knobs, PWR/LOUD/AFC/AM-FM `radio-switches`, and the large Tuning/Initiative knob). Power/audio/mode/authority readouts and the mic/camera cutoff buttons were moved out of the radio face into the `Radio Status` panel. Virtual Chat's Send button is attached to the composer textarea (Enter sends, Shift+Enter inserts a newline, Send disables while generating); Clear Input is a secondary action. Control meanings are unchanged.
 
 ## Phase Commit Checklist
 
@@ -441,7 +441,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `eventLog` | 0S | Event log JSON panel. |
 | `radioActivityLed` | 0S | Virtual tuning-window activity LED. |
 | `radioAuthorityLed` | 0S | Virtual tuning-window authority LED. |
-| `radioMeter` | 0V/AUDIO5 | Virtual tuning-window visualizer; renders dim line when idle and PCM-derived vertical waveform during Piper speech. |
+| `radioMeter` | 0V/AUDIO6 | Virtual tuning-window visualizer; renders dim centerline when idle and PCM-derived horizontal two-sided waveform during Piper speech. |
 | `volumeKnob` | 0S | Virtual top/volume knob. |
 | `depthKnob` | 0S | Virtual middle/depth knob. |
 | `initiativeKnob` | 0S | Virtual large tuning/initiative knob. |
@@ -493,8 +493,8 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
 | `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
 | `pulseRadioAudio` | 0V/AUDIO | Pulses the virtual radio meter/strip when TTS output is active or newly completed. |
-| `renderRadioWave` | 0V/AUDIO5 | Renders bottom-to-top vertical waveform rows from TTS `audio_levels`. |
-| `pulseRadioFromVoice` | 0V/AUDIO5 | Pulses the radio strip from returned voice event metadata, using `audio_levels` and `audio_visualization_hint_ms` when available. |
+| `renderRadioWave` | 0V/AUDIO6 | Renders old-school horizontal two-sided waveform rows from TTS `audio_levels`. |
+| `pulseRadioFromVoice` | 0V/AUDIO6 | Pulses the radio strip from returned voice event metadata, using `audio_levels` and `audio_visualization_hint_ms` when available. |
 
 ## API Routes
 

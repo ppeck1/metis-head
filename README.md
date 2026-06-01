@@ -10,12 +10,25 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO5` - PCM-derived vertical radio waveform (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment`).
+Phase scope: `0V/AUDIO6` - old-school scope waveform styling and reset (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope`).
 
-Status: the tuning-window visualizer now behaves more like an old stereo instrument: for Piper
-speech, Metis extracts a compact RMS envelope from the actual synthesized WAV and renders it as a
-bottom-to-top vertical waveform trace. It is still a simulator preview, not final LED firmware, but
-it is driven by generated audio data rather than decorative/random animation.
+Status: the tuning-window visualizer now uses a horizontal, two-sided old-stereo scope style with a
+centerline glow and short afterimage decay. It resets to an idle line after the current voice task
+completes instead of holding the last waveform.
+
+Phase 0V/AUDIO6 implemented:
+
+- Reworked the dashboard tuning-window visualizer from flat vertical bars into a glowing two-sided
+  horizontal scope trace.
+- Added a short `voice-decay` afterimage state that clears within one second after voice duration.
+- Added explicit reset to the idle centerline after the current voice task completes.
+- Kept the data source truthful: waveform height still comes from Piper WAV `audio_levels`, not
+  random/decorative motion.
+
+Previous Phase 0V/AUDIO5 status: the tuning-window visualizer behaves like an old stereo instrument: for Piper
+speech, Metis extracts a compact RMS envelope from the actual synthesized WAV and renders it through
+the radio strip. It is still a simulator preview, not final LED firmware, but it is driven by
+generated audio data rather than decorative/random animation.
 
 Phase 0V/AUDIO5 implemented:
 
@@ -489,7 +502,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-93 passed under Python 3.11 (includes PCM-derived Piper waveform, async playback, spoken-text normalization, and radio pulse coverage)
+93 passed under Python 3.11 (includes old-school scope styling, PCM-derived Piper waveform, async playback, spoken-text normalization, and radio reset coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
