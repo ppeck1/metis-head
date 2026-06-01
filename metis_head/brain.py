@@ -26,7 +26,7 @@ from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
 from .sim_manifest import build_sim_test_manifest
-from .voice import VoiceResult, speak_text, stop_voice, voice_profile
+from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
 
 @asynccontextmanager
@@ -301,6 +301,11 @@ def voice() -> dict[str, Any]:
             "boundary": profile["boundary"],
         },
     }
+
+
+@app.get("/metis/voice/options")
+def voice_options_route() -> dict[str, Any]:
+    return voice_options(STATE)
 
 
 @app.post("/metis/voice/speak")

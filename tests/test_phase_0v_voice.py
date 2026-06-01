@@ -38,6 +38,24 @@ def test_voice_profile_config_endpoint_exposes_mock_tts_profile() -> None:
     assert "TTS output only" in body["profile"]["boundary"]
 
 
+def test_voice_options_endpoint_lists_current_and_candidate_voices() -> None:
+    client = _client()
+
+    response = client.get("/metis/voice/options")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["voice_options_version"] == "metis_voice_options.v0.1"
+    assert body["selected_voice_id"] == "metis-counsel-mock"
+    assert body["current_voice_is_audible"] is False
+    options = {item["option_id"]: item for item in body["options"]}
+    assert options["metis-counsel-mock"]["status"] == "available"
+    assert options["metis-counsel-mock"]["privacy_class"] == "local_no_audio"
+    assert options["windows-system-tts"]["status"] == "gated"
+    assert options["piper-local"]["status"] == "candidate"
+    assert options["openai-tts"]["privacy_class"] == "cloud_audio_external"
+
+
 def test_mock_speak_returns_events_and_final_idle_state() -> None:
     client = _client()
 

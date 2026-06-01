@@ -7,6 +7,54 @@ from typing import Any
 
 
 VOICE_SCHEMA_VERSION = "metis_voice.v0.1"
+VOICE_OPTIONS_VERSION = "metis_voice_options.v0.1"
+
+VOICE_OPTION_CATALOG: list[dict[str, Any]] = [
+    {
+        "option_id": "metis-counsel-mock",
+        "provider": "mock",
+        "status": "available",
+        "privacy_class": "local_no_audio",
+        "description": "Deterministic no-audio voice event provider used for tests and safe boot.",
+        "requires_network": False,
+        "requires_install": False,
+        "current_default": True,
+        "notes": "This is the voice Metis has now: a governed TTS harness, not audible speech.",
+    },
+    {
+        "option_id": "windows-system-tts",
+        "provider": "system",
+        "status": "gated",
+        "privacy_class": "local_os_audio",
+        "description": "Windows/system TTS provider shape for local audible speech.",
+        "requires_network": False,
+        "requires_install": False,
+        "current_default": False,
+        "notes": "Explicitly disabled until METIS_VOICE_ALLOW_SYSTEM_TTS=true and a real synthesis implementation is approved.",
+    },
+    {
+        "option_id": "piper-local",
+        "provider": "piper",
+        "status": "candidate",
+        "privacy_class": "local_model_audio",
+        "description": "Future local neural TTS candidate for offline voice output.",
+        "requires_network": False,
+        "requires_install": True,
+        "current_default": False,
+        "notes": "Needs provider bakeoff and installation path before runtime support.",
+    },
+    {
+        "option_id": "openai-tts",
+        "provider": "openai",
+        "status": "candidate",
+        "privacy_class": "cloud_audio_external",
+        "description": "Future cloud TTS candidate with external transmission.",
+        "requires_network": True,
+        "requires_install": False,
+        "current_default": False,
+        "notes": "Would require explicit cloud/privacy labeling and operator approval before use.",
+    },
+]
 
 
 class VoiceProviderError(RuntimeError):
@@ -276,6 +324,18 @@ def voice_profile(state: dict[str, Any], options: dict[str, Any] | None = None) 
         "audio_state": state.get("audio_state"),
         "can_speak_now": bool(config.enabled and not state.get("output_muted")),
         "boundary": "TTS output only; does not imply microphone capture, listening, or privacy state changes.",
+    }
+
+
+def voice_options(state: dict[str, Any]) -> dict[str, Any]:
+    profile = voice_profile(state)
+    return {
+        "voice_options_version": VOICE_OPTIONS_VERSION,
+        "selected_provider": profile["provider"],
+        "selected_voice_id": profile["voice_id"],
+        "current_voice_is_audible": False,
+        "boundary": profile["boundary"],
+        "options": VOICE_OPTION_CATALOG,
     }
 
 
