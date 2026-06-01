@@ -269,6 +269,29 @@ def test_wav_spectrum_envelope_reflects_actual_audio(tmp_path) -> None:
     assert len(set(levels)) > 3
 
 
+def test_wav_spectrum_frames_follow_actual_audio_over_time(tmp_path) -> None:
+    wav_path = tmp_path / "spectrum_frames.wav"
+    sample_rate = 22050
+    samples = []
+    for index in range(sample_rate):
+        t = index / sample_rate
+        frequency = 220 if index < sample_rate // 2 else 1800
+        samples.append(int(math.sin(2 * math.pi * frequency * t) * 10000))
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    frames = voice_module._wav_spectrum_frames(wav_path, frame_count=10, bands=12)
+
+    assert len(frames) == 10
+    assert all(len(frame) == 12 for frame in frames)
+    assert frames[0] != frames[-1]
+    assert max(frames[0]) == 1.0
+    assert max(frames[-1]) == 1.0
+
+
 def test_mock_speak_returns_events_and_final_idle_state() -> None:
     client = _client()
 

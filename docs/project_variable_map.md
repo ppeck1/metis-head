@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO8` (full-panel spectrum analyzer polish with UI-side resampling and gain normalization; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction`)
+Last phase updated: `0V/AUDIO9` (time-sliced Piper spectrum frame animation and `#3AA3A7` analyzer color; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction + 0V/AUDIO8 full-panel polish`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -102,7 +102,7 @@ Before committing any phase:
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
 | `chat_event` | 0R | `status`, `provider`, `model`, `user_message`, `assistant_message`, `source_state` | Governed virtual chat completion/failure. |
-| `provider_event` (`tts`) | 0V/AUDIO7 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, `audio_levels`, `audio_level_count`, `audio_spectrum_levels`, `audio_spectrum_count`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text, raw audio, and concrete temp paths are not persisted. `audio_spectrum_levels` is derived from the actual Piper WAV and drives the mirrored analyzer. |
+| `provider_event` (`tts`) | 0V/AUDIO9 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, `audio_levels`, `audio_level_count`, `audio_spectrum_levels`, `audio_spectrum_count`, `audio_spectrum_frames`, `audio_spectrum_frame_count`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text, raw audio, and concrete temp paths are not persisted. `audio_spectrum_frames` and `audio_spectrum_levels` are derived from the actual Piper WAV and drive the mirrored analyzer. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
@@ -317,6 +317,7 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 | `PiperVoiceProvider` | 0V/AUDIO4 | Invokes local Piper CLI, writes a temporary WAV, and optionally plays it through Windows `Media.SoundPlayer` or `winsound` in async or sync mode. |
 | `normalize_spoken_text` | 0V/AUDIO3 | Removes or converts Markdown/control punctuation before text is sent to TTS. |
 | `_wav_spectrum_envelope` | 0V/AUDIO7 | Extracts compact frequency-band levels from the generated Piper WAV for the vertical mirrored analyzer. |
+| `_wav_spectrum_frames` | 0V/AUDIO9 | Extracts time-sliced compact frequency-band frames from the generated Piper WAV for animated analyzer motion. |
 | `FailedVoiceProvider` | 0V | Deterministic visible TTS failure provider for tests. |
 | `speak_text` | 0V | Applies output-mute/standby gates and returns redacted TTS events. |
 | `stop_voice` | 0V | Emits a deterministic cancelled TTS event. |
@@ -442,7 +443,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `eventLog` | 0S | Event log JSON panel. |
 | `radioActivityLed` | 0S | Virtual tuning-window activity LED. |
 | `radioAuthorityLed` | 0S | Virtual tuning-window authority LED. |
-| `radioMeter` | 0V/AUDIO8 | Virtual tuning-window visualizer; renders an idle center spine and a full-height bottom-to-top mirrored analog spectrum analyzer from Piper `audio_spectrum_levels` during speech. |
+| `radioMeter` | 0V/AUDIO9 | Virtual tuning-window visualizer; renders an idle center spine and a full-height bottom-to-top mirrored analog spectrum analyzer from Piper `audio_spectrum_frames` during speech. Primary analyzer color is `#3AA3A7`. |
 | `volumeKnob` | 0S | Virtual top/volume knob. |
 | `depthKnob` | 0S | Virtual middle/depth knob. |
 | `initiativeKnob` | 0S | Virtual large tuning/initiative knob. |
@@ -494,9 +495,9 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
 | `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
 | `pulseRadioAudio` | 0V/AUDIO | Pulses the virtual radio meter/strip when TTS output is active or newly completed. |
-| `renderRadioWave` | 0V/AUDIO8 | Renders vertical mirrored spectrum rows from TTS `audio_spectrum_levels`, resamples the real bands to fill the panel, normalizes per utterance, and falls back to `audio_levels` only for compatibility. |
+| `renderRadioWave` | 0V/AUDIO9 | Renders one vertical mirrored spectrum frame, resamples real bands to fill the panel, normalizes per utterance, and falls back to aggregate levels for compatibility. |
 | `resampleLevels` | 0V/AUDIO8 | Interpolates compact Piper spectrum metadata into the dashboard's full-height analyzer row count without inventing new source signal. |
-| `pulseRadioFromVoice` | 0V/AUDIO8 | Pulses the radio strip from returned voice event metadata, using `audio_spectrum_levels`, `audio_levels`, and `audio_visualization_hint_ms` when available. |
+| `pulseRadioFromVoice` | 0V/AUDIO9 | Pulses the radio strip from returned voice event metadata, using `audio_spectrum_frames`, `audio_spectrum_levels`, `audio_levels`, and `audio_visualization_hint_ms` when available. |
 
 ## API Routes
 

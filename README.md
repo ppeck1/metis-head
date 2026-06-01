@@ -10,12 +10,26 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO8` - full-panel spectrum analyzer polish (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction`).
+Phase scope: `0V/AUDIO9` - real-time spectrum frame animation (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction + 0V/AUDIO8 full-panel polish`).
 
-Status: the tuning-window visualizer now fills its panel like a real instrument. Piper synthesis
-still produces truthful `audio_spectrum_levels` from the generated WAV, and the dashboard resamples
-that signal into a full-height mirrored spectrum analyzer with per-utterance gain normalization,
-brighter phosphor-style segments, peak ticks, afterimage decay, and idle reset.
+Status: the tuning-window visualizer now animates through time-sliced spectrum frames from the
+actual Piper WAV instead of holding one aggregate spectrum shape. The dashboard plays those frames
+over the speech duration, keeps the full-height mirrored analyzer, and uses the project color
+`#3AA3A7` as the primary phosphor/LED tone.
+
+Phase 0V/AUDIO9 implemented:
+
+- Added `audio_spectrum_frames` and `audio_spectrum_frame_count` to Piper TTS events.
+- Extracted compact per-frame spectrum data from the generated Piper WAV for voice-reactive motion.
+- Updated the dashboard to animate analyzer frames over the voice duration.
+- Switched the analyzer base color from green to `#3AA3A7`.
+- Kept aggregate `audio_spectrum_levels` and `audio_levels` for compatibility and reset/decay.
+
+Previous Phase 0V/AUDIO8 status: the tuning-window visualizer filled its panel like a real
+instrument. Piper synthesis still produced truthful `audio_spectrum_levels` from the generated WAV,
+and the dashboard resampled that signal into a full-height mirrored spectrum analyzer with
+per-utterance gain normalization, brighter phosphor-style segments, peak ticks, afterimage decay,
+and idle reset.
 
 Phase 0V/AUDIO8 implemented:
 
@@ -530,7 +544,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-94 passed under Python 3.11 (includes vertical mirrored spectrum analyzer, Piper WAV spectrum extraction, async playback, spoken-text normalization, and radio reset coverage)
+95 passed under Python 3.11 (includes animated Piper spectrum frames, vertical mirrored spectrum analyzer, async playback, spoken-text normalization, and radio reset coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

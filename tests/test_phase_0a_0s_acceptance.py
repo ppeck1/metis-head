@@ -367,9 +367,11 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "renderRadioWave" in dashboard
     assert "resampleLevels" in dashboard
     assert "audio_spectrum_levels" in dashboard
+    assert "audio_spectrum_frames" in dashboard
     assert "audio_levels" in dashboard
     assert "spectrum-row" in dashboard
     assert "spectrum-arm" in dashboard
+    assert "#3AA3A7" in dashboard
     assert "voice-decay" in dashboard
     assert "radioResetTimer" in dashboard
     assert "column-reverse" in dashboard

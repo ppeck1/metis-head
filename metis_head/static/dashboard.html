@@ -106,7 +106,7 @@
       justify-items: center;
       align-content: stretch;
       background:
-        radial-gradient(circle at 50% 42%, rgba(81, 255, 139, 0.13), transparent 58%),
+        radial-gradient(circle at 50% 42%, rgba(58, 163, 167, 0.17), transparent 58%),
         linear-gradient(180deg, #050d0e, #0d1617 48%, #030708);
       border: 1px solid rgba(255,255,255,0.28);
       border-radius: 8px;
@@ -140,15 +140,15 @@
       min-height: 218px;
       border-radius: 6px;
       background:
-        linear-gradient(90deg, rgba(4,12,10,0), rgba(49,255,119,0.12) 50%, rgba(4,12,10,0)),
-        repeating-linear-gradient(0deg, rgba(98,255,126,0.12) 0 1px, transparent 1px 8px),
-        repeating-linear-gradient(90deg, rgba(98,255,126,0.045) 0 1px, transparent 1px 12px),
-        radial-gradient(circle at 50% 54%, rgba(69,255,121,0.18), transparent 66%),
+        linear-gradient(90deg, rgba(4,12,10,0), rgba(58,163,167,0.14) 50%, rgba(4,12,10,0)),
+        repeating-linear-gradient(0deg, rgba(58,163,167,0.14) 0 1px, transparent 1px 8px),
+        repeating-linear-gradient(90deg, rgba(58,163,167,0.055) 0 1px, transparent 1px 12px),
+        radial-gradient(circle at 50% 54%, rgba(58,163,167,0.22), transparent 66%),
         #020604;
       box-shadow:
         inset 0 0 18px rgba(0,0,0,0.8),
-        inset 0 0 44px rgba(13, 109, 46, 0.35),
-        0 0 0 1px rgba(92, 255, 125, 0.08);
+        inset 0 0 44px rgba(20, 92, 96, 0.42),
+        0 0 0 1px rgba(58, 163, 167, 0.1);
       overflow: hidden;
       position: relative;
       padding: 9px 8px;
@@ -161,8 +161,8 @@
       top: 7px;
       bottom: 7px;
       width: 1px;
-      background: rgba(123, 255, 168, 0.22);
-      box-shadow: 0 0 8px rgba(117, 243, 168, 0.28);
+      background: rgba(123, 234, 238, 0.28);
+      box-shadow: 0 0 8px rgba(58, 163, 167, 0.46);
       z-index: 0;
     }
     .radio-meter::after {
@@ -178,7 +178,7 @@
     .spectrum-row {
       --arm-width: 2%;
       --peak-offset: 4%;
-      --spectrum-color: #2fe86e;
+      --spectrum-color: #3AA3A7;
       --peak-opacity: 0;
       position: relative;
       display: grid;
@@ -195,8 +195,8 @@
       height: 60%;
       min-height: 3px;
       border-radius: 999px;
-      background: rgba(110,255,150,0.42);
-      box-shadow: 0 0 4px rgba(110,255,150,0.28);
+      background: rgba(99,221,225,0.46);
+      box-shadow: 0 0 4px rgba(58,163,167,0.38);
     }
     .spectrum-arm {
       width: var(--arm-width);
@@ -210,7 +210,7 @@
       box-shadow:
         0 0 4px color-mix(in srgb, var(--spectrum-color) 68%, transparent),
         0 0 16px color-mix(in srgb, var(--spectrum-color) 32%, transparent),
-        0 0 28px rgba(58, 255, 101, 0.12);
+        0 0 28px rgba(58, 163, 167, 0.18);
       opacity: 0.5;
     }
     .spectrum-arm.left { justify-self: end; }
@@ -247,7 +247,7 @@
       transition-duration: 900ms;
     }
     .radio-strip.voice-active {
-      box-shadow: 0 0 0 1px rgba(70,201,92,0.35), 0 0 22px rgba(70,201,92,0.35);
+      box-shadow: 0 0 0 1px rgba(58,163,167,0.42), 0 0 24px rgba(58,163,167,0.42);
     }
     @keyframes spectrumTrace {
       0% { opacity: 0.58; filter: brightness(0.82); }
@@ -616,7 +616,9 @@
     let lastSeenTtsOutputCount = 0;
     let radioPulseTimer = null;
     let radioResetTimer = null;
+    let radioFrameTimer = null;
     let lastVoiceLevels = [];
+    let lastVoiceFrames = [];
 
     const BOH_TRANSITION_MESSAGES = {
       connected: 'BOH library connected. Read-only retrieval available.',
@@ -1017,7 +1019,7 @@
         const volumeLift = 0.72 + (Math.max(0, Math.min(1, volume || 0.6)) * 0.28);
         const shown = active || decay ? Math.min(1, Math.pow(amplitude * gain, 0.72) * volumeLift) : 0.015;
         const armWidth = Math.max(3, Math.min(48, Math.round(5 + shown * 43)));
-        const color = shown > 0.84 ? '#ff4b39' : shown > 0.66 ? '#ffd43b' : shown > 0.42 ? '#b7ff2e' : '#36f276';
+        const color = shown > 0.86 ? '#d7fbff' : shown > 0.68 ? '#7cd2d5' : '#3AA3A7';
         row.className = (active || decay) && amplitude > 0.04 ? 'spectrum-row active' : 'spectrum-row';
         row.style.setProperty('--arm-width', `${armWidth}%`);
         row.style.setProperty('--peak-offset', `${Math.max(6, armWidth + 2)}%`);
@@ -1059,7 +1061,7 @@
       }
       return result;
     }
-    function pulseRadioAudio(durationMs) {
+    function pulseRadioAudio(durationMs, frames = []) {
       const meter = document.getElementById('radioMeter');
       const strip = document.querySelector('.radio-strip');
       meter.classList.remove('voice-decay');
@@ -1067,12 +1069,24 @@
       strip.classList.add('voice-active');
       clearTimeout(radioPulseTimer);
       clearTimeout(radioResetTimer);
+      clearInterval(radioFrameTimer);
+      if (Array.isArray(frames) && frames.length > 1) {
+        let frameIndex = 0;
+        const frameDelay = Math.max(36, Math.floor(durationMs / frames.length));
+        renderRadioWave(frames[0], true, currentState?.volume_level || 0.6);
+        radioFrameTimer = setInterval(() => {
+          frameIndex = (frameIndex + 1) % frames.length;
+          renderRadioWave(frames[frameIndex], true, currentState?.volume_level || 0.6);
+        }, frameDelay);
+      }
       radioPulseTimer = setTimeout(() => {
+        clearInterval(radioFrameTimer);
         meter.classList.remove('voice-active');
         strip.classList.remove('voice-active');
         renderRadioWave(lastVoiceLevels, false, currentState?.volume_level || 0.6, true);
         radioResetTimer = setTimeout(() => {
           lastVoiceLevels = [];
+          lastVoiceFrames = [];
           meter.classList.remove('voice-decay');
           renderRadioWave([], false, currentState?.volume_level || 0.6);
         }, 850);
@@ -1082,14 +1096,15 @@
       if (!voice || !voice.spoken) return;
       const events = voice.events || [];
       const speaking = events.find(event => event.status === 'speaking') || events[events.length - 1] || {};
+      lastVoiceFrames = Array.isArray(speaking.audio_spectrum_frames) ? speaking.audio_spectrum_frames : [];
       lastVoiceLevels = Array.isArray(speaking.audio_spectrum_levels)
         ? speaking.audio_spectrum_levels
         : (Array.isArray(speaking.audio_levels) ? speaking.audio_levels : []);
-      renderRadioWave(lastVoiceLevels, true, currentState?.volume_level || 0.6);
+      renderRadioWave(lastVoiceFrames[0] || lastVoiceLevels, true, currentState?.volume_level || 0.6);
       const hinted = Number(speaking.audio_visualization_hint_ms || 0);
       const textLen = Number(speaking.text_len || 0);
       const duration = hinted || Math.max(2200, Math.min(30000, 900 + (textLen * 70)));
-      pulseRadioAudio(duration);
+      pulseRadioAudio(duration, lastVoiceFrames);
     }
     async function refresh() {
       const data = await fetch('/metis/state').then(r => r.json());

@@ -270,10 +270,13 @@ class PiperVoiceProvider(BaseVoiceProvider):
             )
             audio_levels = _wav_level_envelope(wav_path)
             audio_spectrum = _wav_spectrum_envelope(wav_path)
+            audio_spectrum_frames = _wav_spectrum_frames(wav_path)
             base["audio_levels"] = audio_levels
             base["audio_level_count"] = len(audio_levels)
             base["audio_spectrum_levels"] = audio_spectrum
             base["audio_spectrum_count"] = len(audio_spectrum)
+            base["audio_spectrum_frames"] = audio_spectrum_frames
+            base["audio_spectrum_frame_count"] = len(audio_spectrum_frames)
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
                 if config.piper_playback_mode == "async":
@@ -649,6 +652,33 @@ def _wav_spectrum_envelope(wav_path: Path, bands: int = 20) -> list[float]:
     if sample_data is None:
         return []
     samples, sample_rate = sample_data
+    return _spectrum_for_samples(samples, sample_rate, bands)
+
+
+def _wav_spectrum_frames(wav_path: Path, frame_count: int = 48, bands: int = 20) -> list[list[float]]:
+    sample_data = _read_wav_samples(wav_path)
+    if sample_data is None:
+        return []
+    samples, sample_rate = sample_data
+    if not samples or sample_rate <= 0:
+        return []
+    frame_count = max(8, min(96, frame_count))
+    window_size = max(512, min(4096, int(sample_rate * 0.09)))
+    if len(samples) <= window_size:
+        spectrum = _spectrum_for_samples(samples, sample_rate, bands)
+        return [spectrum] if spectrum else []
+    frames: list[list[float]] = []
+    max_start = max(0, len(samples) - window_size)
+    for frame_index in range(frame_count):
+        start = round((frame_index / max(1, frame_count - 1)) * max_start)
+        segment = samples[start : start + window_size]
+        spectrum = _spectrum_for_samples(segment, sample_rate, bands)
+        if spectrum:
+            frames.append(spectrum)
+    return frames
+
+
+def _spectrum_for_samples(samples: list[float], sample_rate: int, bands: int = 20) -> list[float]:
     if not samples or sample_rate <= 0:
         return []
     max_samples = 4096
