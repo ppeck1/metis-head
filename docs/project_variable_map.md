@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0M` (simulation test manifest export; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice`)
+Last phase updated: `0X` (portable artifact persistence; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -34,6 +34,7 @@ Before committing any phase:
 | `PERSONALITY_VERSION` | `metis_personality.v1.0` | `metis_head.personality` | Structured Metis personality constitution version. |
 | `VOICE_SCHEMA_VERSION` | `metis_voice.v0.1` | `metis_head.voice` | Governed voice output provider/result schema version. |
 | `SIM_TEST_MANIFEST_VERSION` | `metis_sim_tests.v0.1` | `metis_head.sim_manifest` | Portable simulation scenario/acceptance/parity manifest version. |
+| `ARTIFACT_SCHEMA_VERSION` | `metis_artifact.v0.1` | `metis_head.artifacts` | Portable saved artifact envelope version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
@@ -301,6 +302,20 @@ The manifest is intentionally portable JSON. It does not require hardware, BOH, 
 real microphone/camera capture, or real external tools. `include_results=false` can be used when a
 caller wants the inventory without executing scenarios.
 
+## Artifact Persistence
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `metis_head.artifacts` | 0X | Save/list/read portable JSON artifacts under the local `artifacts/` directory. |
+| `ARTIFACT_SCHEMA_VERSION` | 0X | `metis_artifact.v0.1`. |
+| `ARTIFACT_DIR` | 0X | Repository-local artifact directory; created on demand. |
+| `save_artifact(payload, artifact_type, label)` | 0X | Save `export` or `manifest` artifact with safe filename. |
+| `list_artifacts()` | 0X | Return metadata records for saved artifacts. |
+| `read_artifact(filename)` | 0X | Read one artifact envelope; rejects path traversal. |
+
+Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
+(`metis_sim_tests.v0.1`). This is intentionally JSON-file storage, not SQLite.
+
 ## Governance Policy
 
 | Name | Current Phase | Purpose |
@@ -442,6 +457,9 @@ caller wants the inventory without executing scenarios.
 | `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
 | `GET` | `/metis/proposals` | `metis_head.brain` | Return structured approval queue records. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
+| `POST` | `/metis/artifacts/save` | `metis_head.brain` | Persist an `export` or `manifest` JSON artifact locally. |
+| `GET` | `/metis/artifacts` | `metis_head.brain` | List saved artifact metadata. |
+| `GET` | `/metis/artifacts/{filename}` | `metis_head.brain` | Read one saved artifact envelope by safe filename. |
 | `GET` | `/metis/sim/manifest` | `metis_head.brain` | Portable `metis_sim_tests.v0.1` manifest with optional scenario results. |
 | `GET` | `/metis/sim/tests` | `metis_head.brain` | Alias for the simulation test manifest endpoint. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |

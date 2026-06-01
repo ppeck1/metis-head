@@ -31,7 +31,7 @@ CHECKLIST = [
     ("scenario_assertions_executable", "Scenario assertions executable", 5, "pass"),
     ("event_replay_available", "Event replay available", 4, "pass"),
     ("bridge_emulator_protocol_available", "Bridge emulator protocol available", 4, "pass"),
-    ("persistence_config_export_available", "Persistence/config export available", 3, "partial"),
+    ("persistence_config_export_available", "Persistence/config export available", 3, "pass"),
     ("simulator_to_spec_traceability_available", "Simulator-to-spec traceability available", 3, "pass"),
     ("hardware_parity_manifest_available", "Hardware parity manifest available", 4, "partial"),
 ]

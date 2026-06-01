@@ -10,9 +10,21 @@ token).
 
 ## Current Phase
 
-Phase scope: `0M` — simulation test manifest export (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice`).
+Phase scope: `0X` — portable artifact persistence (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest`).
 
-Status: Metis now publishes a portable `metis_sim_tests.v0.1` manifest that inventories scenarios,
+Status: Metis can now persist portable JSON artifacts for state exports and simulation manifests
+inside a local `artifacts/` directory. This keeps review snapshots shareable without adding a
+database.
+
+Phase 0X implemented:
+
+- `metis_head/artifacts.py`: safe artifact save/list/read helpers with `metis_artifact.v0.1`
+  envelopes and filename/path validation.
+- `POST /metis/artifacts/save` for `export` and `manifest` artifacts.
+- `GET /metis/artifacts` and `GET /metis/artifacts/{filename}`.
+- Readiness checklist now marks persistence/config export as `pass`.
+
+Previous Phase 0M status: Metis publishes a portable `metis_sim_tests.v0.1` manifest that inventories scenarios,
 acceptance coverage, readiness, hardware parity, schemas, and simulation boundaries.
 
 Phase 0M implemented:
@@ -141,6 +153,7 @@ Implemented:
 - Metis personality constitution injected into governed chat prompts.
 - Governed voice output harness for mock/system-shaped TTS, with output mute enforcement.
 - Portable simulation test manifest for acceptance coverage, scenarios, readiness, and parity links.
+- Portable JSON artifact persistence for exports and simulation manifests.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
 - Dashboard order: Virtual Radio, Virtual Chat (Send attached to the composer; Enter sends, Shift+Enter newlines), Radio Status, BOH Library Link, readiness/LED/adapter/state/scenario panels, export/replay, event log.
@@ -294,6 +307,9 @@ Metis — BOH remains the source of truth.
 
 - `GET /metis/state`
 - `GET /metis/export`
+- `POST /metis/artifacts/save`
+- `GET /metis/artifacts`
+- `GET /metis/artifacts/{filename}`
 - `GET /metis/sim/manifest`
 - `GET /metis/sim/tests`
 - `GET /metis/boh/status`
@@ -326,7 +342,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-76 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, 4 Phase 0P personality-layer tests, 6 Phase 0V voice-harness tests, and 5 Phase 0M manifest tests)
+80 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, 4 Phase 0P personality-layer tests, 6 Phase 0V voice-harness tests, 5 Phase 0M manifest tests, and 4 Phase 0X artifact tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+from .artifacts import ArtifactError, list_artifacts, read_artifact, save_artifact
 from .boh_link import (
     LINK_AUTH_FAILED,
     get_link_state,
@@ -78,6 +79,46 @@ def export_state() -> dict[str, Any]:
         "event_log": STATE.get("event_log", []),
         "export_schema": "metis_export.v0.1",
     }
+
+
+def _export_payload() -> dict[str, Any]:
+    return {
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+        "readiness": calculate_readiness(),
+        "event_log": STATE.get("event_log", []),
+        "export_schema": "metis_export.v0.1",
+    }
+
+
+@app.post("/metis/artifacts/save")
+def artifacts_save(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    artifact_type = str(payload.get("artifact_type") or "export")
+    label = payload.get("label")
+    try:
+        if artifact_type == "export":
+            artifact_payload = _export_payload()
+        elif artifact_type == "manifest":
+            artifact_payload = build_sim_test_manifest(include_results=bool(payload.get("include_results", True)))
+        else:
+            raise ArtifactError(f"unsupported artifact type: {artifact_type}")
+        return save_artifact(artifact_payload, artifact_type, str(label) if label is not None else None)
+    except ArtifactError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/metis/artifacts")
+def artifacts_list() -> dict[str, Any]:
+    return {"artifact_schema": "metis_artifact.v0.1", "artifacts": list_artifacts()}
+
+
+@app.get("/metis/artifacts/{filename}")
+def artifacts_get(filename: str) -> dict[str, Any]:
+    try:
+        return read_artifact(filename)
+    except ArtifactError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.get("/metis/sim/manifest")
