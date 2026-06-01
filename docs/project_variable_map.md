@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V+` (reviewable voice options catalog; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity`)
+Last phase updated: `0V/UI` (dashboard voice selection controls; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -443,6 +443,10 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `chatProvider` | 0R | UI provider selector: `mock`, `ollama`, or `openai`. |
 | `ollamaBaseUrl` | 0R | UI override for local Ollama base URL. |
 | `ollamaModel` | 0R | UI model selector populated from Ollama `/api/tags`. |
+| `voiceProvider` | 0V/UI | UI voice provider selector populated from `/metis/voice/options`. |
+| `voiceId` | 0V/UI | UI voice ID selector; candidate options are disabled until implemented. |
+| `voiceReplyEnabled` | 0V/UI | Chat voice-reply switch; sends `options.voice.speak_response=true` when checked. |
+| `voiceStatus` | 0V/UI | Voice option/status line. |
 
 ## Dashboard Functions
 
@@ -461,6 +465,10 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `refreshLlmOptions` | 0R | Refreshes provider defaults and Ollama model list. |
 | `handleProviderChange` | 0R | Enables/disables Ollama controls based on selected provider. |
 | `chatOptions` | 0R | Builds provider/model/base URL options for `/metis/chat`. |
+| `refreshVoiceOptions` | 0V/UI | Refreshes reviewable voice options and selected voice controls. |
+| `handleVoiceProviderChange` | 0V/UI | Updates voice IDs when the provider changes. |
+| `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
+| `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
 
 ## API Routes
 

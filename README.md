@@ -10,9 +10,21 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V+` — reviewable voice options catalog (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity`).
+Phase scope: `0V/UI` — dashboard voice selection controls (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options`).
 
-Status: Metis now exposes reviewable voice options. The current voice is
+Status: the mock Brain dashboard now exposes voice selection and a voice-reply switch in the
+Virtual Chat panel. Chat requests include `options.voice.speak_response=true` only when the switch
+is enabled.
+
+Phase 0V/UI implemented:
+
+- Voice provider selector populated from `/metis/voice/options`.
+- Voice ID selector with candidate voices disabled until implemented.
+- `Voice replies` switch for chat responses.
+- `Preview Voice` action through `/metis/voice/preview`.
+- Voice status line showing selected option, status, and privacy class.
+
+Previous Phase 0V+ status: Metis exposes reviewable voice options. The current voice is
 `metis-counsel-mock`, which is local and non-audible; real audible voice choices remain gated or
 candidate status until explicitly approved.
 
@@ -177,6 +189,7 @@ Implemented:
 - Metis personality constitution injected into governed chat prompts.
 - Governed voice output harness for mock/system-shaped TTS, with output mute enforcement.
 - Reviewable voice options catalog showing current, gated, and candidate voices.
+- Dashboard controls for voice provider/voice selection and chat voice-reply toggle.
 - Portable simulation test manifest for acceptance coverage, scenarios, readiness, and parity links.
 - Portable JSON artifact persistence for exports and simulation manifests.
 - Executable hardware parity manifest for every simulated physical control.
@@ -369,7 +382,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-85 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, 4 Phase 0P personality-layer tests, 7 Phase 0V/0V+ voice tests, 5 Phase 0M manifest tests, 4 Phase 0X artifact tests, and 4 Phase 0Y hardware-parity tests)
+85 passed under Python 3.11 (includes dashboard voice-control presence coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

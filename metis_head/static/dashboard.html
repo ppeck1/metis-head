@@ -291,6 +291,17 @@
       gap: 8px;
       margin-top: 8px;
     }
+    .toggle-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 36px;
+      color: #384456;
+      font-size: 12px;
+    }
+    .toggle-inline input {
+      accent-color: #2f6fbe;
+    }
     .boh-badge {
       display: inline-flex;
       align-items: center;
@@ -379,6 +390,14 @@
         <button onclick="refreshLlmOptions()">Refresh Ollama Models</button>
         <select id="ollamaModel"></select>
       </div>
+      <div class="tool-row">
+        <select id="voiceProvider" onchange="handleVoiceProviderChange()"></select>
+        <select id="voiceId"></select>
+        <label class="toggle-inline"><input id="voiceReplyEnabled" type="checkbox"> Voice replies</label>
+        <button onclick="refreshVoiceOptions()">Refresh Voices</button>
+        <button onclick="previewVoice()">Preview Voice</button>
+      </div>
+      <div id="voiceStatus" class="status-line"></div>
       <div id="chatLog" class="chat-log"></div>
       <div class="chat-composer">
         <textarea id="chatInput" spellcheck="true" placeholder="Ask Metis a governed virtual-chat question (Enter to send, Shift+Enter for newline)"></textarea>
@@ -468,6 +487,7 @@
     let currentState = null;
     let currentLeds = null;
     let bohSeenTransitions = 0;
+    let voiceOptionsCatalog = [];
 
     const BOH_TRANSITION_MESSAGES = {
       connected: 'BOH library connected. Read-only retrieval available.',
@@ -644,6 +664,78 @@
       document.getElementById('ollamaBaseUrl').disabled = !ollamaOnly;
       document.getElementById('ollamaModel').disabled = !ollamaOnly;
     }
+    async function refreshVoiceOptions() {
+      const status = document.getElementById('voiceStatus');
+      status.textContent = 'Refreshing voices...';
+      const data = await fetch('/metis/voice/options').then(r => r.json());
+      voiceOptionsCatalog = data.options || [];
+      const providerSelect = document.getElementById('voiceProvider');
+      const voiceSelect = document.getElementById('voiceId');
+      const previousProvider = providerSelect.value || data.selected_provider || 'mock';
+      const previousVoice = voiceSelect.value || data.selected_voice_id || 'metis-counsel-mock';
+      const providers = [...new Set(voiceOptionsCatalog.map(option => option.provider))];
+      providerSelect.innerHTML = '';
+      for (const provider of providers) {
+        const option = document.createElement('option');
+        option.value = provider;
+        option.textContent = provider;
+        providerSelect.appendChild(option);
+      }
+      providerSelect.value = providers.includes(previousProvider) ? previousProvider : (data.selected_provider || providers[0] || 'mock');
+      renderVoiceIds(previousVoice);
+      const current = voiceOptionsCatalog.find(option => option.option_id === document.getElementById('voiceId').value);
+      status.textContent = current
+        ? `${current.option_id} / ${current.status} / ${current.privacy_class}`
+        : `${data.selected_voice_id} / ${data.selected_provider}`;
+    }
+    function renderVoiceIds(preferredVoice) {
+      const provider = document.getElementById('voiceProvider').value;
+      const voiceSelect = document.getElementById('voiceId');
+      const voices = voiceOptionsCatalog.filter(option => option.provider === provider);
+      voiceSelect.innerHTML = '';
+      for (const voice of voices) {
+        const option = document.createElement('option');
+        option.value = voice.option_id;
+        option.textContent = `${voice.option_id} (${voice.status})`;
+        option.disabled = voice.status === 'candidate';
+        voiceSelect.appendChild(option);
+      }
+      const available = voices.find(voice => voice.option_id === preferredVoice && voice.status !== 'candidate')
+        || voices.find(voice => voice.status !== 'candidate')
+        || voices[0];
+      if (available) {
+        voiceSelect.value = available.option_id;
+      }
+    }
+    function handleVoiceProviderChange() {
+      renderVoiceIds();
+      const current = voiceOptionsCatalog.find(option => option.option_id === document.getElementById('voiceId').value);
+      document.getElementById('voiceStatus').textContent = current
+        ? `${current.option_id} / ${current.status} / ${current.privacy_class}`
+        : '';
+    }
+    function voiceChatOptions() {
+      const speak = document.getElementById('voiceReplyEnabled').checked;
+      return {
+        speak_response: speak,
+        enabled: speak,
+        provider: document.getElementById('voiceProvider').value || 'mock',
+        voice_id: document.getElementById('voiceId').value || 'metis-counsel-mock'
+      };
+    }
+    async function previewVoice() {
+      const voice = voiceChatOptions();
+      const response = await fetch('/metis/voice/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({...voice, enabled: true, text: 'Metis voice preview.'})
+      });
+      const result = await response.json();
+      document.getElementById('voiceStatus').textContent = response.ok
+        ? `${result.provider}:${result.voice_id} / ${result.spoken ? 'spoken' : result.block_reason || 'not spoken'}`
+        : String(result.detail || 'Voice preview failed');
+      await refresh();
+    }
     function chatOptions() {
       const provider = document.getElementById('chatProvider').value;
       const options = {provider};
@@ -651,6 +743,7 @@
         options.base_url = document.getElementById('ollamaBaseUrl').value.trim() || 'http://127.0.0.1:11434';
         options.model = document.getElementById('ollamaModel').value;
       }
+      options.voice = voiceChatOptions();
       return options;
     }
     async function sendChat() {
@@ -676,6 +769,7 @@
         const labels = [`${result.provider}:${result.model}`];
         if (result.proposal_queued) labels.push('proposal queued');
         if (result.source_state) labels.push(result.source_state);
+        if (result.voice) labels.push(result.voice.spoken ? 'voice queued' : result.voice.block_reason || 'voice off');
         document.getElementById('chatStatus').textContent = labels.join(' / ');
         input.value = '';
         await refresh();
@@ -775,6 +869,7 @@
     document.getElementById('chatInput').addEventListener('keydown', handleChatKeydown);
     refresh();
     refreshLlmOptions();
+    refreshVoiceOptions();
     refreshBohStatus();
     setInterval(refreshBohStatus, 10000);
   </script>
