@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO4` (async Piper playback and radio alignment; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization`)
+Last phase updated: `0V/AUDIO5` (PCM-derived vertical radio waveform; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -102,7 +102,7 @@ Before committing any phase:
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
 | `chat_event` | 0R | `status`, `provider`, `model`, `user_message`, `assistant_message`, `source_state` | Governed virtual chat completion/failure. |
-| `provider_event` (`tts`) | 0V/AUDIO4 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text and concrete temp paths are not persisted. |
+| `provider_event` (`tts`) | 0V/AUDIO5 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, `audio_levels`, `audio_level_count`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text, raw audio, and concrete temp paths are not persisted. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
@@ -441,7 +441,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `eventLog` | 0S | Event log JSON panel. |
 | `radioActivityLed` | 0S | Virtual tuning-window activity LED. |
 | `radioAuthorityLed` | 0S | Virtual tuning-window authority LED. |
-| `radioMeter` | 0S | Virtual visualizer bars. |
+| `radioMeter` | 0V/AUDIO5 | Virtual tuning-window visualizer; renders dim line when idle and PCM-derived vertical waveform during Piper speech. |
 | `volumeKnob` | 0S | Virtual top/volume knob. |
 | `depthKnob` | 0S | Virtual middle/depth knob. |
 | `initiativeKnob` | 0S | Virtual large tuning/initiative knob. |
@@ -493,7 +493,8 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
 | `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
 | `pulseRadioAudio` | 0V/AUDIO | Pulses the virtual radio meter/strip when TTS output is active or newly completed. |
-| `pulseRadioFromVoice` | 0V/AUDIO4 | Pulses the radio strip from returned voice event metadata, using `audio_visualization_hint_ms` when available. |
+| `renderRadioWave` | 0V/AUDIO5 | Renders bottom-to-top vertical waveform rows from TTS `audio_levels`. |
+| `pulseRadioFromVoice` | 0V/AUDIO5 | Pulses the radio strip from returned voice event metadata, using `audio_levels` and `audio_visualization_hint_ms` when available. |
 
 ## API Routes
 

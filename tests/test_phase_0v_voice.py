@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import builtins
+import struct
+import wave
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -226,6 +228,22 @@ def test_async_playback_runs_in_background_and_cleans_up(monkeypatch, tmp_path) 
 
     assert calls == [(wav_path, "soundplayer")]
     assert not wav_path.exists()
+
+
+def test_wav_level_envelope_reflects_actual_audio(tmp_path) -> None:
+    wav_path = tmp_path / "levels.wav"
+    samples = [0, 800, -800, 1600, -1600, 6400, -6400, 12000, -12000]
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(22050)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    levels = voice_module._wav_level_envelope(wav_path, bins=3)
+
+    assert len(levels) == 3
+    assert levels[0] < levels[1] < levels[2]
+    assert levels[-1] == 1.0
 
 
 def test_mock_speak_returns_events_and_final_idle_state() -> None:

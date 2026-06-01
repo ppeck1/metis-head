@@ -122,29 +122,37 @@
       color: rgba(248,245,239,0.5);
     }
     .radio-meter {
-      display: grid;
-      grid-template-rows: repeat(12, 1fr);
+      display: flex;
+      flex-direction: column-reverse;
+      justify-content: flex-end;
       gap: 3px;
       width: 12px;
       height: 100%;
-      align-content: stretch;
+      align-items: center;
     }
-    .meter-bar {
+    .wave-row {
       border-radius: 3px;
       background: rgba(255,255,255,0.16);
+      width: 3px;
+      min-height: 4px;
+      flex: 1 1 0;
+      transition: width 120ms ease, background 120ms ease, opacity 120ms ease;
     }
-    .meter-bar.active {
-      background: #46b6c9;
+    .wave-row.active {
+      background: var(--wave-color, #46b6c9);
+      box-shadow: 0 0 8px rgba(70,182,201,0.32);
     }
-    .radio-meter.voice-active .meter-bar.active {
-      animation: meterPulse 0.55s ease-in-out infinite alternate;
+    .radio-meter.voice-active .wave-row.active {
+      animation: waveTrace 1.4s linear infinite;
+      animation-delay: var(--wave-delay, 0ms);
     }
     .radio-strip.voice-active {
       box-shadow: 0 0 0 1px rgba(70,182,201,0.35), 0 0 22px rgba(70,182,201,0.35);
     }
-    @keyframes meterPulse {
-      from { opacity: 0.55; transform: scaleX(0.75); }
-      to { opacity: 1; transform: scaleX(1.2); }
+    @keyframes waveTrace {
+      0% { opacity: 0.28; transform: scaleX(0.72); }
+      35% { opacity: 1; transform: scaleX(1.28); }
+      100% { opacity: 0.46; transform: scaleX(0.88); }
     }
     .radio-controls {
       display: grid;
@@ -505,6 +513,7 @@
     let voiceOptionsCatalog = [];
     let lastSeenTtsOutputCount = 0;
     let radioPulseTimer = null;
+    let lastVoiceLevels = [];
 
     const BOH_TRANSITION_MESSAGES = {
       connected: 'BOH library connected. Read-only retrieval available.',
@@ -884,20 +893,26 @@
       setRadioText('radioCamera', state.camera_hardware_enabled ? 'enabled' : 'cutoff');
 
       const meter = document.getElementById('radioMeter');
-      meter.innerHTML = '';
       const voiceActive = ['queued', 'synthesizing', 'speaking'].includes(state.voice_output_state);
       const voiceRecent = (state.tts_output_count || 0) > previousTtsOutputCount;
-      const activeBars = voiceActive || voiceRecent
-        ? Math.max(4, Math.round((state.volume_level || 0.6) * 12))
-        : Math.max(1, Math.round((state.volume_level + state.initiative_level) * 6));
-      for (let index = 12; index >= 1; index -= 1) {
-        const bar = document.createElement('div');
-        bar.className = index <= activeBars ? 'meter-bar active' : 'meter-bar';
-        meter.appendChild(bar);
-      }
+      renderRadioWave(lastVoiceLevels, voiceActive || voiceRecent, state.volume_level || 0.6);
       if (voiceActive || voiceRecent) {
         pulseRadioAudio(voiceActive ? 1200 : 2200);
       }
+    }
+    function renderRadioWave(levels, active, volume) {
+      const meter = document.getElementById('radioMeter');
+      const safeLevels = Array.isArray(levels) && levels.length ? levels : Array.from({length: 18}, (_, index) => active ? Math.sin((index + 1) / 18 * Math.PI) * 0.35 : 0);
+      meter.innerHTML = '';
+      safeLevels.forEach((level, index) => {
+        const row = document.createElement('div');
+        const amplitude = Math.max(0.02, Math.min(1, Number(level) || 0));
+        const width = active ? Math.max(3, Math.round(3 + amplitude * 28 * Math.max(0.2, volume))) : 3;
+        row.className = active && amplitude > 0.04 ? 'wave-row active' : 'wave-row';
+        row.style.width = `${width}px`;
+        row.style.setProperty('--wave-delay', `${index * 55}ms`);
+        meter.appendChild(row);
+      });
     }
     function pulseRadioAudio(durationMs) {
       const meter = document.getElementById('radioMeter');
@@ -914,6 +929,8 @@
       if (!voice || !voice.spoken) return;
       const events = voice.events || [];
       const speaking = events.find(event => event.status === 'speaking') || events[events.length - 1] || {};
+      lastVoiceLevels = Array.isArray(speaking.audio_levels) ? speaking.audio_levels : [];
+      renderRadioWave(lastVoiceLevels, true, currentState?.volume_level || 0.6);
       const hinted = Number(speaking.audio_visualization_hint_ms || 0);
       const textLen = Number(speaking.text_len || 0);
       const duration = hinted || Math.max(2200, Math.min(30000, 900 + (textLen * 70)));

@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO4` - async Piper playback and radio alignment (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization`).
+Phase scope: `0V/AUDIO5` - PCM-derived vertical radio waveform (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment`).
 
-Status: Piper playback now launches asynchronously after synthesis, so the mock Brain can return the
+Status: the tuning-window visualizer now behaves more like an old stereo instrument: for Piper
+speech, Metis extracts a compact RMS envelope from the actual synthesized WAV and renders it as a
+bottom-to-top vertical waveform trace. It is still a simulator preview, not final LED firmware, but
+it is driven by generated audio data rather than decorative/random animation.
+
+Phase 0V/AUDIO5 implemented:
+
+- Piper voice events include a compact `audio_levels` envelope derived from the generated WAV.
+- The dashboard radio strip renders a vertical waveform trace from those levels.
+- The trace flows bottom-to-top to match the planned vertical tuning-window format.
+- Idle remains a dim vertical instrument line; blocked/failure precedence still comes from the LED
+  resolver/state path.
+- No raw audio file path, raw audio, or spoken text is persisted in the event log.
+
+Previous Phase 0V/AUDIO4 status: Piper playback launches asynchronously after synthesis, so the mock Brain can return the
 chat response while audio is playing instead of after playback finishes. The dashboard uses the TTS
 event metadata to pulse the virtual radio strip for an estimated speech duration.
 
@@ -475,7 +489,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-92 passed under Python 3.11 (includes async Piper playback, spoken-text normalization, and radio pulse coverage)
+93 passed under Python 3.11 (includes PCM-derived Piper waveform, async playback, spoken-text normalization, and radio pulse coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

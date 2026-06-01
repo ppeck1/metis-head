@@ -8,6 +8,8 @@ import subprocess
 import sysconfig
 import tempfile
 import threading
+import wave
+from array import array
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
@@ -265,6 +267,9 @@ class PiperVoiceProvider(BaseVoiceProvider):
                 timeout=_piper_timeout_seconds(spoken_text),
                 check=True,
             )
+            audio_levels = _wav_level_envelope(wav_path)
+            base["audio_levels"] = audio_levels
+            base["audio_level_count"] = len(audio_levels)
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
                 if config.piper_playback_mode == "async":
@@ -610,6 +615,37 @@ def _piper_timeout_seconds(text: str) -> int:
 
 def _audio_visualization_hint_ms(text: str) -> int:
     return max(2200, min(30000, 900 + (len(text) * 70)))
+
+
+def _wav_level_envelope(wav_path: Path, bins: int = 18) -> list[float]:
+    try:
+        with wave.open(str(wav_path), "rb") as wav_file:
+            sample_width = wav_file.getsampwidth()
+            frame_count = wav_file.getnframes()
+            if sample_width != 2 or frame_count <= 0:
+                return []
+            frames = wav_file.readframes(frame_count)
+    except (EOFError, wave.Error, OSError):
+        return []
+
+    samples = array("h")
+    samples.frombytes(frames)
+    if not samples:
+        return []
+    segment_size = max(1, len(samples) // bins)
+    levels: list[float] = []
+    for index in range(0, len(samples), segment_size):
+        segment = samples[index : index + segment_size]
+        if not segment:
+            continue
+        mean_square = sum(sample * sample for sample in segment) / len(segment)
+        levels.append(mean_square**0.5)
+        if len(levels) >= bins:
+            break
+    peak = max(levels, default=0.0)
+    if peak <= 0:
+        return [0.0 for _ in levels]
+    return [round(min(1.0, level / peak), 3) for level in levels]
 
 
 def _play_wav_file_async(wav_path: Path, strategy: str = "soundplayer") -> None:
