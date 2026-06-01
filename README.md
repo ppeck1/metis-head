@@ -10,16 +10,31 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/UI` — dashboard voice selection controls (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options`).
+Phase scope: `0V/AUDIO` - local Piper voice output and audio visualization (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls`).
 
-Status: the mock Brain dashboard now exposes voice selection and a voice-reply switch in the
+Status: Metis can now route governed voice output to a local Piper CLI provider when configured.
+The mock Brain dashboard exposes Piper path fields, sends a per-request local playback opt-in, and
+the virtual radio meter pulses from TTS output events.
+
+Phase 0V/AUDIO implemented:
+
+- `PiperVoiceProvider` invokes a local Piper executable with text on stdin and a temporary WAV
+  output file.
+- Local WAV playback uses Windows `winsound` after Piper synthesis.
+- Piper stays local and opt-in: select `piper` in the UI or set the environment variables below.
+- The dashboard exposes `Piper executable path` and `Piper .onnx model path` fields when Piper is
+  selected.
+- The virtual radio AM/FM-style meter now pulses when voice output is queued/speaking or a new TTS
+  output completes.
+
+Previous Phase 0V/UI status: the mock Brain dashboard now exposes voice selection and a voice-reply switch in the
 Virtual Chat panel. Chat requests include `options.voice.speak_response=true` only when the switch
 is enabled.
 
 Phase 0V/UI implemented:
 
 - Voice provider selector populated from `/metis/voice/options`.
-- Voice ID selector with candidate voices disabled until implemented.
+- Voice ID selector with unsupported candidate voices disabled until implemented.
 - `Voice replies` switch for chat responses.
 - `Preview Voice` action through `/metis/voice/preview`.
 - Voice status line showing selected option, status, and privacy class.
@@ -190,6 +205,8 @@ Implemented:
 - Governed voice output harness for mock/system-shaped TTS, with output mute enforcement.
 - Reviewable voice options catalog showing current, gated, and candidate voices.
 - Dashboard controls for voice provider/voice selection and chat voice-reply toggle.
+- Local Piper voice output path with dashboard-provided executable/model overrides.
+- Radio meter visualization tied to TTS output events.
 - Portable simulation test manifest for acceptance coverage, scenarios, readiness, and parity links.
 - Portable JSON artifact persistence for exports and simulation manifests.
 - Executable hardware parity manifest for every simulated physical control.
@@ -264,16 +281,26 @@ It only converts completed text responses into governed TTS events.
 
 ```powershell
 $env:METIS_VOICE_ENABLED="false"
-$env:METIS_VOICE_PROVIDER="mock"       # mock or system
+$env:METIS_VOICE_PROVIDER="mock"       # mock, system, or piper
 $env:METIS_VOICE_ID="metis-counsel-mock"
 $env:METIS_VOICE_RATE="1.0"
 $env:METIS_VOICE_VOLUME="0.6"
 $env:METIS_VOICE_ALLOW_SYSTEM_TTS="false"
+$env:METIS_VOICE_ALLOW_PIPER="false"
+$env:METIS_PIPER_EXE="B:\path\to\piper.exe"
+$env:METIS_PIPER_MODEL="B:\path\to\voice.onnx"
+$env:METIS_PIPER_CONFIG="B:\path\to\voice.onnx.json"   # optional
+$env:METIS_PIPER_PLAYBACK="true"
 ```
 
 `system` is present as a gated provider shape only. Real OS speech remains disabled unless
 `METIS_VOICE_ALLOW_SYSTEM_TTS=true`; the default `mock` provider emits deterministic TTS events
 without audio.
+
+For local audible speech, choose `piper` in the dashboard, enter the local Piper executable and
+`.onnx` model paths, turn on `Voice replies`, then use `Preview Voice` or send a chat response.
+The dashboard request sets `allow_piper=true` for that selected local provider; text is passed to
+Piper over stdin and raw speech text is still not persisted in the Metis event log.
 
 ## BOH Retrieval Bridge Config (Phase 0B)
 
@@ -382,7 +409,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-85 passed under Python 3.11 (includes dashboard voice-control presence coverage)
+87 passed under Python 3.11 (includes Piper provider and dashboard audio-visualizer coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

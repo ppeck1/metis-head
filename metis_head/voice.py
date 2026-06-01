@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 import hashlib
+import subprocess
+import tempfile
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -69,6 +72,11 @@ class VoiceConfig:
     rate: float
     volume: float
     allow_system_tts: bool = False
+    allow_piper: bool = False
+    piper_exe: str | None = None
+    piper_model: str | None = None
+    piper_config: str | None = None
+    piper_playback: bool = True
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
@@ -79,7 +87,9 @@ class VoiceConfig:
             "rate": self.rate,
             "volume": self.volume,
             "allow_system_tts": self.allow_system_tts,
-            "providers": ["mock", "system"],
+            "allow_piper": self.allow_piper,
+            "piper_configured": bool(self.piper_exe and self.piper_model),
+            "providers": ["mock", "system", "piper"],
         }
 
 
@@ -186,6 +196,71 @@ class SystemVoiceProvider(MockVoiceProvider):
         return events
 
 
+class PiperVoiceProvider(BaseVoiceProvider):
+    provider_id = "piper"
+
+    def speak(self, text: str, config: VoiceConfig) -> list[dict[str, Any]]:
+        if not config.allow_piper:
+            raise VoiceProviderError("Piper TTS is disabled; set METIS_VOICE_ALLOW_PIPER=true to allow local speech")
+        if not config.piper_exe:
+            raise VoiceProviderError("Piper TTS executable is not configured; set METIS_PIPER_EXE")
+        if not config.piper_model:
+            raise VoiceProviderError("Piper TTS model is not configured; set METIS_PIPER_MODEL")
+        piper_exe = Path(config.piper_exe)
+        piper_model = Path(config.piper_model)
+        if not piper_exe.exists():
+            raise VoiceProviderError(f"Piper TTS executable not found: {piper_exe}")
+        if not piper_model.exists():
+            raise VoiceProviderError(f"Piper TTS model not found: {piper_model}")
+
+        metadata = _text_metadata(text)
+        base = {
+            **metadata,
+            "type": "provider_event",
+            "provider": "tts",
+            "voice_provider": self.provider_id,
+            "voice_id": config.voice_id,
+            "voice_schema": VOICE_SCHEMA_VERSION,
+            "volume": config.volume,
+            "rate": config.rate,
+            "playback": bool(config.piper_playback),
+        }
+        events = [
+            {**base, "status": "queued"},
+            {**base, "status": "synthesizing"},
+        ]
+        with tempfile.NamedTemporaryFile(prefix="metis_piper_", suffix=".wav", delete=False) as wav_file:
+            wav_path = Path(wav_file.name)
+        try:
+            command = [str(piper_exe), "--model", str(piper_model), "--output_file", str(wav_path)]
+            if config.piper_config:
+                command.extend(["--config", str(config.piper_config)])
+            subprocess.run(
+                command,
+                input=text,
+                text=True,
+                capture_output=True,
+                timeout=90,
+                check=True,
+            )
+            events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
+            if config.piper_playback:
+                _play_wav_file(wav_path)
+            events.append({**base, "status": "complete", "audio_file": "local_temp_wav"})
+        except subprocess.TimeoutExpired as exc:
+            raise VoiceProviderError("Piper TTS timed out") from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            detail = f"Piper TTS failed: {stderr}" if stderr else "Piper TTS failed"
+            raise VoiceProviderError(detail) from exc
+        finally:
+            try:
+                wav_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return events
+
+
 def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, Any] | None = None, state: dict[str, Any] | None = None) -> VoiceConfig:
     env = env or os.environ
     options = options or {}
@@ -198,9 +273,26 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
     volume_default = state_volume if state_volume is not None else env.get("METIS_VOICE_VOLUME", "0.6")
     volume = _clamp_float(voice_options.get("volume", volume_default), 0.0, 1.0, 0.6)
     allow_system_tts = _as_bool(voice_options.get("allow_system_tts", env.get("METIS_VOICE_ALLOW_SYSTEM_TTS", "false")))
-    if provider not in {"mock", "system", "failed"}:
+    allow_piper = _as_bool(voice_options.get("allow_piper", env.get("METIS_VOICE_ALLOW_PIPER", "false")))
+    piper_exe = _optional_str(voice_options.get("piper_exe", env.get("METIS_PIPER_EXE")))
+    piper_model = _optional_str(voice_options.get("piper_model", env.get("METIS_PIPER_MODEL")))
+    piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG")))
+    piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "true")))
+    if provider not in {"mock", "system", "piper", "failed"}:
         provider = "mock"
-    return VoiceConfig(enabled=enabled, provider=provider, voice_id=voice_id, rate=rate, volume=volume, allow_system_tts=allow_system_tts)
+    return VoiceConfig(
+        enabled=enabled,
+        provider=provider,
+        voice_id=voice_id,
+        rate=rate,
+        volume=volume,
+        allow_system_tts=allow_system_tts,
+        allow_piper=allow_piper,
+        piper_exe=piper_exe,
+        piper_model=piper_model,
+        piper_config=piper_config,
+        piper_playback=piper_playback,
+    )
 
 
 def voice_provider_from_config(config: VoiceConfig) -> BaseVoiceProvider:
@@ -208,6 +300,8 @@ def voice_provider_from_config(config: VoiceConfig) -> BaseVoiceProvider:
         return MockVoiceProvider()
     if config.provider == "system":
         return SystemVoiceProvider()
+    if config.provider == "piper":
+        return PiperVoiceProvider()
     if config.provider == "failed":
         return FailedVoiceProvider()
     raise VoiceProviderError(f"unsupported voice provider: {config.provider}")
@@ -329,13 +423,15 @@ def voice_profile(state: dict[str, Any], options: dict[str, Any] | None = None) 
 
 def voice_options(state: dict[str, Any]) -> dict[str, Any]:
     profile = voice_profile(state)
+    config = voice_config_from_env(state=state)
+    options = _voice_option_catalog_for_config(config)
     return {
         "voice_options_version": VOICE_OPTIONS_VERSION,
         "selected_provider": profile["provider"],
         "selected_voice_id": profile["voice_id"],
-        "current_voice_is_audible": False,
+        "current_voice_is_audible": profile["provider"] in {"piper", "system"} and profile["can_speak_now"],
         "boundary": profile["boundary"],
-        "options": VOICE_OPTION_CATALOG,
+        "options": options,
     }
 
 
@@ -358,3 +454,35 @@ def _clamp_float(value: Any, low: float, high: float, default: float) -> float:
 def _text_metadata(text: str) -> dict[str, Any]:
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
     return {"text_len": len(text), "text_hash": digest, "text_redacted": True}
+
+
+def _optional_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _voice_option_catalog_for_config(config: VoiceConfig) -> list[dict[str, Any]]:
+    catalog = []
+    piper_ready = bool(config.piper_exe and config.piper_model)
+    for item in VOICE_OPTION_CATALOG:
+        option = dict(item)
+        if option["option_id"] == "piper-local" and piper_ready:
+            option["status"] = "available"
+            option["current_default"] = config.provider == "piper"
+            option["notes"] = "Configured through METIS_PIPER_EXE and METIS_PIPER_MODEL; selecting it in the UI opts in to local playback."
+        elif option["option_id"] == "metis-counsel-mock":
+            option["current_default"] = config.provider == "mock"
+        elif option["option_id"] == "windows-system-tts":
+            option["current_default"] = config.provider == "system"
+        catalog.append(option)
+    return catalog
+
+
+def _play_wav_file(wav_path: Path) -> None:
+    try:
+        import winsound
+    except ImportError as exc:
+        raise VoiceProviderError("local WAV playback is only implemented on Windows in this phase") from exc
+    winsound.PlaySound(str(wav_path), winsound.SND_FILENAME | winsound.SND_SYNC)

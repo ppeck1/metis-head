@@ -136,6 +136,16 @@
     .meter-bar.active {
       background: #46b6c9;
     }
+    .radio-meter.voice-active .meter-bar.active {
+      animation: meterPulse 0.55s ease-in-out infinite alternate;
+    }
+    .radio-strip.voice-active {
+      box-shadow: 0 0 0 1px rgba(70,182,201,0.35), 0 0 22px rgba(70,182,201,0.35);
+    }
+    @keyframes meterPulse {
+      from { opacity: 0.55; transform: scaleX(0.75); }
+      to { opacity: 1; transform: scaleX(1.2); }
+    }
     .radio-controls {
       display: grid;
       gap: 14px;
@@ -397,6 +407,10 @@
         <button onclick="refreshVoiceOptions()">Refresh Voices</button>
         <button onclick="previewVoice()">Preview Voice</button>
       </div>
+      <div id="piperControls" class="tool-row" style="display:none;">
+        <input id="piperExe" type="text" placeholder="Piper executable path">
+        <input id="piperModel" type="text" placeholder="Piper .onnx model path">
+      </div>
       <div id="voiceStatus" class="status-line"></div>
       <div id="chatLog" class="chat-log"></div>
       <div class="chat-composer">
@@ -488,6 +502,8 @@
     let currentLeds = null;
     let bohSeenTransitions = 0;
     let voiceOptionsCatalog = [];
+    let lastSeenTtsOutputCount = 0;
+    let radioPulseTimer = null;
 
     const BOH_TRANSITION_MESSAGES = {
       connected: 'BOH library connected. Read-only retrieval available.',
@@ -697,15 +713,16 @@
         const option = document.createElement('option');
         option.value = voice.option_id;
         option.textContent = `${voice.option_id} (${voice.status})`;
-        option.disabled = voice.status === 'candidate';
+        option.disabled = voice.status === 'candidate' && provider !== 'piper';
         voiceSelect.appendChild(option);
       }
-      const available = voices.find(voice => voice.option_id === preferredVoice && voice.status !== 'candidate')
-        || voices.find(voice => voice.status !== 'candidate')
+      const available = voices.find(voice => voice.option_id === preferredVoice && (voice.status !== 'candidate' || provider === 'piper'))
+        || voices.find(voice => voice.status !== 'candidate' || provider === 'piper')
         || voices[0];
       if (available) {
         voiceSelect.value = available.option_id;
       }
+      document.getElementById('piperControls').style.display = provider === 'piper' ? 'flex' : 'none';
     }
     function handleVoiceProviderChange() {
       renderVoiceIds();
@@ -713,15 +730,23 @@
       document.getElementById('voiceStatus').textContent = current
         ? `${current.option_id} / ${current.status} / ${current.privacy_class}`
         : '';
+      document.getElementById('piperControls').style.display = document.getElementById('voiceProvider').value === 'piper' ? 'flex' : 'none';
     }
     function voiceChatOptions() {
       const speak = document.getElementById('voiceReplyEnabled').checked;
-      return {
+      const provider = document.getElementById('voiceProvider').value || 'mock';
+      const options = {
         speak_response: speak,
         enabled: speak,
-        provider: document.getElementById('voiceProvider').value || 'mock',
-        voice_id: document.getElementById('voiceId').value || 'metis-counsel-mock'
+        provider,
+        voice_id: document.getElementById('voiceId').value || 'metis-counsel-mock',
+        allow_piper: provider === 'piper'
       };
+      if (provider === 'piper') {
+        options.piper_exe = document.getElementById('piperExe').value.trim();
+        options.piper_model = document.getElementById('piperModel').value.trim();
+      }
+      return options;
     }
     async function previewVoice() {
       const voice = voiceChatOptions();
@@ -822,6 +847,8 @@
       await refresh();
     }
     function updateRadio(state, leds) {
+      const previousTtsOutputCount = lastSeenTtsOutputCount;
+      lastSeenTtsOutputCount = state.tts_output_count || 0;
       setKnob('volumeKnob', state.volume_level);
       setKnob('depthKnob', state.conversation_depth_level);
       setKnob('initiativeKnob', state.initiative_level);
@@ -839,12 +866,30 @@
 
       const meter = document.getElementById('radioMeter');
       meter.innerHTML = '';
-      const activeBars = Math.max(1, Math.round((state.volume_level + state.initiative_level) * 6));
+      const voiceActive = ['queued', 'synthesizing', 'speaking'].includes(state.voice_output_state);
+      const voiceRecent = (state.tts_output_count || 0) > previousTtsOutputCount;
+      const activeBars = voiceActive || voiceRecent
+        ? Math.max(4, Math.round((state.volume_level || 0.6) * 12))
+        : Math.max(1, Math.round((state.volume_level + state.initiative_level) * 6));
       for (let index = 12; index >= 1; index -= 1) {
         const bar = document.createElement('div');
         bar.className = index <= activeBars ? 'meter-bar active' : 'meter-bar';
         meter.appendChild(bar);
       }
+      if (voiceActive || voiceRecent) {
+        pulseRadioAudio(voiceActive ? 1200 : 2200);
+      }
+    }
+    function pulseRadioAudio(durationMs) {
+      const meter = document.getElementById('radioMeter');
+      const strip = document.querySelector('.radio-strip');
+      meter.classList.add('voice-active');
+      strip.classList.add('voice-active');
+      clearTimeout(radioPulseTimer);
+      radioPulseTimer = setTimeout(() => {
+        meter.classList.remove('voice-active');
+        strip.classList.remove('voice-active');
+      }, durationMs);
     }
     async function refresh() {
       const data = await fetch('/metis/state').then(r => r.json());

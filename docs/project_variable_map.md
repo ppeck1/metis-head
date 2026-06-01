@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/UI` (dashboard voice selection controls; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options`)
+Last phase updated: `0V/AUDIO` (local Piper voice output and radio audio visualization; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -102,7 +102,7 @@ Before committing any phase:
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
 | `chat_event` | 0R | `status`, `provider`, `model`, `user_message`, `assistant_message`, `source_state` | Governed virtual chat completion/failure. |
-| `provider_event` (`tts`) | 0V | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted` | Voice output events; raw spoken text is not persisted. |
+| `provider_event` (`tts`) | 0V/AUDIO | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text and concrete temp paths are not persisted. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
@@ -207,11 +207,16 @@ results are returned for inspection but do not mutate canonical state.
 | Variable | Values | Default | Purpose |
 |---|---|---|---|
 | `METIS_VOICE_ENABLED` | bool | `false` | Enables automatic voice output when used by config/env. Direct speak endpoints opt in per request. |
-| `METIS_VOICE_PROVIDER` | `mock`, `system` | `mock` | Selects the voice provider shape. |
+| `METIS_VOICE_PROVIDER` | `mock`, `system`, `piper` | `mock` | Selects the voice provider shape. |
 | `METIS_VOICE_ID` | voice id | `metis-counsel-mock` | Voice profile identifier. |
 | `METIS_VOICE_RATE` | float `0.5-2.0` | `1.0` | Speech rate metadata. |
 | `METIS_VOICE_VOLUME` | float `0.0-1.0` | state `volume_level` or `0.6` | Voice volume metadata. |
 | `METIS_VOICE_ALLOW_SYSTEM_TTS` | bool | `false` | Explicit gate for future real OS speech. |
+| `METIS_VOICE_ALLOW_PIPER` | bool | `false` | Explicit environment gate for local Piper CLI speech; dashboard Piper selection also opts in per request. |
+| `METIS_PIPER_EXE` | filesystem path | none | Local Piper executable path. |
+| `METIS_PIPER_MODEL` | filesystem path | none | Local Piper `.onnx` model path. |
+| `METIS_PIPER_CONFIG` | filesystem path | none | Optional Piper model config path. |
+| `METIS_PIPER_PLAYBACK` | bool | `true` | Plays the generated temporary WAV through Windows audio when true. |
 
 Boundary: Phase 0V is output-only TTS. It does not imply microphone capture, camera capture,
 listening, wake-word detection, or privacy mode. `output_muted=true` blocks speech but does not
@@ -297,6 +302,7 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 | `BaseVoiceProvider` | 0V | Interface with `speak(text, config) -> events`. |
 | `MockVoiceProvider` | 0V | Deterministic no-audio TTS event provider. |
 | `SystemVoiceProvider` | 0V | Gated system-TTS shape; real OS speech remains disabled unless explicitly allowed. |
+| `PiperVoiceProvider` | 0V/AUDIO | Invokes local Piper CLI, writes a temporary WAV, and optionally plays it through Windows audio. |
 | `FailedVoiceProvider` | 0V | Deterministic visible TTS failure provider for tests. |
 | `speak_text` | 0V | Applies output-mute/standby gates and returns redacted TTS events. |
 | `stop_voice` | 0V | Emits a deterministic cancelled TTS event. |
@@ -310,7 +316,7 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 |---|---|---|---|---|
 | `metis-counsel-mock` | `mock` | `available` | `local_no_audio` | Current default; emits governed TTS events but no audible speech. |
 | `windows-system-tts` | `system` | `gated` | `local_os_audio` | Local OS audio shape; disabled unless explicitly allowed and implemented. |
-| `piper-local` | `piper` | `candidate` | `local_model_audio` | Future offline/local neural TTS candidate; needs provider bakeoff. |
+| `piper-local` | `piper` | `candidate` or `available` | `local_model_audio` | Local neural TTS path; becomes available when Piper executable/model paths are configured. |
 | `openai-tts` | `openai` | `candidate` | `cloud_audio_external` | Future cloud TTS candidate; would require explicit cloud/privacy labeling. |
 
 ## Simulation Test Manifest
@@ -444,9 +450,12 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `ollamaBaseUrl` | 0R | UI override for local Ollama base URL. |
 | `ollamaModel` | 0R | UI model selector populated from Ollama `/api/tags`. |
 | `voiceProvider` | 0V/UI | UI voice provider selector populated from `/metis/voice/options`. |
-| `voiceId` | 0V/UI | UI voice ID selector; candidate options are disabled until implemented. |
+| `voiceId` | 0V/UI | UI voice ID selector; unsupported candidate options are disabled until implemented. |
 | `voiceReplyEnabled` | 0V/UI | Chat voice-reply switch; sends `options.voice.speak_response=true` when checked. |
 | `voiceStatus` | 0V/UI | Voice option/status line. |
+| `piperControls` | 0V/AUDIO | Shows local Piper path inputs when the Piper voice provider is selected. |
+| `piperExe` | 0V/AUDIO | Per-request Piper executable path override. |
+| `piperModel` | 0V/AUDIO | Per-request Piper `.onnx` model path override. |
 
 ## Dashboard Functions
 
@@ -469,6 +478,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `handleVoiceProviderChange` | 0V/UI | Updates voice IDs when the provider changes. |
 | `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
 | `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
+| `pulseRadioAudio` | 0V/AUDIO | Pulses the virtual radio meter/strip when TTS output is active or newly completed. |
 
 ## API Routes
 

@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+import metis_head.voice as voice_module
 from metis_head.brain import app
 
 
@@ -54,6 +55,56 @@ def test_voice_options_endpoint_lists_current_and_candidate_voices() -> None:
     assert options["windows-system-tts"]["status"] == "gated"
     assert options["piper-local"]["status"] == "candidate"
     assert options["openai-tts"]["privacy_class"] == "cloud_audio_external"
+
+
+def test_piper_option_becomes_available_when_local_paths_are_configured(monkeypatch, tmp_path) -> None:
+    piper_exe = tmp_path / "piper.exe"
+    piper_model = tmp_path / "voice.onnx"
+    piper_exe.write_text("stub", encoding="utf-8")
+    piper_model.write_text("stub", encoding="utf-8")
+    monkeypatch.setenv("METIS_PIPER_EXE", str(piper_exe))
+    monkeypatch.setenv("METIS_PIPER_MODEL", str(piper_model))
+    client = _client()
+
+    response = client.get("/metis/voice/options")
+
+    assert response.status_code == 200
+    options = {item["option_id"]: item for item in response.json()["options"]}
+    assert options["piper-local"]["status"] == "available"
+
+
+def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp_path) -> None:
+    piper_exe = tmp_path / "piper.exe"
+    piper_model = tmp_path / "voice.onnx"
+    piper_exe.write_text("stub", encoding="utf-8")
+    piper_model.write_text("stub", encoding="utf-8")
+    monkeypatch.setenv("METIS_PIPER_EXE", str(piper_exe))
+    monkeypatch.setenv("METIS_PIPER_MODEL", str(piper_model))
+    monkeypatch.setenv("METIS_VOICE_ALLOW_PIPER", "true")
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(command: list[str], **kwargs: Any) -> object:
+        calls.append({"command": command, "kwargs": kwargs})
+        return object()
+
+    monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(voice_module, "_play_wav_file", lambda wav_path: None)
+    client = _client()
+
+    response = client.post(
+        "/metis/voice/speak",
+        json={"text": "Piper local voice check.", "provider": "piper", "voice_id": "piper-local", "allow_piper": True},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "piper"
+    assert body["spoken"] is True
+    assert [event["status"] for event in body["events"]] == ["queued", "synthesizing", "speaking", "complete"]
+    assert body["state"]["tts_output_count"] == 1
+    assert body["state"]["audio_state"] == "idle"
+    assert calls[0]["command"][0] == str(piper_exe)
+    assert calls[0]["kwargs"]["input"] == "Piper local voice check."
 
 
 def test_mock_speak_returns_events_and_final_idle_state() -> None:
