@@ -10,9 +10,20 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V` — governed voice output harness (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality`).
+Phase scope: `0M` — simulation test manifest export (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice`).
 
-Status: Metis now has a simulation-first voice output harness. It supports mock voice output,
+Status: Metis now publishes a portable `metis_sim_tests.v0.1` manifest that inventories scenarios,
+acceptance coverage, readiness, hardware parity, schemas, and simulation boundaries.
+
+Phase 0M implemented:
+
+- `metis_head/sim_manifest.py`: manifest builder with scenario summaries, acceptance requirement
+  coverage, computed readiness, hardware parity manifest, and boundary list.
+- `GET /metis/sim/manifest` and `GET /metis/sim/tests`.
+- Tests proving the manifest is versioned, computed, endpoint-accessible, and mapped to required
+  acceptance coverage.
+
+Previous Phase 0V status: Metis has a simulation-first voice output harness. It supports mock voice output,
 explicitly gated system-TTS shape, voice status, speak/preview/stop endpoints, chat response speech,
 output-mute blocking, visible TTS failures, and redacted speech metadata in the event log.
 
@@ -129,6 +140,7 @@ Implemented:
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
 - Metis personality constitution injected into governed chat prompts.
 - Governed voice output harness for mock/system-shaped TTS, with output mute enforcement.
+- Portable simulation test manifest for acceptance coverage, scenarios, readiness, and parity links.
 - Virtual chat panel that maps depth, initiative, Agent Mode, and source grounding into chat behavior.
 - Ollama model selector that reads locally available models from the configured Ollama base URL.
 - Dashboard order: Virtual Radio, Virtual Chat (Send attached to the composer; Enter sends, Shift+Enter newlines), Radio Status, BOH Library Link, readiness/LED/adapter/state/scenario panels, export/replay, event log.
@@ -282,6 +294,8 @@ Metis — BOH remains the source of truth.
 
 - `GET /metis/state`
 - `GET /metis/export`
+- `GET /metis/sim/manifest`
+- `GET /metis/sim/tests`
 - `GET /metis/boh/status`
 - `GET /metis/llm/options`
 - `POST /metis/event`
@@ -312,7 +326,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-71 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, 4 Phase 0P personality-layer tests, and 6 Phase 0V voice-harness tests)
+76 passed under Python 3.11 (includes 8 Phase 0B BOH-bridge tests, 14 Phase 0C link-manager tests, 5 Phase 0S/S4 bridge-emulator tests, 6 Phase 0S/S3 provider-harness tests, 4 Phase 0P personality-layer tests, 6 Phase 0V voice-harness tests, and 5 Phase 0M manifest tests)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

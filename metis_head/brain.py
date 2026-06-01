@@ -24,6 +24,7 @@ from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
+from .sim_manifest import build_sim_test_manifest
 from .voice import VoiceResult, speak_text, stop_voice, voice_profile
 
 
@@ -77,6 +78,16 @@ def export_state() -> dict[str, Any]:
         "event_log": STATE.get("event_log", []),
         "export_schema": "metis_export.v0.1",
     }
+
+
+@app.get("/metis/sim/manifest")
+def sim_manifest(include_results: bool = True) -> dict[str, Any]:
+    return build_sim_test_manifest(include_results=include_results)
+
+
+@app.get("/metis/sim/tests")
+def sim_tests(include_results: bool = True) -> dict[str, Any]:
+    return build_sim_test_manifest(include_results=include_results)
 
 
 @app.get("/metis/proposals")

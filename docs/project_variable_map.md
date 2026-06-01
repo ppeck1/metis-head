@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V` (governed voice output harness; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality`)
+Last phase updated: `0M` (simulation test manifest export; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -33,6 +33,7 @@ Before committing any phase:
 | `PROVIDER_HARNESS_VERSION` | `metis_provider_harness.v0.1` | `metis_head.provider_harness` | Mock provider catalog/invocation harness version. |
 | `PERSONALITY_VERSION` | `metis_personality.v1.0` | `metis_head.personality` | Structured Metis personality constitution version. |
 | `VOICE_SCHEMA_VERSION` | `metis_voice.v0.1` | `metis_head.voice` | Governed voice output provider/result schema version. |
+| `SIM_TEST_MANIFEST_VERSION` | `metis_sim_tests.v0.1` | `metis_head.sim_manifest` | Portable simulation scenario/acceptance/parity manifest version. |
 | `metis_export.v0.1` | `metis_export.v0.1` | `metis_head.brain` | Dashboard/API export envelope version. |
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
@@ -286,6 +287,20 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 | `stop_voice` | 0V | Emits a deterministic cancelled TTS event. |
 | `voice_profile` | 0V | Returns current voice config/status boundary. |
 
+## Simulation Test Manifest
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `metis_head.sim_manifest` | 0M | Builds a portable simulation manifest from scenarios, readiness, acceptance requirements, and hardware parity. |
+| `SIM_TEST_MANIFEST_VERSION` | 0M | `metis_sim_tests.v0.1`. |
+| `ACCEPTANCE_REQUIREMENTS` | 0M | Required acceptance coverage labels for simulation review. |
+| `REQUIREMENT_SCENARIO_MAP` | 0M | Maps acceptance requirements to executable scenario IDs where applicable. |
+| `build_sim_test_manifest(include_results=True)` | 0M | Returns schemas, readiness, summary, acceptance coverage, scenario summaries, hardware parity, and boundaries. |
+
+The manifest is intentionally portable JSON. It does not require hardware, BOH, Atlas, Robot Shell,
+real microphone/camera capture, or real external tools. `include_results=false` can be used when a
+caller wants the inventory without executing scenarios.
+
 ## Governance Policy
 
 | Name | Current Phase | Purpose |
@@ -427,6 +442,8 @@ Personality is now a runtime governance/behavior layer, not a decorative dashboa
 | `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
 | `GET` | `/metis/proposals` | `metis_head.brain` | Return structured approval queue records. |
 | `GET` | `/metis/export` | `metis_head.brain` | Export state, LEDs, readiness, and event log. |
+| `GET` | `/metis/sim/manifest` | `metis_head.brain` | Portable `metis_sim_tests.v0.1` manifest with optional scenario results. |
+| `GET` | `/metis/sim/tests` | `metis_head.brain` | Alias for the simulation test manifest endpoint. |
 | `POST` | `/metis/replay` | `metis_head.brain` | Replay a JSON event list from baseline or current state. |
 | `POST` | `/metis/state/reset` | `metis_head.brain` | Reset mock Brain state and scenario results to baseline. |
 | `POST` | `/metis/scenario/run` | `metis_head.brain` | Run one scenario or all scenarios. |
