@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import hashlib
+import shutil
 import subprocess
+import sysconfig
 import tempfile
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -11,6 +13,10 @@ from typing import Any
 
 VOICE_SCHEMA_VERSION = "metis_voice.v0.1"
 VOICE_OPTIONS_VERSION = "metis_voice_options.v0.1"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_PIPER_VOICE_DIR = REPO_ROOT / "models" / "piper" / "en_US" / "hfc_female" / "medium"
+DEFAULT_PIPER_MODEL = DEFAULT_PIPER_VOICE_DIR / "en_US-hfc_female-medium.onnx"
+DEFAULT_PIPER_CONFIG = DEFAULT_PIPER_VOICE_DIR / "en_US-hfc_female-medium.onnx.json"
 
 VOICE_OPTION_CATALOG: list[dict[str, Any]] = [
     {
@@ -232,7 +238,7 @@ class PiperVoiceProvider(BaseVoiceProvider):
         with tempfile.NamedTemporaryFile(prefix="metis_piper_", suffix=".wav", delete=False) as wav_file:
             wav_path = Path(wav_file.name)
         try:
-            command = [str(piper_exe), "--model", str(piper_model), "--output_file", str(wav_path)]
+            command = [str(piper_exe), "--model", str(piper_model), "--output-file", str(wav_path), "--volume", str(config.volume)]
             if config.piper_config:
                 command.extend(["--config", str(config.piper_config)])
             subprocess.run(
@@ -274,9 +280,9 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
     volume = _clamp_float(voice_options.get("volume", volume_default), 0.0, 1.0, 0.6)
     allow_system_tts = _as_bool(voice_options.get("allow_system_tts", env.get("METIS_VOICE_ALLOW_SYSTEM_TTS", "false")))
     allow_piper = _as_bool(voice_options.get("allow_piper", env.get("METIS_VOICE_ALLOW_PIPER", "false")))
-    piper_exe = _optional_str(voice_options.get("piper_exe", env.get("METIS_PIPER_EXE")))
-    piper_model = _optional_str(voice_options.get("piper_model", env.get("METIS_PIPER_MODEL")))
-    piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG")))
+    piper_exe = _optional_str(voice_options.get("piper_exe", env.get("METIS_PIPER_EXE"))) or _default_piper_exe()
+    piper_model = _optional_str(voice_options.get("piper_model", env.get("METIS_PIPER_MODEL"))) or _default_piper_model()
+    piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG"))) or _default_piper_config()
     piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "true")))
     if provider not in {"mock", "system", "piper", "failed"}:
         provider = "mock"
@@ -431,6 +437,13 @@ def voice_options(state: dict[str, Any]) -> dict[str, Any]:
         "selected_voice_id": profile["voice_id"],
         "current_voice_is_audible": profile["provider"] in {"piper", "system"} and profile["can_speak_now"],
         "boundary": profile["boundary"],
+        "piper": {
+            "exe": config.piper_exe,
+            "model": config.piper_model,
+            "config": config.piper_config,
+            "playback": config.piper_playback,
+            "configured": bool(config.piper_exe and config.piper_model),
+        },
         "options": options,
     }
 
@@ -478,6 +491,26 @@ def _voice_option_catalog_for_config(config: VoiceConfig) -> list[dict[str, Any]
             option["current_default"] = config.provider == "system"
         catalog.append(option)
     return catalog
+
+
+def _default_piper_exe() -> str | None:
+    discovered = shutil.which("piper") or shutil.which("piper.exe")
+    if discovered:
+        return discovered
+    scripts = sysconfig.get_path("scripts")
+    if scripts:
+        candidate = Path(scripts) / "piper.exe"
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def _default_piper_model() -> str | None:
+    return str(DEFAULT_PIPER_MODEL) if DEFAULT_PIPER_MODEL.exists() else None
+
+
+def _default_piper_config() -> str | None:
+    return str(DEFAULT_PIPER_CONFIG) if DEFAULT_PIPER_CONFIG.exists() else None
 
 
 def _play_wav_file(wav_path: Path) -> None:

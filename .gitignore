@@ -170,6 +170,9 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Local speech/model assets
+models/
+
 # PyPI configuration file
 .pypirc
 

@@ -39,7 +39,10 @@ def test_voice_profile_config_endpoint_exposes_mock_tts_profile() -> None:
     assert "TTS output only" in body["profile"]["boundary"]
 
 
-def test_voice_options_endpoint_lists_current_and_candidate_voices() -> None:
+def test_voice_options_endpoint_lists_current_and_candidate_voices(monkeypatch) -> None:
+    monkeypatch.setattr(voice_module, "_default_piper_exe", lambda: None)
+    monkeypatch.setattr(voice_module, "_default_piper_model", lambda: None)
+    monkeypatch.setattr(voice_module, "_default_piper_config", lambda: None)
     client = _client()
 
     response = client.get("/metis/voice/options")
@@ -71,6 +74,7 @@ def test_piper_option_becomes_available_when_local_paths_are_configured(monkeypa
     assert response.status_code == 200
     options = {item["option_id"]: item for item in response.json()["options"]}
     assert options["piper-local"]["status"] == "available"
+    assert response.json()["piper"]["configured"] is True
 
 
 def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp_path) -> None:

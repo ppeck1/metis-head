@@ -410,6 +410,7 @@
       <div id="piperControls" class="tool-row" style="display:none;">
         <input id="piperExe" type="text" placeholder="Piper executable path">
         <input id="piperModel" type="text" placeholder="Piper .onnx model path">
+        <input id="piperConfig" type="text" placeholder="Piper .onnx.json config path">
       </div>
       <div id="voiceStatus" class="status-line"></div>
       <div id="chatLog" class="chat-log"></div>
@@ -687,6 +688,9 @@
       voiceOptionsCatalog = data.options || [];
       const providerSelect = document.getElementById('voiceProvider');
       const voiceSelect = document.getElementById('voiceId');
+      document.getElementById('piperExe').value = data.piper?.exe || document.getElementById('piperExe').value || '';
+      document.getElementById('piperModel').value = data.piper?.model || document.getElementById('piperModel').value || '';
+      document.getElementById('piperConfig').value = data.piper?.config || document.getElementById('piperConfig').value || '';
       const previousProvider = providerSelect.value || data.selected_provider || 'mock';
       const previousVoice = voiceSelect.value || data.selected_voice_id || 'metis-counsel-mock';
       const providers = [...new Set(voiceOptionsCatalog.map(option => option.provider))];
@@ -745,6 +749,7 @@
       if (provider === 'piper') {
         options.piper_exe = document.getElementById('piperExe').value.trim();
         options.piper_model = document.getElementById('piperModel').value.trim();
+        options.piper_config = document.getElementById('piperConfig').value.trim();
       }
       return options;
     }

@@ -10,11 +10,26 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO` - local Piper voice output and audio visualization (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls`).
+Phase scope: `0V/AUDIO+` - installed Piper voice model wiring (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider`).
 
-Status: Metis can now route governed voice output to a local Piper CLI provider when configured.
-The mock Brain dashboard exposes Piper path fields, sends a per-request local playback opt-in, and
-the virtual radio meter pulses from TTS output events.
+Status: Piper is installed in the Python 3.11 runtime used by the mock Brain, and the requested
+`rhasspy/piper-voices` `en_US/hfc_female/medium` model is downloaded locally under `models/`
+(ignored by git). The backend auto-detects the local Piper executable and this default model/config
+when present, while the dashboard still allows per-request overrides.
+
+Phase 0V/AUDIO+ implemented:
+
+- Installed `piper-tts` into the local Python 3.11 runtime.
+- Downloaded `en_US-hfc_female-medium.onnx` and `en_US-hfc_female-medium.onnx.json` from
+  `rhasspy/piper-voices`.
+- Added repo-local default Piper path discovery for the downloaded model/config.
+- Added dashboard auto-fill for Piper executable, model, and config paths.
+- Added `voice` optional dependency metadata for future environment setup.
+- Ignored `models/` so large local voice assets are not committed.
+
+Previous Phase 0V/AUDIO status: Metis can route governed voice output to a local Piper CLI provider
+when configured. The mock Brain dashboard exposes Piper path fields, sends a per-request local
+playback opt-in, and the virtual radio meter pulses from TTS output events.
 
 Phase 0V/AUDIO implemented:
 
@@ -291,6 +306,14 @@ $env:METIS_PIPER_EXE="B:\path\to\piper.exe"
 $env:METIS_PIPER_MODEL="B:\path\to\voice.onnx"
 $env:METIS_PIPER_CONFIG="B:\path\to\voice.onnx.json"   # optional
 $env:METIS_PIPER_PLAYBACK="true"
+```
+
+Default local Piper paths are auto-detected when installed/downloaded:
+
+```text
+C:\Users\peckm\AppData\Local\Programs\Python\Python311\Scripts\piper.exe
+B:\dev\metis_head\metis_head\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx
+B:\dev\metis_head\metis_head\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx.json
 ```
 
 `system` is present as a gated provider shape only. Real OS speech remains disabled unless

@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO` (local Piper voice output and radio audio visualization; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls`)
+Last phase updated: `0V/AUDIO+` (installed Piper hfc_female medium voice wiring; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -217,6 +217,15 @@ results are returned for inspection but do not mutate canonical state.
 | `METIS_PIPER_MODEL` | filesystem path | none | Local Piper `.onnx` model path. |
 | `METIS_PIPER_CONFIG` | filesystem path | none | Optional Piper model config path. |
 | `METIS_PIPER_PLAYBACK` | bool | `true` | Plays the generated temporary WAV through Windows audio when true. |
+
+Default local Piper assets when present:
+
+| Name | Current Value | Notes |
+|---|---|---|
+| `DEFAULT_PIPER_VOICE_DIR` | `models/piper/en_US/hfc_female/medium` | Repo-local ignored model folder. |
+| `DEFAULT_PIPER_MODEL` | `en_US-hfc_female-medium.onnx` | Downloaded from `rhasspy/piper-voices/en/en_US/hfc_female/medium`. |
+| `DEFAULT_PIPER_CONFIG` | `en_US-hfc_female-medium.onnx.json` | Matching Piper voice config. |
+| `DEFAULT_PIPER_EXE` | Python 3.11 `Scripts/piper.exe` when installed | Discovered through PATH or Python scripts directory. |
 
 Boundary: Phase 0V is output-only TTS. It does not imply microphone capture, camera capture,
 listening, wake-word detection, or privacy mode. `output_muted=true` blocks speech but does not
@@ -456,6 +465,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `piperControls` | 0V/AUDIO | Shows local Piper path inputs when the Piper voice provider is selected. |
 | `piperExe` | 0V/AUDIO | Per-request Piper executable path override. |
 | `piperModel` | 0V/AUDIO | Per-request Piper `.onnx` model path override. |
+| `piperConfig` | 0V/AUDIO+ | Per-request Piper `.onnx.json` config path override. |
 
 ## Dashboard Functions
 

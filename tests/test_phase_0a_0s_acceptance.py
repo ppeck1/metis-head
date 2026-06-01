@@ -359,6 +359,7 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "voiceId" in dashboard
     assert "piperExe" in dashboard
     assert "piperModel" in dashboard
+    assert "piperConfig" in dashboard
     assert "refreshVoiceOptions" in dashboard
     assert "previewVoice" in dashboard
     assert "pulseRadioAudio" in dashboard
