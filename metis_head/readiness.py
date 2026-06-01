@@ -33,7 +33,7 @@ CHECKLIST = [
     ("bridge_emulator_protocol_available", "Bridge emulator protocol available", 4, "pass"),
     ("persistence_config_export_available", "Persistence/config export available", 3, "pass"),
     ("simulator_to_spec_traceability_available", "Simulator-to-spec traceability available", 3, "pass"),
-    ("hardware_parity_manifest_available", "Hardware parity manifest available", 4, "partial"),
+    ("hardware_parity_manifest_available", "Hardware parity manifest available", 4, "pass"),
 ]
 
 CREDIT = {"pass": 1.0, "partial": 0.5, "fail": 0.0, "unknown": 0.0}

@@ -6,8 +6,8 @@ from typing import Any
 BRIDGE_SCHEMA_VERSION = "metis_bridge_event.v0.1"
 
 HARDWARE_PARITY_MANIFEST = [
-    {"hardware": "volume_knob", "event": "control_change:volume", "state": "volume_level", "dashboard": "canonical_state", "failure": "bridge_disconnected", "test": "scenario_replay"},
-    {"hardware": "conversation_depth_knob", "event": "control_change:conversation_depth", "state": "conversation_depth_bucket", "dashboard": "canonical_state", "failure": "bridge_disconnected", "test": "scenario_replay"},
+    {"hardware": "volume_knob", "event": "control_change:volume", "state": "volume_level", "dashboard": "canonical_state", "failure": "bridge_disconnected", "test": "volume_control_updates_state"},
+    {"hardware": "conversation_depth_knob", "event": "control_change:conversation_depth", "state": "conversation_depth_bucket", "dashboard": "canonical_state", "failure": "bridge_disconnected", "test": "conversation_depth_control_updates_state"},
     {"hardware": "initiative_knob", "event": "control_change:initiative", "state": "initiative_bucket", "dashboard": "canonical_state", "failure": "bridge_disconnected", "test": "simulator_replay_deterministic"},
     {"hardware": "pwr_button", "event": "button_event:pwr", "state": "power_state", "dashboard": "canonical_state", "failure": "bridge_disconnected", "test": "pwr_standby_no_hidden_listening"},
     {"hardware": "loud_button", "event": "button_event:loud", "state": "output_muted", "dashboard": "canonical_state", "failure": "tts_failure", "test": "output_muted_not_privacy"},
@@ -15,8 +15,24 @@ HARDWARE_PARITY_MANIFEST = [
     {"hardware": "am_fm_button", "event": "button_event:am_fm", "state": "interaction_mode", "dashboard": "canonical_state", "failure": "governance_block", "test": "agent_mode_requires_approval"},
     {"hardware": "mic_cutoff", "event": "hardware_privacy:mic", "state": "mic_hardware_enabled", "dashboard": "privacy", "failure": "stt_failure", "test": "mic_cutoff_blocks_capture"},
     {"hardware": "camera_cutoff", "event": "hardware_privacy:camera", "state": "camera_hardware_enabled", "dashboard": "privacy", "failure": "camera_failure", "test": "camera_cutoff_blocks_capture"},
-    {"hardware": "bridge_heartbeat", "event": "heartbeat", "state": "module_health.metis_head_bridge", "dashboard": "adapter_health", "failure": "bridge_disconnected", "test": "safe_boot_simulated"},
+    {"hardware": "bridge_heartbeat", "event": "heartbeat", "state": "module_health.metis_head_bridge", "dashboard": "adapter_health", "failure": "bridge_disconnected", "test": "bridge_heartbeat_sets_bridge_ok"},
 ]
+
+
+def validate_hardware_parity_manifest(scenario_ids: set[str]) -> dict[str, Any]:
+    failures: list[str] = []
+    for index, item in enumerate(HARDWARE_PARITY_MANIFEST):
+        for key in {"hardware", "event", "state", "dashboard", "failure", "test"}:
+            if not item.get(key):
+                failures.append(f"item {index} missing {key}")
+        test_id = item.get("test")
+        if test_id not in scenario_ids:
+            failures.append(f"{item.get('hardware', index)} test {test_id!r} is not an executable scenario")
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "item_count": len(HARDWARE_PARITY_MANIFEST),
+    }
 
 
 def control_change(control: str, value: float, raw: int | None = None, timestamp_ms: int = 0) -> dict[str, Any]:

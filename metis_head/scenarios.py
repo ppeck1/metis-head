@@ -24,6 +24,16 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "events": [{"type": "button_event", "button": "loud", "state": "off"}],
         "expected": {"output_muted": True, "mic_hardware_enabled": True, "logging_state": "session_logging_active"},
     },
+    "volume_control_updates_state": {
+        "name": "Volume control updates spoken output level",
+        "events": [{"type": "control_change", "control": "volume", "value": 0.25, "raw": 256}],
+        "expected": {"volume_level": 0.25},
+    },
+    "conversation_depth_control_updates_state": {
+        "name": "Conversation depth control updates depth bucket",
+        "events": [{"type": "control_change", "control": "conversation_depth", "value": 0.9, "raw": 921}],
+        "expected": {"conversation_depth_level": 0.9, "conversation_depth_bucket": "systems"},
+    },
     "mic_cutoff_blocks_capture": {
         "name": "Hardware mic cutoff prevents listening/transcription",
         "events": [
@@ -120,6 +130,14 @@ SCENARIOS: dict[str, dict[str, Any]] = {
             {"type": "user_intent", "intent": "send_email", "action_class": "external_action"},
         ],
         "expected": {"initiative_bucket": "proactive", "pending_approval_count": 1, "external_action_executed": False},
+    },
+    "bridge_heartbeat_sets_bridge_ok": {
+        "name": "Bridge heartbeat marks bridge module healthy",
+        "events": [
+            {"type": "bridge_disconnected", "reason": "test disconnect"},
+            {"type": "heartbeat", "bridge_id": "sim-bridge-001", "uptime_ms": 42, "firmware": "sim.0.1"},
+        ],
+        "expected": {"active_failure": None, "module_health.metis_head_bridge": "ok"},
     },
 }
 

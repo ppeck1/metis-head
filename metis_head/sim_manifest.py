@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .bridge import HARDWARE_PARITY_MANIFEST
+from .bridge import HARDWARE_PARITY_MANIFEST, validate_hardware_parity_manifest
 from .readiness import calculate_readiness
 from .scenarios import SCENARIOS, run_all_scenarios
 from .schemas import EVENT_SCHEMA_VERSION, READINESS_CHECKLIST_VERSION, STATE_SCHEMA_VERSION
@@ -46,6 +46,7 @@ REQUIREMENT_SCENARIO_MAP = {
 def build_sim_test_manifest(*, include_results: bool = True) -> dict[str, Any]:
     readiness = calculate_readiness("simulation_readiness")
     scenario_results = run_all_scenarios() if include_results else []
+    parity_validation = validate_hardware_parity_manifest(set(SCENARIOS))
     result_by_id = {result["scenario_id"]: result for result in scenario_results}
     scenarios = []
     for scenario_id, scenario in SCENARIOS.items():
@@ -92,10 +93,12 @@ def build_sim_test_manifest(*, include_results: bool = True) -> dict[str, Any]:
             "scenario_failed": sum(1 for result in scenario_results if not result["passed"]) if include_results else None,
             "acceptance_requirement_count": len(ACCEPTANCE_REQUIREMENTS),
             "hardware_parity_item_count": len(HARDWARE_PARITY_MANIFEST),
+            "hardware_parity_passed": parity_validation["passed"],
         },
         "acceptance_requirements": requirements,
         "scenarios": scenarios,
         "hardware_parity_manifest": HARDWARE_PARITY_MANIFEST,
+        "hardware_parity_validation": parity_validation,
         "boundaries": [
             "No real hardware required",
             "No microphone or camera capture required",

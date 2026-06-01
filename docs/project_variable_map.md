@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0X` (portable artifact persistence; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest`)
+Last phase updated: `0Y` (executable hardware parity manifest; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -140,6 +140,19 @@ Before committing any phase:
 Bridge emulator JSONL lines must be one event object per line. The parser reports line numbers for
 invalid JSON or unsupported event types. All emitted events include `bridge_schema` and
 `emulator_version`, then pass through the same event validator used by the mock Brain.
+
+## Hardware Parity Manifest
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `HARDWARE_PARITY_MANIFEST` | 0Y | Maps each future hardware behavior to event, state, dashboard surface, failure, and executable scenario. |
+| `validate_hardware_parity_manifest(scenario_ids)` | 0Y | Verifies each manifest row is complete and references a real scenario ID. |
+| `volume_control_updates_state` | 0Y | Scenario proving volume knob parity. |
+| `conversation_depth_control_updates_state` | 0Y | Scenario proving depth knob parity. |
+| `bridge_heartbeat_sets_bridge_ok` | 0Y | Scenario proving bridge heartbeat recovery parity. |
+
+Every hardware parity row must reference an executable scenario ID. Decorative or generic labels
+such as `scenario_replay` are no longer accepted by the parity validator.
 
 ## Adapter IDs
 
@@ -488,6 +501,8 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `baseline_boot_no_adapters` | Safe boot with all adapters disabled. |
 | `pwr_standby_no_hidden_listening` | Standby does not imply hidden listening. |
 | `output_muted_not_privacy` | Output mute does not imply privacy. |
+| `volume_control_updates_state` | Volume control updates spoken output level. |
+| `conversation_depth_control_updates_state` | Conversation depth control updates depth bucket. |
 | `mic_cutoff_blocks_capture` | Mic cutoff blocks capture. |
 | `camera_cutoff_blocks_capture` | Camera cutoff blocks capture. |
 | `source_grounding_unsourced` | AFC labels unsourced answer when retrieval unavailable. |
@@ -501,12 +516,13 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `memory_proposal_needs_review` | Memory proposal requires review. |
 | `memory_deletion_logs_without_content` | Deletion audit does not retain sensitive content. |
 | `simulator_replay_deterministic` | Same event replay produces same final state. |
+| `bridge_heartbeat_sets_bridge_ok` | Bridge heartbeat marks bridge module healthy. |
 
 ## Readiness Domain
 
 | Domain | Current Phase | Notes |
 |---|---|---|
-| `simulation_readiness` | 0A/0S | Computed from weighted checklist, not static text. |
+| `simulation_readiness` | 0A/0S/0Y | Computed from weighted checklist, not static text; currently all checklist items pass. |
 
 ## Future Build Placeholders
 
