@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import math
 import re
 import shutil
 import subprocess
@@ -268,8 +269,11 @@ class PiperVoiceProvider(BaseVoiceProvider):
                 check=True,
             )
             audio_levels = _wav_level_envelope(wav_path)
+            audio_spectrum = _wav_spectrum_envelope(wav_path)
             base["audio_levels"] = audio_levels
             base["audio_level_count"] = len(audio_levels)
+            base["audio_spectrum_levels"] = audio_spectrum
+            base["audio_spectrum_count"] = len(audio_spectrum)
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
                 if config.piper_playback_mode == "async":
@@ -618,18 +622,10 @@ def _audio_visualization_hint_ms(text: str) -> int:
 
 
 def _wav_level_envelope(wav_path: Path, bins: int = 18) -> list[float]:
-    try:
-        with wave.open(str(wav_path), "rb") as wav_file:
-            sample_width = wav_file.getsampwidth()
-            frame_count = wav_file.getnframes()
-            if sample_width != 2 or frame_count <= 0:
-                return []
-            frames = wav_file.readframes(frame_count)
-    except (EOFError, wave.Error, OSError):
+    sample_data = _read_wav_samples(wav_path)
+    if sample_data is None:
         return []
-
-    samples = array("h")
-    samples.frombytes(frames)
+    samples, _sample_rate = sample_data
     if not samples:
         return []
     segment_size = max(1, len(samples) // bins)
@@ -646,6 +642,78 @@ def _wav_level_envelope(wav_path: Path, bins: int = 18) -> list[float]:
     if peak <= 0:
         return [0.0 for _ in levels]
     return [round(min(1.0, level / peak), 3) for level in levels]
+
+
+def _wav_spectrum_envelope(wav_path: Path, bands: int = 20) -> list[float]:
+    sample_data = _read_wav_samples(wav_path)
+    if sample_data is None:
+        return []
+    samples, sample_rate = sample_data
+    if not samples or sample_rate <= 0:
+        return []
+    max_samples = 4096
+    step = max(1, len(samples) // max_samples)
+    window = samples[::step][:max_samples]
+    if len(window) < 32:
+        return []
+    mean = sum(window) / len(window)
+    centered = [sample - mean for sample in window]
+    windowed = [
+        sample * (0.5 - 0.5 * math.cos((2 * math.pi * index) / (len(centered) - 1)))
+        for index, sample in enumerate(centered)
+    ]
+    nyquist = sample_rate / 2
+    low_hz = 85.0
+    high_hz = min(6200.0, nyquist * 0.86)
+    if high_hz <= low_hz:
+        return []
+    levels: list[float] = []
+    for band in range(bands):
+        fraction = band / max(1, bands - 1)
+        center_hz = low_hz * ((high_hz / low_hz) ** fraction)
+        levels.append(_goertzel_magnitude(windowed, sample_rate, center_hz))
+    peak = max(levels, default=0.0)
+    if peak <= 0:
+        return [0.0 for _ in levels]
+    return [round(min(1.0, level / peak), 3) for level in levels]
+
+
+def _read_wav_samples(wav_path: Path) -> tuple[list[float], int] | None:
+    try:
+        with wave.open(str(wav_path), "rb") as wav_file:
+            sample_width = wav_file.getsampwidth()
+            channels = wav_file.getnchannels()
+            sample_rate = wav_file.getframerate()
+            frame_count = wav_file.getnframes()
+            if sample_width != 2 or frame_count <= 0:
+                return None
+            frames = wav_file.readframes(frame_count)
+    except (EOFError, wave.Error, OSError):
+        return None
+
+    samples = array("h")
+    samples.frombytes(frames)
+    if not samples:
+        return None
+    if channels > 1:
+        mixed = []
+        for index in range(0, len(samples), channels):
+            frame = samples[index : index + channels]
+            mixed.append(sum(frame) / len(frame))
+        return mixed, sample_rate
+    return [float(sample) for sample in samples], sample_rate
+
+
+def _goertzel_magnitude(samples: list[float], sample_rate: int, frequency_hz: float) -> float:
+    normalized = frequency_hz / sample_rate
+    coefficient = 2 * math.cos(2 * math.pi * normalized)
+    previous = 0.0
+    previous2 = 0.0
+    for sample in samples:
+        value = sample + coefficient * previous - previous2
+        previous2 = previous
+        previous = value
+    return math.sqrt(previous2 * previous2 + previous * previous - coefficient * previous * previous2)
 
 
 def _play_wav_file_async(wav_path: Path, strategy: str = "soundplayer") -> None:

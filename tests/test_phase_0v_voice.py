@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+import math
 import struct
 import wave
 from typing import Any
@@ -244,6 +245,28 @@ def test_wav_level_envelope_reflects_actual_audio(tmp_path) -> None:
     assert len(levels) == 3
     assert levels[0] < levels[1] < levels[2]
     assert levels[-1] == 1.0
+
+
+def test_wav_spectrum_envelope_reflects_actual_audio(tmp_path) -> None:
+    wav_path = tmp_path / "spectrum.wav"
+    sample_rate = 22050
+    samples = []
+    for index in range(sample_rate // 2):
+        t = index / sample_rate
+        value = (math.sin(2 * math.pi * 220 * t) * 8500) + (math.sin(2 * math.pi * 1600 * t) * 3500)
+        samples.append(int(max(-32767, min(32767, value))))
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    levels = voice_module._wav_spectrum_envelope(wav_path, bands=12)
+
+    assert len(levels) == 12
+    assert max(levels) == 1.0
+    assert min(levels) < 0.5
+    assert len(set(levels)) > 3
 
 
 def test_mock_speak_returns_events_and_final_idle_state() -> None:

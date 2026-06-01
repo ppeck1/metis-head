@@ -10,11 +10,25 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO6` - old-school scope waveform styling and reset (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope`).
+Phase scope: `0V/AUDIO7` - vertical mirrored spectrum analyzer (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling`).
 
-Status: the tuning-window visualizer now uses a horizontal, two-sided old-stereo scope style with a
-centerline glow and short afterimage decay. It resets to an idle line after the current voice task
-completes instead of holding the last waveform.
+Status: the tuning-window visualizer is vertical again and now behaves like a mirrored analog
+spectrum analyzer. Piper synthesis produces `audio_spectrum_levels` from the actual generated WAV;
+the dashboard renders those frequency-band levels bottom-to-top with matching left/right LED traces,
+a short afterimage decay, and an idle reset after the current voice task completes.
+
+Phase 0V/AUDIO7 implemented:
+
+- Added Piper WAV spectrum extraction for truthful, audio-derived visualizer metadata.
+- Reworked the dashboard tuning-window visualizer into a vertical mirrored spectrum analyzer.
+- Preserved buildspec intent: the strip is an instrument/status visualizer, not eyes, mood lighting,
+  or a hallucinated animation layer.
+- Kept `audio_levels` as compatibility metadata while preferring `audio_spectrum_levels` for the UI.
+- Kept the short `voice-decay` afterimage state and idle reset after voice duration.
+
+Previous Phase 0V/AUDIO6 status: the tuning-window visualizer used a horizontal, two-sided old-stereo scope style with a
+centerline glow and short afterimage decay. It reset to an idle line after the current voice task
+completed instead of holding the last waveform.
 
 Phase 0V/AUDIO6 implemented:
 
@@ -502,7 +516,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-93 passed under Python 3.11 (includes old-school scope styling, PCM-derived Piper waveform, async playback, spoken-text normalization, and radio reset coverage)
+94 passed under Python 3.11 (includes vertical mirrored spectrum analyzer, Piper WAV spectrum extraction, async playback, spoken-text normalization, and radio reset coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

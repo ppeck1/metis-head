@@ -365,10 +365,13 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "pulseRadioAudio" in dashboard
     assert "pulseRadioFromVoice" in dashboard
     assert "renderRadioWave" in dashboard
+    assert "audio_spectrum_levels" in dashboard
     assert "audio_levels" in dashboard
+    assert "spectrum-row" in dashboard
+    assert "spectrum-arm" in dashboard
     assert "voice-decay" in dashboard
     assert "radioResetTimer" in dashboard
-    assert "column-reverse" not in dashboard
+    assert "column-reverse" in dashboard
     assert "voice-active" in dashboard
     assert "piper_playback_mode" in dashboard
     assert dashboard.index("Virtual Radio") < dashboard.index("Virtual Chat") < dashboard.index("Readiness")
