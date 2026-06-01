@@ -10,12 +10,26 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO7` - vertical mirrored spectrum analyzer (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling`).
+Phase scope: `0V/AUDIO8` - full-panel spectrum analyzer polish (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction`).
 
-Status: the tuning-window visualizer is vertical again and now behaves like a mirrored analog
-spectrum analyzer. Piper synthesis produces `audio_spectrum_levels` from the actual generated WAV;
-the dashboard renders those frequency-band levels bottom-to-top with matching left/right LED traces,
-a short afterimage decay, and an idle reset after the current voice task completes.
+Status: the tuning-window visualizer now fills its panel like a real instrument. Piper synthesis
+still produces truthful `audio_spectrum_levels` from the generated WAV, and the dashboard resamples
+that signal into a full-height mirrored spectrum analyzer with per-utterance gain normalization,
+brighter phosphor-style segments, peak ticks, afterimage decay, and idle reset.
+
+Phase 0V/AUDIO8 implemented:
+
+- Expanded the vertical analyzer from a compact cluster into a full-panel instrument surface.
+- Added UI-side spectrum resampling so real Piper bands occupy the full tuning-window height.
+- Added per-utterance visual gain normalization, preserving the real frequency shape while reducing
+  wasted empty space.
+- Improved the phosphor/LED aesthetic with deeper glass, grid, glow, color thresholds, and peak
+  ticks.
+
+Previous Phase 0V/AUDIO7 status: the tuning-window visualizer returned to a vertical mirrored analog
+spectrum analyzer. Piper synthesis produced `audio_spectrum_levels` from the actual generated WAV;
+the dashboard rendered those frequency-band levels bottom-to-top with matching left/right LED traces,
+a short afterimage decay, and an idle reset after the current voice task completed.
 
 Phase 0V/AUDIO7 implemented:
 

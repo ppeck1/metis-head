@@ -2,7 +2,7 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO7` (vertical mirrored spectrum analyzer from Piper WAV spectrum; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling`)
+Last phase updated: `0V/AUDIO8` (full-panel spectrum analyzer polish with UI-side resampling and gain normalization; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -11,7 +11,7 @@ Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core st
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
-Virtual Radio is a 3-zone instrument (`grid-template-columns: 58% 19% 23%`): an inert `radio-speaker` grille (visual only), a tuning-window `radio-strip` carrying the activity LED, authority LED, and vertical mirrored `radio-meter` spectrum analyzer, and a right `radio-controls` stack (Volume + Depth knobs, PWR/LOUD/AFC/AM-FM `radio-switches`, and the large Tuning/Initiative knob). The analyzer is a simulator rendering of the buildspec tuning-window LED/status visualizer, not a selected LCD panel or final LED firmware. Power/audio/mode/authority readouts and the mic/camera cutoff buttons were moved out of the radio face into the `Radio Status` panel. Virtual Chat's Send button is attached to the composer textarea (Enter sends, Shift+Enter inserts a newline, Send disables while generating); Clear Input is a secondary action. Control meanings are unchanged.
+Virtual Radio is a 3-zone instrument (`grid-template-columns: 58% 19% 23%`): an inert `radio-speaker` grille (visual only), a tuning-window `radio-strip` carrying the activity LED, authority LED, and full-panel vertical mirrored `radio-meter` spectrum analyzer, and a right `radio-controls` stack (Volume + Depth knobs, PWR/LOUD/AFC/AM-FM `radio-switches`, and the large Tuning/Initiative knob). The analyzer is a simulator rendering of the buildspec tuning-window LED/status visualizer, not a selected LCD panel or final LED firmware. Power/audio/mode/authority readouts and the mic/camera cutoff buttons were moved out of the radio face into the `Radio Status` panel. Virtual Chat's Send button is attached to the composer textarea (Enter sends, Shift+Enter inserts a newline, Send disables while generating); Clear Input is a secondary action. Control meanings are unchanged.
 
 ## Phase Commit Checklist
 
@@ -442,7 +442,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `eventLog` | 0S | Event log JSON panel. |
 | `radioActivityLed` | 0S | Virtual tuning-window activity LED. |
 | `radioAuthorityLed` | 0S | Virtual tuning-window authority LED. |
-| `radioMeter` | 0V/AUDIO7 | Virtual tuning-window visualizer; renders an idle center spine and a bottom-to-top mirrored analog spectrum analyzer from Piper `audio_spectrum_levels` during speech. |
+| `radioMeter` | 0V/AUDIO8 | Virtual tuning-window visualizer; renders an idle center spine and a full-height bottom-to-top mirrored analog spectrum analyzer from Piper `audio_spectrum_levels` during speech. |
 | `volumeKnob` | 0S | Virtual top/volume knob. |
 | `depthKnob` | 0S | Virtual middle/depth knob. |
 | `initiativeKnob` | 0S | Virtual large tuning/initiative knob. |
@@ -494,8 +494,9 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `voiceChatOptions` | 0V/UI | Builds `options.voice` for `/metis/chat`. |
 | `previewVoice` | 0V/UI | Calls `/metis/voice/preview` with the selected voice option. |
 | `pulseRadioAudio` | 0V/AUDIO | Pulses the virtual radio meter/strip when TTS output is active or newly completed. |
-| `renderRadioWave` | 0V/AUDIO7 | Renders vertical mirrored spectrum rows from TTS `audio_spectrum_levels`, falling back to `audio_levels` only for compatibility. |
-| `pulseRadioFromVoice` | 0V/AUDIO7 | Pulses the radio strip from returned voice event metadata, using `audio_spectrum_levels`, `audio_levels`, and `audio_visualization_hint_ms` when available. |
+| `renderRadioWave` | 0V/AUDIO8 | Renders vertical mirrored spectrum rows from TTS `audio_spectrum_levels`, resamples the real bands to fill the panel, normalizes per utterance, and falls back to `audio_levels` only for compatibility. |
+| `resampleLevels` | 0V/AUDIO8 | Interpolates compact Piper spectrum metadata into the dashboard's full-height analyzer row count without inventing new source signal. |
+| `pulseRadioFromVoice` | 0V/AUDIO8 | Pulses the radio strip from returned voice event metadata, using `audio_spectrum_levels`, `audio_levels`, and `audio_visualization_hint_ms` when available. |
 
 ## API Routes
 

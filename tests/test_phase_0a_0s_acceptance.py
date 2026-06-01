@@ -365,6 +365,7 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "pulseRadioAudio" in dashboard
     assert "pulseRadioFromVoice" in dashboard
     assert "renderRadioWave" in dashboard
+    assert "resampleLevels" in dashboard
     assert "audio_spectrum_levels" in dashboard
     assert "audio_levels" in dashboard
     assert "spectrum-row" in dashboard
