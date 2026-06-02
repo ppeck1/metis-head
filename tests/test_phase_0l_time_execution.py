@@ -113,5 +113,5 @@ def test_policy_marks_time_and_git_status_active() -> None:
 
     assert lanes["time.now"] == "active_approved_read_only"
     assert lanes["git.status"] == "active_approved_read_only"
-    assert lanes["filesystem.read"] == "future_only"
+    assert lanes["filesystem.read"] == "active_approved_read_only"
     assert lanes["fetch.url"] == "future_only"

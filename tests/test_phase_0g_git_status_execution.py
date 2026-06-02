@@ -81,5 +81,5 @@ def test_policy_marks_git_status_active() -> None:
     lanes = {lane["lane"]: lane["status"] for lane in policy["candidate_lanes"]}
 
     assert lanes["git.status"] == "active_approved_read_only"
-    assert lanes["filesystem.read"] == "future_only"
+    assert lanes["filesystem.read"] == "active_approved_read_only"
     assert lanes["fetch.url"] == "future_only"

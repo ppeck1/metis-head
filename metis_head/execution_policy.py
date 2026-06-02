@@ -21,8 +21,8 @@ READ_ONLY_EXECUTION_POLICY: dict[str, Any] = {
         },
         {
             "lane": "filesystem.read",
-            "status": "future_only",
-            "minimum_gate": "path allowlist, size limit, extension policy, redacted preview, explicit operator approval",
+            "status": "active_approved_read_only",
+            "minimum_gate": "current repo allowlist, text extension allowlist, 32KB size limit, redacted/truncated preview, explicit operator approval",
         },
         {
             "lane": "git.status",

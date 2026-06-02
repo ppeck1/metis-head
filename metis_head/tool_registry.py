@@ -84,6 +84,18 @@ TOOLS: dict[str, ToolManifest] = {
         enabled=True,
         source_reference="modelcontextprotocol/servers:filesystem",
     ),
+    "filesystem.read": ToolManifest(
+        tool_id="filesystem.read",
+        name="Filesystem Read",
+        description="Approved read-only current-repo file preview with path, extension, and size gates.",
+        input_schema={"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False},
+        output_schema={"type": "object", "properties": {"path": {"type": "string"}, "byte_count": {"type": "integer"}, "preview_lines": {"type": "array"}}},
+        risk_class="medium",
+        side_effect_class="read_only",
+        permission_mode="approved_read_only",
+        enabled=True,
+        source_reference="modelcontextprotocol/servers:filesystem",
+    ),
     "git.status_proposed": ToolManifest(
         tool_id="git.status_proposed",
         name="Git Status Proposal",
