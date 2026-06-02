@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0F` (approved read-only `filesystem.read` preview lane; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane`)
+Last phase updated: `0J` (chat routing alignment for active read-only tool lanes; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G/0F UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise approved `time.now`, `git.status`, and `filesystem.read` read-only lanes. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
+Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise approved `time.now`, `git.status`, and `filesystem.read` read-only lanes. As of Phase 0J, chat `git status` and `read/open file` intents queue the active approved read-only proposal lanes, not the legacy placeholder lanes. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -251,14 +251,14 @@ change mic/camera/logging state. Spoken text is represented in TTS events as `te
 | `metis_head.tool_registry` | 0T | Metis-native governed tool registry and dry-run/proposal surface. |
 | `ToolManifest` | 0T | Versioned tool manifest with ID, schemas, risk, side-effect class, permission mode, enabled flag, and source reference. |
 | `TOOLS` | 0T | Seed tool bank inspired by MCP reference categories; no external runtime dependency. |
-| `route_tool_request(message)` | 0T/CHAT | Deterministically routes clear chat requests to governed tool IDs without LLM inference. |
+| `route_tool_request(message)` | 0T/CHAT/0J | Deterministically routes clear chat requests to governed tool IDs without LLM inference; `git status` routes to `git.status`, and `read/open file` routes to `filesystem.read`. |
 | `_route_math(text)` | 0T/CHAT | Parses narrow arithmetic requests into `math.calculate` operands; no `eval`. |
 | `time.now` | 0T | Side-effect-free dry-run time-shaped result. |
 | `text.summarize` | 0T | Deterministic local summary-shaped dry run. |
 | `math.calculate` | 0T | Narrow arithmetic dry run from explicit operands; no eval. |
-| `filesystem.read_proposed` | 0T | Proposal-only future file-read shape; Phase 0T does not read files. |
+| `filesystem.read_proposed` | 0T | Legacy proposal-only file-read shape; direct use remains blocked after approval. |
 | `filesystem.read` | 0F | Approved read-only current-repo text preview with path/extension/size gates and redacted/truncated output. |
-| `git.status_proposed` | 0T | Proposal-only future git-status shape; Phase 0T does not run git. |
+| `git.status_proposed` | 0T | Legacy proposal-only git-status shape; direct use remains blocked after approval. |
 | `git.status` | 0G | Approved read-only current-repo git status using fixed no-shell `git status --short --branch`; no arbitrary git command execution. |
 | `memory.propose` | 0T | Proposal-only memory review shape; no promotion. |
 | `dry_run_tool` | 0T | Returns safe `metis_tool_receipt.v0.1` receipts for side-effect-free dry-run tools. |
@@ -459,7 +459,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `metis_head.execution_policy` | 0Q | Structured policy export for API/tests. |
 | `READ_ONLY_EXECUTION_POLICY_VERSION` | 0Q | `metis_read_only_execution_policy.v0.1`. |
 | `read_only_execution_policy()` | 0Q | Returns the policy contract as JSON-safe data. |
-| `candidate_lanes` | 0Q/0L/0G/0F | Read-only lane list: `time.now` active in 0L, `git.status` active in 0G, `filesystem.read` active in 0F; `fetch.url` and deeper `boh.retrieve` execution remain future-only. |
+| `candidate_lanes` | 0Q/0L/0G/0F/0J | Read-only lane list: `time.now` active in 0L, `git.status` active in 0G, `filesystem.read` active in 0F; Phase 0J routes chat intents into active `git.status`/`filesystem.read` proposals. `fetch.url` and deeper `boh.retrieve` execution remain future-only. |
 | `required_gates` | 0Q | Future gates: proposal ID, approved review, approved read-only permission, lane policy match, pre-result receipt, redaction. |
 | `execution_enabled` | 0Q | Always `false`; Phase 0Q is policy only. |
 
@@ -602,7 +602,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `GET` | `/` | `metis_head.brain` | Static dashboard. |
 | `GET` | `/metis/state` | `metis_head.brain` | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | `metis_head.brain` | Reduce one event into state. |
-| `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider, or `tool_router` for explicit governed tool requests. When source grounding is on and BOH enabled (0B), retrieves read-only context first; response adds `source_state`, `metadata.boh`, and `retrieval`. Tool routing can be disabled per request with `options.tools.enabled=false`. |
+| `POST` | `/metis/chat` | `metis_head.brain` | Governed virtual chat through selected LLM provider, or `tool_router` for explicit governed tool requests. When source grounding is on and BOH enabled (0B), retrieves read-only context first; response adds `source_state`, `metadata.boh`, and `retrieval`. Tool routing can be disabled per request with `options.tools.enabled=false`; Phase 0J chat routing queues active `git.status` and `filesystem.read` proposals without direct execution. |
 | `GET` | `/metis/voice` | `metis_head.brain` | Current voice config/status and output-only boundary. |
 | `GET` | `/metis/voice/options` | `metis_head.brain` | Reviewable `metis_voice_options.v0.1` voice option catalog. |
 | `POST` | `/metis/voice/speak` | `metis_head.brain` | Speak supplied text through the governed voice harness and reduce emitted TTS events. |
@@ -691,7 +691,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | LED provider | `led_renderer`, `led_provider`, `led_command` | Provider receives already-resolved Metis LED state. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
-| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, 0W records execution receipts, and 0Q documents the future read-only execution policy. Approval remains separate from execution; future phases may add scoped real execution only after this policy is implemented with explicit governance gates. |
+| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, 0W records execution receipts, 0Q documents the future read-only execution policy, and 0J routes chat `git.status`/`filesystem.read` requests to active approved read-only proposal lanes. Approval remains separate from execution; future phases may add additional scoped execution only after explicit governance gates. |
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
 | BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B (`metis_head.boh_retrieval`); deeper adapter wiring still future. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |

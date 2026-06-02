@@ -164,7 +164,25 @@ def test_chat_routes_git_status_to_proposal_without_running_git(monkeypatch) -> 
     assert body["provider"] == "tool_router"
     assert body["tool"]["status"] == "proposal_queued"
     assert body["proposal_queued"] is True
-    assert body["state"]["approval_queue"][0]["tool_id"] == "git.status_proposed"
+    assert body["state"]["approval_queue"][0]["tool_id"] == "git.status"
+    assert body["state"]["approval_queue"][0]["side_effect_class"] == "read_only"
+    assert body["state"]["approval_queue"][0]["execution_allowed"] is False
+
+
+def test_chat_routes_file_read_to_active_read_only_proposal(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = _client()
+
+    response = client.post("/metis/chat", json={"message": "read file README.md"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tool_router"
+    assert body["model"] == "filesystem.read"
+    assert body["tool"]["status"] == "proposal_queued"
+    assert body["proposal_queued"] is True
+    assert body["state"]["approval_queue"][0]["tool_id"] == "filesystem.read"
+    assert body["state"]["approval_queue"][0]["side_effect_class"] == "read_only"
     assert body["state"]["approval_queue"][0]["execution_allowed"] is False
     assert body["state"]["external_action_executed"] is False
 

@@ -278,10 +278,10 @@ def route_tool_request(message: str) -> dict[str, Any] | None:
     if lowered.startswith("summarize:") or lowered.startswith("summarise:"):
         return {"tool_id": "text.summarize", "arguments": {"text": text.split(":", 1)[1].strip()}, "reason": "chat requested summarization"}
     if "git status" in lowered:
-        return {"tool_id": "git.status_proposed", "arguments": {"repository": "."}, "reason": "chat requested git status"}
+        return {"tool_id": "git.status", "arguments": {"repository": "."}, "reason": "chat requested git status"}
     if lowered.startswith("read file ") or lowered.startswith("open file "):
         path = text.split(" ", 2)[2].strip()
-        return {"tool_id": "filesystem.read_proposed", "arguments": {"path": path}, "reason": "chat requested file read"}
+        return {"tool_id": "filesystem.read", "arguments": {"path": path}, "reason": "chat requested file read"}
     if lowered.startswith("remember "):
         summary = text[len("remember ") :].strip()
         memory_id = f"chat_memory_{sha1(summary.encode('utf-8')).hexdigest()[:8]}"

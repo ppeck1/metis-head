@@ -10,8 +10,9 @@ This policy defines the minimum contract Metis must satisfy before any future ph
 approved read-only tools. Phase 0L activates the internal `time.now` lane after proposal review.
 Phase 0G activates `git.status` for the current allowlisted repo with fixed no-shell arguments. It
 Phase 0F activates `filesystem.read` for current-repo text preview with path, extension, and size
-gates. It does not enable arbitrary filesystem reads, arbitrary git commands, fetch, BOH mutation,
-Atlas, hardware, shell, or external actions.
+gates. Phase 0J routes explicit chat requests into those active approved read-only proposal lanes,
+but chat still never executes them directly. It does not enable arbitrary filesystem reads,
+arbitrary git commands, fetch, BOH mutation, Atlas, hardware, shell, or external actions.
 
 ## Non-Goals
 
@@ -33,6 +34,14 @@ Atlas, hardware, shell, or external actions.
 | `git.status` | active approved read-only | Current repo allowlist, fixed `git status --short --branch`, output truncation, no porcelain mutation commands. |
 | `fetch.url` | future only | Domain allowlist, timeout, size limit, content-type filter, no credential forwarding. |
 | `boh.retrieve` | existing read-only retrieval bridge | Retrieval token only; never operator token; no mutation; no corpus copy. |
+
+## Chat Routing Boundary
+
+Phase 0J allows the virtual chat `tool_router` to queue proposals for active approved read-only
+lanes when the request is explicit and deterministic: `git status` routes to `git.status`, and
+`read file ...` / `open file ...` routes to `filesystem.read`. This routing is proposal creation
+only. The chat endpoint must not run git, read files, or return read-only previews inline; operator
+review plus a separate execution request remain required.
 
 ## Required Approval Gates
 
@@ -88,8 +97,9 @@ a documented schema. Required fields:
 - `output_hash`
 - `output_summary`
 
-## Phase 0F Boundary
+## Phase 0J Boundary
 
-Phase 0F activates `time.now`, `git.status`, and `filesystem.read` as approved read-only lanes.
-Existing Phase 0W behavior remains for every other lane: execution requests create blocked or
-dry-run-only audit receipts, and `external_action_executed` remains `false`.
+Phase 0J aligns chat routing with the active `time.now`, `git.status`, and `filesystem.read`
+approved read-only lanes. Phase 0F activates `time.now`, `git.status`, and `filesystem.read` as
+approved read-only lanes. Existing Phase 0W behavior remains for every other lane: execution requests
+create blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.
