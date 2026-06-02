@@ -550,6 +550,7 @@
         <button onclick="denyProposal()">Deny</button>
         <button onclick="requestExecution()">Request Execution</button>
         <button onclick="refreshExecutionReceipts()">Refresh Receipts</button>
+        <button onclick="refreshExecutionPolicy()">Policy</button>
       </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
@@ -1074,6 +1075,12 @@
       executionReceipts = data.receipts || [];
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
       document.getElementById('toolStatus').textContent = `${executionReceipts.length} execution receipt(s)`;
+      return data;
+    }
+    async function refreshExecutionPolicy() {
+      const data = await fetch('/metis/execution/policy').then(r => r.json());
+      document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('toolStatus').textContent = data.status || 'Execution policy loaded';
       return data;
     }
     async function dryRunTool() {

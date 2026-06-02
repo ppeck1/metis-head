@@ -16,6 +16,7 @@ from .boh_link import (
 )
 from .boh_retrieval import BOHRetrievalResult, boh_config_from_env, render_context, retrieve_boh_context
 from .bridge import HARDWARE_PARITY_MANIFEST
+from .execution_policy import read_only_execution_policy
 from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
 from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
@@ -208,6 +209,11 @@ def execution_receipt_detail(receipt_id: str) -> dict[str, Any]:
     if receipt is None:
         raise HTTPException(status_code=404, detail="execution receipt not found")
     return {"receipt": receipt}
+
+
+@app.get("/metis/execution/policy")
+def execution_policy() -> dict[str, Any]:
+    return read_only_execution_policy()
 
 
 @app.post("/metis/proposals/{proposal_id}/request_execution")
