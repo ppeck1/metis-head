@@ -189,6 +189,18 @@ TOOLS: dict[str, ToolManifest] = {
         enabled=True,
         source_reference="modelcontextprotocol/servers:fetch",
     ),
+    "boh.retrieve_proposed": ToolManifest(
+        tool_id="boh.retrieve_proposed",
+        name="BOH Retrieve Proposal",
+        description="Queue a proposal for future BOH retrieval-as-tool; Phase 0E does not call BOH through the tool registry.",
+        input_schema={"type": "object", "properties": {"query": {"type": "string"}, "mode": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["query"], "additionalProperties": False},
+        output_schema={"type": "object", "properties": {"proposal_only": {"type": "boolean"}}},
+        risk_class="medium",
+        side_effect_class="read_only",
+        permission_mode="proposal_only",
+        enabled=True,
+        source_reference="metis-native:boh-retrieval-contract",
+    ),
     "memory.propose": ToolManifest(
         tool_id="memory.propose",
         name="Memory Proposal",
@@ -358,6 +370,9 @@ def route_tool_request(message: str) -> dict[str, Any] | None:
     if lowered.startswith("fetch url ") or lowered.startswith("fetch "):
         url = text.split(" ", 2)[2].strip() if lowered.startswith("fetch url ") else text.split(" ", 1)[1].strip()
         return {"tool_id": "fetch.url_proposed", "arguments": {"url": url, "method": "GET"}, "reason": "chat requested URL fetch proposal"}
+    if lowered.startswith("search boh ") or lowered.startswith("retrieve boh ") or lowered.startswith("search library "):
+        query = text.split(" ", 2)[2].strip()
+        return {"tool_id": "boh.retrieve_proposed", "arguments": {"query": query, "mode": "exploration", "limit": 5}, "reason": "chat requested BOH retrieval proposal"}
     if "git status" in lowered:
         return {"tool_id": "git.status", "arguments": {"repository": "."}, "reason": "chat requested git status"}
     if lowered.startswith("read file ") or lowered.startswith("open file "):

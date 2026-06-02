@@ -12,7 +12,8 @@ Phase 0G activates `git.status` for the current allowlisted repo with fixed no-s
 Phase 0F activates `filesystem.read` for current-repo text preview with path, extension, and size
 gates. Phase 0J routes explicit chat requests into those active approved read-only proposal lanes,
 but chat still never executes them directly. Phase 0K adds a blocked `fetch.url_proposed` lane for
-future URL retrieval review and a side-effect-free visible planning dry-run. It does not enable
+future URL retrieval review and a side-effect-free visible planning dry-run. Phase 0E adds blocked
+`boh.retrieve_proposed` for future retrieval-as-tool review. It does not enable
 arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas, hardware,
 shell, or external actions.
 
@@ -35,6 +36,7 @@ shell, or external actions.
 | `filesystem.read` | active approved read-only | Current repo path allowlist, text extension allowlist, 32KB size limit, redacted/truncated preview, explicit operator approval. |
 | `git.status` | active approved read-only | Current repo allowlist, fixed `git status --short --branch`, output truncation, no porcelain mutation commands. |
 | `fetch.url_proposed` | proposal-only blocked | Queues a future URL-fetch proposal for review; performs no DNS, HTTP, or network I/O in Phase 0K. |
+| `boh.retrieve_proposed` | proposal-only blocked | Queues a future BOH retrieval-as-tool proposal for review; performs no BOH HTTP call in Phase 0E. |
 | `fetch.url` | future only | Domain allowlist, timeout, size limit, content-type filter, no credential forwarding. |
 | `boh.retrieve` | existing read-only retrieval bridge | Retrieval token only; never operator token; no mutation; no corpus copy. |
 
@@ -49,6 +51,8 @@ review plus a separate execution request remain required.
 Phase 0K additionally routes explicit `fetch ...` requests to `fetch.url_proposed`, which remains
 blocked and performs no network access, and routes `plan:` / `outline plan:` to
 `thinking.plan_outline`, a visible side-effect-free dry-run that grants no execution authority.
+Phase 0E routes explicit BOH/library search requests to `boh.retrieve_proposed`, which remains
+blocked and does not call the existing live BOH chat-grounding bridge.
 
 ## Required Approval Gates
 
@@ -111,6 +115,7 @@ approved read-only lanes. Phase 0F activates `time.now`, `git.status`, and `file
 approved read-only lanes. Phase 0K adds blocked fetch proposals and visible planning dry-runs only.
 Phase 0N adds deterministic replay and receipt-detail tests for those paths without enabling
 additional execution. Phase 0D adds lifecycle labels to the tool catalog for operator visibility;
-these labels do not grant permission or bypass review. Existing Phase 0W behavior remains for every
-other lane: execution requests create blocked or dry-run-only audit receipts, and
+these labels do not grant permission or bypass review. Phase 0E adds blocked BOH retrieval proposals
+only; BOH retrieval-as-tool remains future work. Existing Phase 0W behavior remains for every other
+lane: execution requests create blocked or dry-run-only audit receipts, and
 `external_action_executed` remains `false`.
