@@ -135,8 +135,22 @@ def sim_tests(include_results: bool = True) -> dict[str, Any]:
 
 
 @app.get("/metis/proposals")
-def proposals() -> dict[str, Any]:
-    return {"proposals": STATE.get("approval_queue", []), "pending_approval_count": STATE.get("pending_approval_count", 0)}
+def proposals(status: str | None = None, proposal_type: str | None = None, tool_id: str | None = None) -> dict[str, Any]:
+    queue = list(STATE.get("approval_queue", []))
+    filtered = queue
+    if status:
+        filtered = [proposal for proposal in filtered if proposal.get("review_status") == status or proposal.get("status") == status]
+    if proposal_type:
+        filtered = [proposal for proposal in filtered if proposal.get("proposal_type") == proposal_type]
+    if tool_id:
+        filtered = [proposal for proposal in filtered if proposal.get("tool_id") == tool_id]
+    return {
+        "proposals": filtered,
+        "pending_approval_count": STATE.get("pending_approval_count", 0),
+        "total_count": len(queue),
+        "filtered_count": len(filtered),
+        "filters": {"status": status or "", "proposal_type": proposal_type or "", "tool_id": tool_id or ""},
+    }
 
 
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:

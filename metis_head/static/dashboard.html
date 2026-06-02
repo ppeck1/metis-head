@@ -543,6 +543,21 @@
         <button onclick="proposeTool()">Queue Proposal</button>
       </div>
       <div class="tool-row">
+        <select id="proposalStatusFilter">
+          <option value="">Any Status</option>
+          <option value="pending">Pending</option>
+          <option value="pending_review">Pending Review</option>
+          <option value="approved">Approved</option>
+          <option value="denied">Denied</option>
+        </select>
+        <select id="proposalTypeFilter">
+          <option value="">Any Type</option>
+          <option value="action">Action</option>
+          <option value="memory">Memory</option>
+        </select>
+        <input id="proposalToolFilter" type="text" placeholder="Tool ID filter">
+      </div>
+      <div class="tool-row">
         <select id="proposalSelect"></select>
         <input id="proposalReason" type="text" placeholder="Review reason (optional)">
         <button onclick="refreshProposals()">Refresh Proposals</button>
@@ -999,7 +1014,15 @@
       await refreshProposals();
     }
     async function refreshProposals() {
-      const data = await fetch('/metis/proposals').then(r => r.json());
+      const params = new URLSearchParams();
+      const statusFilter = document.getElementById('proposalStatusFilter').value;
+      const typeFilter = document.getElementById('proposalTypeFilter').value;
+      const toolFilter = document.getElementById('proposalToolFilter').value.trim();
+      if (statusFilter) params.set('status', statusFilter);
+      if (typeFilter) params.set('proposal_type', typeFilter);
+      if (toolFilter) params.set('tool_id', toolFilter);
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const data = await fetch(`/metis/proposals${suffix}`).then(r => r.json());
       proposalsCatalog = data.proposals || [];
       const select = document.getElementById('proposalSelect');
       const previous = select.value;
@@ -1019,6 +1042,7 @@
         option.textContent = 'No proposals queued';
         select.appendChild(option);
       }
+      document.getElementById('toolStatus').textContent = `${data.filtered_count ?? proposalsCatalog.length}/${data.total_count ?? proposalsCatalog.length} proposal(s) shown`;
       return data;
     }
     async function reviewProposal(decision) {
