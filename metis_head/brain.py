@@ -24,7 +24,7 @@ from .provider_harness import ProviderHarnessError, invoke_provider, provider_ca
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
-from .schemas import FAILURE_TABLE, baseline_state
+from .schemas import FAILURE_TABLE, baseline_state, utc_now
 from .sim_manifest import build_sim_test_manifest
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
@@ -135,6 +135,59 @@ def sim_tests(include_results: bool = True) -> dict[str, Any]:
 @app.get("/metis/proposals")
 def proposals() -> dict[str, Any]:
     return {"proposals": STATE.get("approval_queue", []), "pending_approval_count": STATE.get("pending_approval_count", 0)}
+
+
+def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:
+    for proposal in STATE.get("approval_queue", []):
+        if proposal.get("proposal_id") == proposal_id:
+            return proposal
+    return None
+
+
+@app.get("/metis/proposals/{proposal_id}")
+def proposal_detail(proposal_id: str) -> dict[str, Any]:
+    proposal = _proposal_by_id(proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    return {"proposal": proposal}
+
+
+def _review_proposal(proposal_id: str, decision: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    proposal = _proposal_by_id(proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    if proposal.get("review_status", "pending") != "pending":
+        raise HTTPException(status_code=409, detail="proposal already reviewed")
+    reason = ""
+    if isinstance(payload, dict) and isinstance(payload.get("reason"), str):
+        reason = payload["reason"]
+    event = {
+        "type": "proposal_review",
+        "proposal_id": proposal_id,
+        "decision": decision,
+        "reason": reason,
+        "reviewed_at": utc_now(),
+    }
+    STATE = reduce_metis_event(STATE, event)
+    reviewed = _proposal_by_id(proposal_id)
+    return {
+        "status": f"proposal_{decision}",
+        "proposal": reviewed,
+        "review_receipt": reviewed.get("review_receipt") if reviewed else None,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
+@app.post("/metis/proposals/{proposal_id}/approve")
+def approve_proposal(proposal_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _review_proposal(proposal_id, "approved", payload)
+
+
+@app.post("/metis/proposals/{proposal_id}/deny")
+def deny_proposal(proposal_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _review_proposal(proposal_id, "denied", payload)
 
 
 @app.get("/metis/tools")

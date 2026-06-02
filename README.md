@@ -10,14 +10,31 @@ token).
 
 ## Current Phase
 
-Phase scope: `0T/CHAT` - governed tool registry, dry-run tool lane, and explicit chat-to-tool routing (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer`).
+Phase scope: `0U` - governed proposal review lane (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools`).
 
-Status: Metis now has a native governed tool registry with MCP-inspired manifests, seeded safe
-tools, proposal records, dry-run receipts, and deterministic routing for clear tool requests in
-virtual chat. Safe Human Mode chat requests such as simple arithmetic can return a dry-run receipt
-through `tool_router` without requiring an LLM provider; Agent Mode and side-effectful tools always
-queue proposals with `execution_allowed=false`. Phase 0T/CHAT does not spawn MCP servers, vendor
-public repos, read files, run git, mutate memory, call BOH/Atlas/tools, or execute external actions.
+Status: Metis can now review queued proposals through deterministic approve/deny events and
+FastAPI endpoints. A proposal review changes review state, emits a review receipt, and recomputes
+pending counters, but it still does not execute tools, read files, run git, promote memory, call
+BOH/Atlas, or perform external actions. Approval is explicitly not execution in Phase 0U.
+
+Phase 0U implemented:
+
+- Added `proposal_review` reducer events for replayable approve/deny transitions.
+- Added review metadata to proposal records: `review_status`, `reviewed_at`, `review_decision`,
+  `review_reason`, and `review_receipt`.
+- Added `metis_proposal_review.v0.1` receipts with `execution_allowed=false` and
+  `execution_status=not_executed`.
+- Added `GET /metis/proposals/{proposal_id}`, `POST /metis/proposals/{proposal_id}/approve`, and
+  `POST /metis/proposals/{proposal_id}/deny`.
+- Added dashboard proposal review controls in the Tools panel.
+- Preserved deterministic replay and the no-execution boundary for safe, side-effectful, memory,
+  filesystem, git, BOH, Atlas, hardware, and external actions.
+
+Previous Phase 0T/CHAT status: Metis has a native governed tool registry with MCP-inspired manifests,
+seeded safe tools, proposal records, dry-run receipts, and deterministic routing for clear tool
+requests in virtual chat. Safe Human Mode chat requests such as simple arithmetic can return a
+dry-run receipt through `tool_router` without requiring an LLM provider; Agent Mode and side-effectful
+tools always queue proposals with `execution_allowed=false`.
 
 Phase 0T implemented:
 
@@ -544,8 +561,11 @@ Metis — BOH remains the source of truth.
 - `GET /metis/llm/options`
 - `GET /metis/tools`
 - `GET /metis/tools/{tool_id}`
+- `GET /metis/proposals/{proposal_id}`
 - `POST /metis/event`
 - `POST /metis/chat` (selected LLM provider, or `tool_router` for explicit governed tool requests)
+- `POST /metis/proposals/{proposal_id}/approve`
+- `POST /metis/proposals/{proposal_id}/deny`
 - `POST /metis/tools/propose`
 - `POST /metis/tools/{tool_id}/dry_run`
 - `POST /metis/tools/{tool_id}/execute`
@@ -576,7 +596,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-108 passed under Python 3.11 (includes governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+114 passed under Python 3.11 (includes governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
@@ -586,4 +606,4 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R/0T does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0T tools are registry, dry-run, and proposal records only. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R/0T/0U does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0T tools are registry, dry-run, and proposal records only. Phase 0U proposal approval/denial is review state only, not execution permission. Other reference repositories remain pattern donors only.

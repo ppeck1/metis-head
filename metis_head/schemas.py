@@ -34,6 +34,7 @@ EVENT_TYPES = {
     "adapter_health",
     "adapter_schema_check",
     "bridge_disconnected",
+    "proposal_review",
 }
 
 ACTION_CLASSES = {

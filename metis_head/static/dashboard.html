@@ -542,6 +542,13 @@
         <button onclick="dryRunTool()">Dry Run</button>
         <button onclick="proposeTool()">Queue Proposal</button>
       </div>
+      <div class="tool-row">
+        <select id="proposalSelect"></select>
+        <input id="proposalReason" type="text" placeholder="Review reason (optional)">
+        <button onclick="refreshProposals()">Refresh Proposals</button>
+        <button onclick="approveProposal()">Approve</button>
+        <button onclick="denyProposal()">Deny</button>
+      </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
     </section>
@@ -626,6 +633,7 @@
     let bohSeenTransitions = 0;
     let voiceOptionsCatalog = [];
     let toolsCatalog = [];
+    let proposalsCatalog = [];
     let lastSeenTtsOutputCount = 0;
     let radioPulseTimer = null;
     let radioResetTimer = null;
@@ -983,6 +991,58 @@
       }
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
       document.getElementById('toolStatus').textContent = `${toolsCatalog.length} tool(s) registered`;
+      await refreshProposals();
+    }
+    async function refreshProposals() {
+      const data = await fetch('/metis/proposals').then(r => r.json());
+      proposalsCatalog = data.proposals || [];
+      const select = document.getElementById('proposalSelect');
+      const previous = select.value;
+      select.innerHTML = '';
+      for (const proposal of proposalsCatalog) {
+        const option = document.createElement('option');
+        option.value = proposal.proposal_id;
+        option.textContent = `${proposal.proposal_id} / ${proposal.review_status || proposal.status} / ${proposal.tool_id || proposal.action_class}`;
+        select.appendChild(option);
+      }
+      if (previous && proposalsCatalog.some(proposal => proposal.proposal_id === previous)) {
+        select.value = previous;
+      }
+      if (!proposalsCatalog.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No proposals queued';
+        select.appendChild(option);
+      }
+      return data;
+    }
+    async function reviewProposal(decision) {
+      const proposalId = document.getElementById('proposalSelect').value;
+      if (!proposalId) {
+        document.getElementById('toolStatus').textContent = 'No proposal selected';
+        return;
+      }
+      const reason = document.getElementById('proposalReason').value.trim();
+      try {
+        const response = await fetch(`/metis/proposals/${encodeURIComponent(proposalId)}/${decision}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({reason})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || `Proposal ${decision} failed`);
+        await refresh();
+        await refreshProposals();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
+    async function approveProposal() {
+      await reviewProposal('approve');
+    }
+    async function denyProposal() {
+      await reviewProposal('deny');
     }
     async function dryRunTool() {
       const toolId = document.getElementById('toolSelect').value;
@@ -996,6 +1056,7 @@
         document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
         document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Tool dry run failed');
         await refresh();
+        await refreshProposals();
       } catch (error) {
         document.getElementById('toolStatus').textContent = String(error);
       }
@@ -1012,6 +1073,7 @@
         document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
         document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Tool proposal failed');
         await refresh();
+        await refreshProposals();
       } catch (error) {
         document.getElementById('toolStatus').textContent = String(error);
       }

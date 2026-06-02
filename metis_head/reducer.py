@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from .governance import classify_intent
-from .proposals import build_proposal, pending_count
+from .proposals import build_proposal, build_review_receipt, pending_count
 from .schemas import FAILURE_TABLE, SUPPORTED_ADAPTER_SCHEMAS, validate_event
 
 
@@ -54,6 +54,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         if next_state.get("active_failure") == "bridge_disconnected":
             next_state["active_failure"] = None
             next_state["last_block_reason"] = None
+    elif event_type == "proposal_review":
+        _reduce_proposal_review(next_state, event)
 
     return next_state
 
@@ -255,6 +257,42 @@ def _reduce_memory(state: dict[str, Any], event: dict[str, Any]) -> None:
     elif operation == "delete":
         state["memory_promoted"] = False
         state["last_block_reason"] = "memory deletion audit retained without deleted content"
+
+
+def _reduce_proposal_review(state: dict[str, Any], event: dict[str, Any]) -> None:
+    proposal_id = event.get("proposal_id")
+    decision = event.get("decision")
+    if decision not in {"approved", "denied"}:
+        return
+    for proposal in state.setdefault("approval_queue", []):
+        if proposal.get("proposal_id") != proposal_id:
+            continue
+        if proposal.get("review_status", "pending") != "pending":
+            return
+        reason = event.get("reason") if isinstance(event.get("reason"), str) else None
+        proposal["status"] = "reviewed"
+        proposal["review_status"] = decision
+        proposal["review_decision"] = decision
+        proposal["review_reason"] = reason or ""
+        proposal["reviewed_at"] = event.get("reviewed_at") or event.get("timestamp")
+        proposal["review_receipt"] = build_review_receipt(proposal, decision, reason)
+        proposal["execution_allowed"] = False
+        state["external_action_executed"] = False
+        _refresh_proposal_counts(state)
+        if state.get("pending_approval_count", 0) == 0:
+            if state.get("cognition_state") == "awaiting_approval":
+                state["cognition_state"] = "idle"
+            if state.get("authority_state") == "awaiting_approval":
+                state["authority_state"] = "local_governed"
+        state["last_block_reason"] = "proposal approved but not executed" if decision == "approved" else "proposal denied"
+        return
+
+
+def _refresh_proposal_counts(state: dict[str, Any]) -> None:
+    queue = state.setdefault("approval_queue", [])
+    state["pending_approval_count"] = pending_count(queue)
+    state["memory_proposal_count"] = pending_count([item for item in queue if item.get("proposal_type") == "memory"])
+    state["tool_queue_count"] = pending_count([item for item in queue if item.get("proposal_type") == "action"])
 
 
 def _proposal_metadata_from_event(event: dict[str, Any]) -> dict[str, Any]:
