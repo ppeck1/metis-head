@@ -23,10 +23,21 @@ def test_tool_registry_lists_seeded_tools_with_governance_labels() -> None:
     body = response.json()
     tools = {tool["tool_id"]: tool for tool in body["tools"]}
     assert body["tool_registry_version"] == "metis_tool_registry.v0.1"
-    assert {"time.now", "text.summarize", "math.calculate", "filesystem.read_proposed", "git.status_proposed", "memory.propose"} <= set(tools)
+    assert {
+        "time.now",
+        "text.summarize",
+        "math.calculate",
+        "thinking.plan_outline",
+        "filesystem.read_proposed",
+        "git.status_proposed",
+        "fetch.url_proposed",
+        "memory.propose",
+    } <= set(tools)
     assert tools["time.now"]["permission_mode"] == "dry_run"
+    assert tools["thinking.plan_outline"]["side_effect_class"] == "none"
     assert tools["filesystem.read_proposed"]["side_effect_class"] == "read_only"
     assert tools["git.status_proposed"]["source_reference"] == "modelcontextprotocol/servers:git"
+    assert tools["fetch.url_proposed"]["permission_mode"] == "proposal_only"
 
 
 def test_unknown_tool_returns_404() -> None:
@@ -68,6 +79,23 @@ def test_time_now_dry_run_accepts_deterministic_test_clock() -> None:
     assert receipt["result"]["timezone"] == "UTC"
 
 
+def test_visible_plan_outline_dry_run_has_no_hidden_execution() -> None:
+    client = _client()
+
+    response = client.post(
+        "/metis/tools/thinking.plan_outline/dry_run",
+        json={"arguments": {"task": "prepare the next tool lane", "max_steps": 3}},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "dry_run_complete"
+    assert body["receipt"]["result"]["task"] == "prepare the next tool lane"
+    assert body["receipt"]["result"]["steps"] == ["Clarify the goal", "Identify constraints", "Draft the smallest safe change"]
+    assert body["receipt"]["result"]["execution_allowed"] is False
+    assert body["state"]["external_action_executed"] is False
+
+
 def test_filesystem_and_git_tools_queue_proposals_without_reading_or_running() -> None:
     client = _client()
 
@@ -83,6 +111,30 @@ def test_filesystem_and_git_tools_queue_proposals_without_reading_or_running() -
     assert state["approval_queue"][0]["execution_allowed"] is False
     assert "content" not in state["approval_queue"][0]
     assert "stdout" not in state["approval_queue"][1]
+
+
+def test_fetch_url_proposed_tool_queues_and_blocks_network_execution() -> None:
+    client = _client()
+
+    queued = client.post("/metis/tools/propose", json={"tool_id": "fetch.url_proposed", "arguments": {"url": "https://example.com/private", "token": "abc"}})
+
+    assert queued.status_code == 200
+    state = queued.json()["state"]
+    proposal = state["approval_queue"][0]
+    assert proposal["tool_id"] == "fetch.url_proposed"
+    assert proposal["side_effect_class"] == "read_only"
+    assert proposal["execution_allowed"] is False
+    assert "abc" not in str(proposal["tool_arguments"])
+
+    proposal_id = proposal["proposal_id"]
+    client.post(f"/metis/proposals/{proposal_id}/approve", json={"reason": "reviewed fetch shape only"})
+    requested = client.post(f"/metis/proposals/{proposal_id}/request_execution", json={"reason": "confirm no network"})
+
+    assert requested.status_code == 200
+    body = requested.json()
+    assert body["receipt"]["execution_status"] == "blocked_side_effect"
+    assert body["receipt"]["execution_allowed"] is False
+    assert body["state"]["external_action_executed"] is False
 
 
 def test_agent_mode_always_queues_tool_proposal_even_for_safe_dry_run() -> None:
@@ -153,6 +205,23 @@ def test_chat_routes_clear_math_request_through_tool_dry_run(monkeypatch) -> Non
     assert body["state"]["tool_queue_count"] == 0
 
 
+def test_chat_routes_plan_outline_through_visible_dry_run(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    client = _client()
+
+    response = client.post("/metis/chat", json={"message": "plan: add a fetch proposal lane"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tool_router"
+    assert body["model"] == "thinking.plan_outline"
+    assert body["tool"]["status"] == "dry_run_complete"
+    assert body["tool"]["receipt"]["result"]["execution_allowed"] is False
+    assert body["state"]["external_action_executed"] is False
+    assert body["state"]["tool_queue_count"] == 0
+
+
 def test_chat_routes_git_status_to_proposal_without_running_git(monkeypatch) -> None:
     monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
     client = _client()
@@ -183,6 +252,22 @@ def test_chat_routes_file_read_to_active_read_only_proposal(monkeypatch) -> None
     assert body["proposal_queued"] is True
     assert body["state"]["approval_queue"][0]["tool_id"] == "filesystem.read"
     assert body["state"]["approval_queue"][0]["side_effect_class"] == "read_only"
+    assert body["state"]["approval_queue"][0]["execution_allowed"] is False
+    assert body["state"]["external_action_executed"] is False
+
+
+def test_chat_routes_fetch_to_proposal_without_network(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = _client()
+
+    response = client.post("/metis/chat", json={"message": "fetch https://example.com"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tool_router"
+    assert body["model"] == "fetch.url_proposed"
+    assert body["tool"]["status"] == "proposal_queued"
+    assert body["state"]["approval_queue"][0]["tool_id"] == "fetch.url_proposed"
     assert body["state"]["approval_queue"][0]["execution_allowed"] is False
     assert body["state"]["external_action_executed"] is False
 

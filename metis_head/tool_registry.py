@@ -72,6 +72,18 @@ TOOLS: dict[str, ToolManifest] = {
         enabled=True,
         source_reference="anthropic-tools:manual-math-pattern",
     ),
+    "thinking.plan_outline": ToolManifest(
+        tool_id="thinking.plan_outline",
+        name="Visible Plan Outline",
+        description="Return a short visible planning outline from an explicit task. No hidden reasoning or autonomous execution.",
+        input_schema={"type": "object", "properties": {"task": {"type": "string"}, "max_steps": {"type": "integer"}}, "required": ["task"], "additionalProperties": False},
+        output_schema={"type": "object", "properties": {"task": {"type": "string"}, "steps": {"type": "array"}, "execution_allowed": {"type": "boolean"}}},
+        risk_class="low",
+        side_effect_class="none",
+        permission_mode="dry_run",
+        enabled=True,
+        source_reference="modelcontextprotocol/servers:sequentialthinking",
+    ),
     "filesystem.read_proposed": ToolManifest(
         tool_id="filesystem.read_proposed",
         name="Filesystem Read Proposal",
@@ -119,6 +131,18 @@ TOOLS: dict[str, ToolManifest] = {
         permission_mode="approved_read_only",
         enabled=True,
         source_reference="modelcontextprotocol/servers:git",
+    ),
+    "fetch.url_proposed": ToolManifest(
+        tool_id="fetch.url_proposed",
+        name="Fetch URL Proposal",
+        description="Queue a proposal for future governed URL fetch; Phase 0K does not perform network calls.",
+        input_schema={"type": "object", "properties": {"url": {"type": "string"}, "method": {"type": "string"}}, "required": ["url"], "additionalProperties": False},
+        output_schema={"type": "object", "properties": {"proposal_only": {"type": "boolean"}}},
+        risk_class="high",
+        side_effect_class="read_only",
+        permission_mode="proposal_only",
+        enabled=True,
+        source_reference="modelcontextprotocol/servers:fetch",
     ),
     "memory.propose": ToolManifest(
         tool_id="memory.propose",
@@ -262,6 +286,13 @@ def _dry_run_output(tool_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         else:
             raise ToolRegistryError(f"unsupported math operation: {operation}")
         return {"operation": operation, "result": result}
+    if tool_id == "thinking.plan_outline":
+        task = str(arguments.get("task") or "").strip()
+        if not task:
+            raise ToolRegistryError("task is required")
+        max_steps = max(1, min(6, int(arguments.get("max_steps") or 4)))
+        verbs = ["Clarify the goal", "Identify constraints", "Draft the smallest safe change", "Verify the result", "Record the outcome", "Queue follow-up review"]
+        return {"task": task[:240], "steps": verbs[:max_steps], "execution_allowed": False}
     raise ToolRegistryError(f"no dry-run implementation for: {tool_id}")
 
 
@@ -277,6 +308,11 @@ def route_tool_request(message: str) -> dict[str, Any] | None:
         return {"tool_id": "time.now", "arguments": {}, "reason": "chat requested current time"}
     if lowered.startswith("summarize:") or lowered.startswith("summarise:"):
         return {"tool_id": "text.summarize", "arguments": {"text": text.split(":", 1)[1].strip()}, "reason": "chat requested summarization"}
+    if lowered.startswith("plan:") or lowered.startswith("outline plan:"):
+        return {"tool_id": "thinking.plan_outline", "arguments": {"task": text.split(":", 1)[1].strip()}, "reason": "chat requested visible plan outline"}
+    if lowered.startswith("fetch url ") or lowered.startswith("fetch "):
+        url = text.split(" ", 2)[2].strip() if lowered.startswith("fetch url ") else text.split(" ", 1)[1].strip()
+        return {"tool_id": "fetch.url_proposed", "arguments": {"url": url, "method": "GET"}, "reason": "chat requested URL fetch proposal"}
     if "git status" in lowered:
         return {"tool_id": "git.status", "arguments": {"repository": "."}, "reason": "chat requested git status"}
     if lowered.startswith("read file ") or lowered.startswith("open file "):

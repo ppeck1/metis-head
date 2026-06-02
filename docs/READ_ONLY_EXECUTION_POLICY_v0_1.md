@@ -11,8 +11,10 @@ approved read-only tools. Phase 0L activates the internal `time.now` lane after 
 Phase 0G activates `git.status` for the current allowlisted repo with fixed no-shell arguments. It
 Phase 0F activates `filesystem.read` for current-repo text preview with path, extension, and size
 gates. Phase 0J routes explicit chat requests into those active approved read-only proposal lanes,
-but chat still never executes them directly. It does not enable arbitrary filesystem reads,
-arbitrary git commands, fetch, BOH mutation, Atlas, hardware, shell, or external actions.
+but chat still never executes them directly. Phase 0K adds a blocked `fetch.url_proposed` lane for
+future URL retrieval review and a side-effect-free visible planning dry-run. It does not enable
+arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas, hardware,
+shell, or external actions.
 
 ## Non-Goals
 
@@ -32,6 +34,7 @@ arbitrary git commands, fetch, BOH mutation, Atlas, hardware, shell, or external
 | `time.now` | active approved read-only | Side-effect class must be `none`; proposal must be reviewed; no shell, network, filesystem, or external process may be used. |
 | `filesystem.read` | active approved read-only | Current repo path allowlist, text extension allowlist, 32KB size limit, redacted/truncated preview, explicit operator approval. |
 | `git.status` | active approved read-only | Current repo allowlist, fixed `git status --short --branch`, output truncation, no porcelain mutation commands. |
+| `fetch.url_proposed` | proposal-only blocked | Queues a future URL-fetch proposal for review; performs no DNS, HTTP, or network I/O in Phase 0K. |
 | `fetch.url` | future only | Domain allowlist, timeout, size limit, content-type filter, no credential forwarding. |
 | `boh.retrieve` | existing read-only retrieval bridge | Retrieval token only; never operator token; no mutation; no corpus copy. |
 
@@ -42,6 +45,10 @@ lanes when the request is explicit and deterministic: `git status` routes to `gi
 `read file ...` / `open file ...` routes to `filesystem.read`. This routing is proposal creation
 only. The chat endpoint must not run git, read files, or return read-only previews inline; operator
 review plus a separate execution request remain required.
+
+Phase 0K additionally routes explicit `fetch ...` requests to `fetch.url_proposed`, which remains
+blocked and performs no network access, and routes `plan:` / `outline plan:` to
+`thinking.plan_outline`, a visible side-effect-free dry-run that grants no execution authority.
 
 ## Required Approval Gates
 
@@ -101,5 +108,6 @@ a documented schema. Required fields:
 
 Phase 0J aligns chat routing with the active `time.now`, `git.status`, and `filesystem.read`
 approved read-only lanes. Phase 0F activates `time.now`, `git.status`, and `filesystem.read` as
-approved read-only lanes. Existing Phase 0W behavior remains for every other lane: execution requests
-create blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.
+approved read-only lanes. Phase 0K adds blocked fetch proposals and visible planning dry-runs only.
+Existing Phase 0W behavior remains for every other lane: execution requests create blocked or
+dry-run-only audit receipts, and `external_action_executed` remains `false`.

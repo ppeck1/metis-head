@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0J` - chat routing alignment for active read-only tool lanes (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane`).
+Phase scope: `0K` - fetch proposal and visible planning tool seeds (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing`).
 
-Status: Metis chat now routes explicit `git status` and `read/open file` requests to the active
+Status: Metis now has two additional MCP-inspired native tool shapes without enabling live network
+or hidden reasoning: `fetch.url_proposed` queues future URL fetch proposals and remains blocked, while
+`thinking.plan_outline` returns a visible dry-run planning outline with `execution_allowed=false`.
+Runtime behavior remains locked for arbitrary filesystem reads, arbitrary git commands, network
+fetches, BOH/Atlas mutation, hardware action, shell execution, and autonomous execution.
+
+Phase 0K implemented:
+
+- Added `fetch.url_proposed` as a high-risk proposal-only read-only lane; no HTTP request is made.
+- Added `thinking.plan_outline` as a low-risk side-effect-free dry-run lane for visible planning.
+- Routed explicit chat `fetch ...` requests to a queued fetch proposal.
+- Routed explicit chat `plan:` / `outline plan:` requests to a visible planning dry-run receipt.
+- Added tests proving fetch remains non-executable and planning produces no execution.
+
+Previous Phase 0J status: Metis chat routes explicit `git status` and `read/open file` requests to the active
 approved read-only lanes (`git.status` and `filesystem.read`) instead of the legacy proposal-only
 placeholders. Chat still does not execute these tools directly: it queues governed proposals with
 `execution_allowed=false`, and approved execution still requires the separate review/request flow.
@@ -132,7 +146,8 @@ Phase 0T implemented:
 - Added `metis_head/tool_registry.py` with `metis_tool_registry.v0.1` manifests and
   `metis_tool_receipt.v0.1` dry-run receipts.
 - Seeded `time.now`, `text.summarize`, `math.calculate`, `filesystem.read_proposed`,
-  `git.status_proposed`, and `memory.propose`.
+  `git.status_proposed`, and `memory.propose`. Phase 0K extends the seed bank with
+  `thinking.plan_outline` and `fetch.url_proposed`.
 - Added `/metis/tools`, `/metis/tools/{tool_id}`, `/metis/tools/propose`,
   `/metis/tools/{tool_id}/dry_run`, and `/metis/tools/{tool_id}/execute`.
 - Extended proposal records with tool ID, sanitized arguments, risk class, side-effect class,
@@ -692,7 +707,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-143 passed under Python 3.11 (includes active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+147 passed under Python 3.11 (includes fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
@@ -702,4 +717,4 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis; BOH remains the source of truth. Phase 0L allows approved internal `time.now` read-only execution. Phase 0G allows approved current-repo `git.status` only. Phase 0F allows approved current-repo text-file previews only. Phase 0J routes chat requests into those active read-only proposal lanes but still requires separate review/request execution. Arbitrary filesystem reads, arbitrary git commands, fetch, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis; BOH remains the source of truth. Phase 0L allows approved internal `time.now` read-only execution. Phase 0G allows approved current-repo `git.status` only. Phase 0F allows approved current-repo text-file previews only. Phase 0J routes chat requests into those active read-only proposal lanes but still requires separate review/request execution. Phase 0K adds blocked fetch proposals and visible planning dry-runs only. Arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
