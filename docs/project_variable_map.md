@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0K` (fetch proposal and visible planning tool seeds; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing`)
+Last phase updated: `0N` (tool audit replay hardening; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise approved `time.now`, `git.status`, and `filesystem.read` read-only lanes. As of Phase 0J, chat `git status` and `read/open file` intents queue the active approved read-only proposal lanes, not the legacy placeholder lanes. As of Phase 0K, chat `fetch ...` queues blocked fetch proposals and `plan:` returns visible planning dry-runs. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
+Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K/0N UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise approved `time.now`, `git.status`, and `filesystem.read` read-only lanes. As of Phase 0J, chat `git status` and `read/open file` intents queue the active approved read-only proposal lanes, not the legacy placeholder lanes. As of Phase 0K, chat `fetch ...` queues blocked fetch proposals and `plan:` returns visible planning dry-runs. As of Phase 0N, replay and receipt-detail tests cover blocked fetch proposals and dry-run-only planning receipts. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -452,6 +452,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `executed_read_only` | 0L/0G/0F | Execution status for approved `time.now`, current-repo `git.status`, or current-repo `filesystem.read` preview; no arbitrary shell/network/filesystem/external action. |
 | `output_summary` | 0L | Bounded key/count/preview summary for approved read-only output. |
 | `output_hash` | 0L | Short hash of approved read-only output for audit comparison. |
+| `test_phase_0n_tool_audit_hardening.py` | 0N | Regression coverage for deterministic replay and receipt detail around `fetch.url_proposed` and `thinking.plan_outline`. |
 
 ## Read-Only Execution Policy
 
@@ -693,7 +694,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | LED provider | `led_renderer`, `led_provider`, `led_command` | Provider receives already-resolved Metis LED state. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
-| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, 0W records execution receipts, 0Q documents the future read-only execution policy, 0J routes chat `git.status`/`filesystem.read` requests to active approved read-only proposal lanes, and 0K adds blocked fetch proposals plus visible planning dry-runs. Approval remains separate from execution; future phases may add additional scoped execution only after explicit governance gates. |
+| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, 0W records execution receipts, 0Q documents the future read-only execution policy, 0J routes chat `git.status`/`filesystem.read` requests to active approved read-only proposal lanes, 0K adds blocked fetch proposals plus visible planning dry-runs, and 0N hardens replay/receipt coverage for those lanes. Approval remains separate from execution; future phases may add additional scoped execution only after explicit governance gates. |
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
 | BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B (`metis_head.boh_retrieval`); deeper adapter wiring still future. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |

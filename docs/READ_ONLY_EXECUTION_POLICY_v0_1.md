@@ -109,5 +109,6 @@ a documented schema. Required fields:
 Phase 0J aligns chat routing with the active `time.now`, `git.status`, and `filesystem.read`
 approved read-only lanes. Phase 0F activates `time.now`, `git.status`, and `filesystem.read` as
 approved read-only lanes. Phase 0K adds blocked fetch proposals and visible planning dry-runs only.
-Existing Phase 0W behavior remains for every other lane: execution requests create blocked or
-dry-run-only audit receipts, and `external_action_executed` remains `false`.
+Phase 0N adds deterministic replay and receipt-detail tests for those paths without enabling
+additional execution. Existing Phase 0W behavior remains for every other lane: execution requests
+create blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.
