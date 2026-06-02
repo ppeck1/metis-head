@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0L` (first approved read-only execution lane for `time.now`; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy`)
+Last phase updated: `0G` (approved read-only `git.status` lane; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R/0T/0U/0W/0Q/0L UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise the approved `time.now` read-only lane. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
+Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise approved `time.now` and `git.status` read-only lanes. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -258,6 +258,7 @@ change mic/camera/logging state. Spoken text is represented in TTS events as `te
 | `math.calculate` | 0T | Narrow arithmetic dry run from explicit operands; no eval. |
 | `filesystem.read_proposed` | 0T | Proposal-only future file-read shape; Phase 0T does not read files. |
 | `git.status_proposed` | 0T | Proposal-only future git-status shape; Phase 0T does not run git. |
+| `git.status` | 0G | Approved read-only current-repo git status using fixed no-shell `git status --short --branch`; no arbitrary git command execution. |
 | `memory.propose` | 0T | Proposal-only memory review shape; no promotion. |
 | `dry_run_tool` | 0T | Returns safe `metis_tool_receipt.v0.1` receipts for side-effect-free dry-run tools. |
 | `execute_tool` | 0T | Blocks execution or returns a dry-run receipt; never performs side-effectful execution. |
@@ -435,6 +436,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | Field | Current Phase | Purpose |
 |---|---|---|
 | `metis_head.execution` | 0W | Builds deterministic execution receipts for execution requests. |
+| `metis_head.read_only_tools` | 0G | Narrow approved read-only local executors; currently only current-repo `git.status`. |
 | `EXECUTION_RECEIPT_VERSION` | 0W | `metis_execution_receipt.v0.1`. |
 | `receipt_id` | 0W | Deterministic ID derived from receipt index, proposal ID, status, and requested timestamp. |
 | `proposal_id` | 0W | Proposal that the operator attempted to execute. |
@@ -444,7 +446,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `execution_allowed` | 0W | Always `false`; Phase 0W records receipts only. |
 | `redactions` | 0W | Declares omitted unsafe classes: secrets, raw file contents, command output, external receipts. |
 | `dry_run_receipt` | 0W | Optional nested `metis_tool_receipt.v0.1` only for approved side-effect-free dry-run tools. |
-| `executed_read_only` | 0L | Execution status for approved internal `time.now`; no shell/network/filesystem/external action. |
+| `executed_read_only` | 0L/0G | Execution status for approved `time.now` or current-repo `git.status`; no arbitrary shell/network/filesystem/external action. |
 | `output_summary` | 0L | Bounded key/count/preview summary for approved read-only output. |
 | `output_hash` | 0L | Short hash of approved read-only output for audit comparison. |
 
@@ -456,7 +458,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `metis_head.execution_policy` | 0Q | Structured policy export for API/tests. |
 | `READ_ONLY_EXECUTION_POLICY_VERSION` | 0Q | `metis_read_only_execution_policy.v0.1`. |
 | `read_only_execution_policy()` | 0Q | Returns the policy contract as JSON-safe data. |
-| `candidate_lanes` | 0Q/0L | Read-only lane list: `time.now` active in 0L; `filesystem.read`, `git.status`, `fetch.url`, and deeper `boh.retrieve` execution remain future-only. |
+| `candidate_lanes` | 0Q/0L/0G | Read-only lane list: `time.now` active in 0L, `git.status` active in 0G; `filesystem.read`, `fetch.url`, and deeper `boh.retrieve` execution remain future-only. |
 | `required_gates` | 0Q | Future gates: proposal ID, approved review, approved read-only permission, lane policy match, pre-result receipt, redaction. |
 | `execution_enabled` | 0Q | Always `false`; Phase 0Q is policy only. |
 

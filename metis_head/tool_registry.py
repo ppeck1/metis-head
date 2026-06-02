@@ -9,7 +9,7 @@ from typing import Any
 
 TOOL_REGISTRY_VERSION = "metis_tool_registry.v0.1"
 TOOL_RECEIPT_VERSION = "metis_tool_receipt.v0.1"
-PERMISSION_MODES = {"disabled", "dry_run", "proposal_only"}
+PERMISSION_MODES = {"disabled", "dry_run", "proposal_only", "approved_read_only"}
 SIDE_EFFECT_CLASSES = {"none", "read_only", "local_mutation", "external_mutation"}
 RISK_CLASSES = {"low", "medium", "high", "blocked"}
 
@@ -96,6 +96,18 @@ TOOLS: dict[str, ToolManifest] = {
         enabled=True,
         source_reference="modelcontextprotocol/servers:git",
     ),
+    "git.status": ToolManifest(
+        tool_id="git.status",
+        name="Git Status",
+        description="Approved read-only git status lane using fixed no-shell arguments and redacted/truncated output.",
+        input_schema={"type": "object", "properties": {"repository": {"type": "string"}}, "additionalProperties": False},
+        output_schema={"type": "object", "properties": {"branch": {"type": "string"}, "changed_count": {"type": "integer"}, "status_preview": {"type": "array"}}},
+        risk_class="medium",
+        side_effect_class="read_only",
+        permission_mode="approved_read_only",
+        enabled=True,
+        source_reference="modelcontextprotocol/servers:git",
+    ),
     "memory.propose": ToolManifest(
         tool_id="memory.propose",
         name="Memory Proposal",
@@ -145,7 +157,7 @@ def tool_policy(tool: ToolManifest, *, agent_mode: bool) -> dict[str, Any]:
         reasons.append("Agent Mode can prepare tool proposals only")
     return {
         "requires_approval": agent_mode or tool.permission_mode != "dry_run" or tool.side_effect_class != "none",
-        "default_decision": "queue_for_review" if tool.permission_mode == "proposal_only" or agent_mode else "dry_run_only",
+        "default_decision": "queue_for_review" if tool.permission_mode in {"proposal_only", "approved_read_only"} or agent_mode else "dry_run_only",
         "reasons": reasons,
     }
 

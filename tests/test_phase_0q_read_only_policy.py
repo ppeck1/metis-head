@@ -37,7 +37,7 @@ def test_read_only_execution_policy_doc_matches_structured_contract() -> None:
     doc = (ROOT / policy["contract_path"]).read_text(encoding="utf-8")
 
     assert "Read-Only Execution Policy v0.1" in doc
-    assert "Phase 0L activates only the internal `time.now` lane" in doc
+    assert "Phase 0G activates `time.now` and `git.status`" in doc
     assert "`filesystem.read`" in doc
     assert "`git.status`" in doc
     assert "`fetch.url`" in doc

@@ -26,8 +26,8 @@ READ_ONLY_EXECUTION_POLICY: dict[str, Any] = {
         },
         {
             "lane": "git.status",
-            "status": "future_only",
-            "minimum_gate": "repo allowlist, fixed arguments, output truncation, no mutation commands",
+            "status": "active_approved_read_only",
+            "minimum_gate": "current repo allowlist, fixed no-shell arguments, output truncation, no mutation commands",
         },
         {
             "lane": "fetch.url",

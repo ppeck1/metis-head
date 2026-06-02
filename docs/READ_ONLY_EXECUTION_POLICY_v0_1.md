@@ -2,13 +2,15 @@
 
 Phase: `0Q`
 
-Status: draft contract with one active internal read-only lane.
+Status: draft contract with two active read-only lanes.
 
 ## Purpose
 
 This policy defines the minimum contract Metis must satisfy before any future phase can execute
-approved read-only tools. Phase 0L activates only the internal `time.now` lane after proposal review.
-It does not enable filesystem, git, fetch, BOH mutation, Atlas, hardware, shell, or external actions.
+approved read-only tools. Phase 0L activates the internal `time.now` lane after proposal review.
+Phase 0G activates `git.status` for the current allowlisted repo with fixed no-shell arguments. It
+does not enable filesystem reads, arbitrary git commands, fetch, BOH mutation, Atlas, hardware,
+shell, or external actions.
 
 ## Non-Goals
 
@@ -27,7 +29,7 @@ It does not enable filesystem, git, fetch, BOH mutation, Atlas, hardware, shell,
 |---|---|---|
 | `time.now` | active approved read-only | Side-effect class must be `none`; proposal must be reviewed; no shell, network, filesystem, or external process may be used. |
 | `filesystem.read` | future only | Path allowlist, size limit, extension policy, redacted preview, explicit operator approval. |
-| `git.status` | future only | Repo allowlist, fixed argument set, output truncation, no porcelain mutation commands. |
+| `git.status` | active approved read-only | Current repo allowlist, fixed `git status --short --branch`, output truncation, no porcelain mutation commands. |
 | `fetch.url` | future only | Domain allowlist, timeout, size limit, content-type filter, no credential forwarding. |
 | `boh.retrieve` | existing read-only retrieval bridge | Retrieval token only; never operator token; no mutation; no corpus copy. |
 
@@ -85,8 +87,8 @@ a documented schema. Required fields:
 - `output_hash`
 - `output_summary`
 
-## Phase 0L Boundary
+## Phase 0G Boundary
 
-Phase 0L activates only `time.now` as an internal approved read-only lane. Existing Phase 0W behavior
-remains for every other lane: execution requests create blocked or dry-run-only audit receipts, and
-`external_action_executed` remains `false`.
+Phase 0G activates `time.now` and `git.status` as approved read-only lanes. Existing Phase 0W
+behavior remains for every other lane: execution requests create blocked or dry-run-only audit
+receipts, and `external_action_executed` remains `false`.

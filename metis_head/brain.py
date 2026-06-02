@@ -22,6 +22,7 @@ from .leds import resolve_leds
 from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
 from .personality import personality_profile
 from .provider_harness import ProviderHarnessError, invoke_provider, provider_catalog
+from .read_only_tools import ReadOnlyToolError, execute_git_status
 from .readiness import calculate_readiness
 from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
@@ -231,6 +232,11 @@ def request_proposal_execution(proposal_id: str, payload: dict[str, Any] | None 
         try:
             read_only_result = dry_run_tool("time.now", proposal.get("tool_arguments") or {})["result"]
         except ToolRegistryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    elif proposal.get("review_status") == "approved" and proposal.get("tool_id") == "git.status":
+        try:
+            read_only_result = execute_git_status(proposal.get("tool_arguments") or {})
+        except ReadOnlyToolError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
     elif proposal.get("review_status") == "approved" and proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
         try:

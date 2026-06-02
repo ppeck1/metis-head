@@ -105,13 +105,13 @@ def test_time_execution_replay_is_deterministic() -> None:
     assert first["execution_audit_log"][0]["output_hash"] == second["execution_audit_log"][0]["output_hash"]
 
 
-def test_policy_marks_only_time_now_active() -> None:
+def test_policy_marks_time_and_git_status_active() -> None:
     client = _client()
 
     policy = client.get("/metis/execution/policy").json()
     lanes = {lane["lane"]: lane["status"] for lane in policy["candidate_lanes"]}
 
     assert lanes["time.now"] == "active_approved_read_only"
+    assert lanes["git.status"] == "active_approved_read_only"
     assert lanes["filesystem.read"] == "future_only"
-    assert lanes["git.status"] == "future_only"
     assert lanes["fetch.url"] == "future_only"

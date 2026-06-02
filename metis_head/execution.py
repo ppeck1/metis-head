@@ -29,7 +29,7 @@ def build_execution_receipt(
     elif decision == "denied":
         execution_status = "blocked_denied"
         policy_decision = "denied"
-    elif proposal.get("tool_id") == "time.now" and read_only_result:
+    elif proposal.get("tool_id") in {"time.now", "git.status"} and read_only_result:
         execution_status = "executed_read_only"
         policy_decision = "approved_read_only"
     elif proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":

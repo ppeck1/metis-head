@@ -10,13 +10,28 @@ token).
 
 ## Current Phase
 
-Phase scope: `0L` - first approved read-only execution lane for `time.now` (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy`).
+Phase scope: `0G` - approved read-only `git.status` lane (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane`).
 
-Status: Metis can now execute one approved internal read-only lane: `time.now`. The lane requires a
-queued proposal and human review, emits an `executed_read_only` audit receipt with bounded output
-summary/hash, and still leaves `external_action_executed=false`. Runtime behavior remains locked for
-filesystem reads, git commands, network fetches, BOH/Atlas mutation, hardware action, shell execution,
-and autonomous execution.
+Status: Metis can now execute approved read-only `git.status` for the current allowlisted repo using
+fixed no-shell arguments: `git status --short --branch`. The lane requires a queued proposal and
+human review, emits an `executed_read_only` audit receipt with bounded output summary/hash, and still
+leaves `external_action_executed=false`. Runtime behavior remains locked for filesystem reads,
+arbitrary git commands, network fetches, BOH/Atlas mutation, hardware action, shell execution, and
+autonomous execution.
+
+Phase 0G implemented:
+
+- Added `git.status` as an approved read-only tool lane.
+- Kept legacy `git.status_proposed` proposal-only and blocked after approval.
+- Added fixed-argument, no-shell `git status --short --branch` execution for the current repo only.
+- Added output truncation and receipt summaries without raw `stdout`/command output fields.
+- Updated the read-only execution policy to mark `git.status` active.
+- Added tests for registry labels, approval, allowlist blocking, legacy lane blocking, and policy
+  status.
+
+Previous Phase 0L status: Metis can execute one approved internal read-only lane: `time.now`. The
+lane requires a queued proposal and human review, emits an `executed_read_only` audit receipt with
+bounded output summary/hash, and still leaves `external_action_executed=false`.
 
 Phase 0L implemented:
 
@@ -645,7 +660,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-130 passed under Python 3.11 (includes approved `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+135 passed under Python 3.11 (includes approved `git.status` and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
@@ -655,4 +670,4 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R/0T/0U/0W/0Q/0L does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0L allows only approved internal `time.now` read-only execution. Filesystem, git, fetch, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R/0T/0U/0W/0Q/0L/0G does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0L allows approved internal `time.now` read-only execution. Phase 0G allows approved current-repo `git.status` only. Filesystem reads, arbitrary git commands, fetch, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
