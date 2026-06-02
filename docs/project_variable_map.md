@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0Q` (read-only execution policy contract; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit`)
+Last phase updated: `0L` (first approved read-only execution lane for `time.now`; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R/0T/0U/0W/0Q UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, and review the read-only execution policy. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
+Current Phase 0S/0R/0T/0U/0W/0Q/0L UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise the approved `time.now` read-only lane. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -444,6 +444,9 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `execution_allowed` | 0W | Always `false`; Phase 0W records receipts only. |
 | `redactions` | 0W | Declares omitted unsafe classes: secrets, raw file contents, command output, external receipts. |
 | `dry_run_receipt` | 0W | Optional nested `metis_tool_receipt.v0.1` only for approved side-effect-free dry-run tools. |
+| `executed_read_only` | 0L | Execution status for approved internal `time.now`; no shell/network/filesystem/external action. |
+| `output_summary` | 0L | Bounded key/count/preview summary for approved read-only output. |
+| `output_hash` | 0L | Short hash of approved read-only output for audit comparison. |
 
 ## Read-Only Execution Policy
 
@@ -453,7 +456,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `metis_head.execution_policy` | 0Q | Structured policy export for API/tests. |
 | `READ_ONLY_EXECUTION_POLICY_VERSION` | 0Q | `metis_read_only_execution_policy.v0.1`. |
 | `read_only_execution_policy()` | 0Q | Returns the policy contract as JSON-safe data. |
-| `candidate_lanes` | 0Q | Future/read-only lane list: `time.now`, `filesystem.read`, `git.status`, `fetch.url`, `boh.retrieve`. |
+| `candidate_lanes` | 0Q/0L | Read-only lane list: `time.now` active in 0L; `filesystem.read`, `git.status`, `fetch.url`, and deeper `boh.retrieve` execution remain future-only. |
 | `required_gates` | 0Q | Future gates: proposal ID, approved review, approved read-only permission, lane policy match, pre-result receipt, redaction. |
 | `execution_enabled` | 0Q | Always `false`; Phase 0Q is policy only. |
 

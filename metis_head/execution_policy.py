@@ -16,8 +16,8 @@ READ_ONLY_EXECUTION_POLICY: dict[str, Any] = {
     "candidate_lanes": [
         {
             "lane": "time.now",
-            "status": "eligible_for_dry_run_only_receipts",
-            "minimum_gate": "side_effect_class=none and Phase 0W/0Q receipt remains non-executing",
+            "status": "active_approved_read_only",
+            "minimum_gate": "side_effect_class=none, reviewed proposal, no shell, no network, no filesystem, receipt required",
         },
         {
             "lane": "filesystem.read",

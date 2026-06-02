@@ -226,7 +226,13 @@ def request_proposal_execution(proposal_id: str, payload: dict[str, Any] | None 
     if isinstance(payload, dict) and isinstance(payload.get("reason"), str):
         reason = payload["reason"]
     dry_run_receipt = None
-    if proposal.get("review_status") == "approved" and proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
+    read_only_result = None
+    if proposal.get("review_status") == "approved" and proposal.get("tool_id") == "time.now":
+        try:
+            read_only_result = dry_run_tool("time.now", proposal.get("tool_arguments") or {})["result"]
+        except ToolRegistryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    elif proposal.get("review_status") == "approved" and proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
         try:
             dry_run_receipt = dry_run_tool(str(proposal.get("tool_id")), proposal.get("tool_arguments") or {})
         except ToolRegistryError as exc:
@@ -239,6 +245,8 @@ def request_proposal_execution(proposal_id: str, payload: dict[str, Any] | None 
     }
     if dry_run_receipt:
         event["dry_run_receipt"] = dry_run_receipt
+    if read_only_result:
+        event["read_only_result"] = read_only_result
     STATE = reduce_metis_event(STATE, event)
     receipt = STATE.get("execution_audit_log", [])[-1] if STATE.get("execution_audit_log") else None
     return {

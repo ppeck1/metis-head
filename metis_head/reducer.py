@@ -309,6 +309,7 @@ def _reduce_execution_request(state: dict[str, Any], event: dict[str, Any]) -> N
         requested_at=event.get("requested_at") or event.get("timestamp"),
         reason=event.get("reason") if isinstance(event.get("reason"), str) else None,
         dry_run_receipt=event.get("dry_run_receipt") if isinstance(event.get("dry_run_receipt"), dict) else None,
+        read_only_result=event.get("read_only_result") if isinstance(event.get("read_only_result"), dict) else None,
     )
     state["execution_audit_log"].append(receipt)
     state["external_action_executed"] = False

@@ -2,14 +2,13 @@
 
 Phase: `0Q`
 
-Status: draft contract, not runtime execution.
+Status: draft contract with one active internal read-only lane.
 
 ## Purpose
 
 This policy defines the minimum contract Metis must satisfy before any future phase can execute
-approved read-only tools. Phase 0Q does not enable real execution. It only records the policy shape
-that future code must pass before filesystem, git, fetch, time, BOH, Atlas, hardware, or external
-actions are allowed.
+approved read-only tools. Phase 0L activates only the internal `time.now` lane after proposal review.
+It does not enable filesystem, git, fetch, BOH mutation, Atlas, hardware, shell, or external actions.
 
 ## Non-Goals
 
@@ -26,7 +25,7 @@ actions are allowed.
 
 | Lane | Status | Minimum Gate |
 |---|---|---|
-| `time.now` | eligible for dry-run-only execution receipts | Side-effect class must be `none`; receipt must remain non-executing in Phase 0W/0Q. |
+| `time.now` | active approved read-only | Side-effect class must be `none`; proposal must be reviewed; no shell, network, filesystem, or external process may be used. |
 | `filesystem.read` | future only | Path allowlist, size limit, extension policy, redacted preview, explicit operator approval. |
 | `git.status` | future only | Repo allowlist, fixed argument set, output truncation, no porcelain mutation commands. |
 | `fetch.url` | future only | Domain allowlist, timeout, size limit, content-type filter, no credential forwarding. |
@@ -34,11 +33,11 @@ actions are allowed.
 
 ## Required Approval Gates
 
-Future read-only execution requires all of these:
+Read-only execution requires all of these:
 
 1. A queued proposal with deterministic `proposal_id`.
 2. Human review state `review_status=approved`.
-3. Tool manifest `permission_mode=approved_read_only` or stricter future equivalent.
+3. Tool manifest permission and lane policy allow the requested read-only action.
 4. Tool manifest `side_effect_class=none` or `read_only`.
 5. Explicit lane policy match.
 6. An execution receipt emitted before any result is exposed.
@@ -86,7 +85,8 @@ a documented schema. Required fields:
 - `output_hash`
 - `output_summary`
 
-## Phase 0Q Boundary
+## Phase 0L Boundary
 
-Phase 0Q only publishes this contract and exposes it for review. Existing Phase 0W behavior remains:
-execution requests create audit receipts only, and `external_action_executed` remains `false`.
+Phase 0L activates only `time.now` as an internal approved read-only lane. Existing Phase 0W behavior
+remains for every other lane: execution requests create blocked or dry-run-only audit receipts, and
+`external_action_executed` remains `false`.

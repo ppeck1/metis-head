@@ -19,6 +19,7 @@ def build_execution_receipt(
     requested_at: str | None,
     reason: str | None = None,
     dry_run_receipt: dict[str, Any] | None = None,
+    read_only_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     proposal_id = str(proposal.get("proposal_id") or "unknown_proposal")
     decision = proposal.get("review_status", "pending")
@@ -28,6 +29,9 @@ def build_execution_receipt(
     elif decision == "denied":
         execution_status = "blocked_denied"
         policy_decision = "denied"
+    elif proposal.get("tool_id") == "time.now" and read_only_result:
+        execution_status = "executed_read_only"
+        policy_decision = "approved_read_only"
     elif proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
         execution_status = "dry_run_only_not_executed"
         policy_decision = "dry_run_only"
@@ -52,6 +56,17 @@ def build_execution_receipt(
         "review_status": decision,
         "reason": reason or "",
     }
+    if read_only_result and execution_status == "executed_read_only":
+        receipt["output_summary"] = _summarize_output(read_only_result)
+        receipt["output_hash"] = sha1(repr(read_only_result).encode("utf-8")).hexdigest()[:16]
     if dry_run_receipt and execution_status == "dry_run_only_not_executed":
         receipt["dry_run_receipt"] = dry_run_receipt
     return receipt
+
+
+def _summarize_output(output: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "item_count": len(output),
+        "keys": sorted(str(key) for key in output),
+        "preview": {str(key): str(value)[:80] for key, value in output.items()},
+    }
