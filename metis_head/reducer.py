@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from .execution import build_execution_receipt
 from .governance import classify_intent
 from .proposals import build_proposal, build_review_receipt, pending_count
 from .schemas import FAILURE_TABLE, SUPPORTED_ADAPTER_SCHEMAS, validate_event
@@ -56,6 +57,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
             next_state["last_block_reason"] = None
     elif event_type == "proposal_review":
         _reduce_proposal_review(next_state, event)
+    elif event_type == "execution_request":
+        _reduce_execution_request(next_state, event)
 
     return next_state
 
@@ -293,6 +296,26 @@ def _refresh_proposal_counts(state: dict[str, Any]) -> None:
     state["pending_approval_count"] = pending_count(queue)
     state["memory_proposal_count"] = pending_count([item for item in queue if item.get("proposal_type") == "memory"])
     state["tool_queue_count"] = pending_count([item for item in queue if item.get("proposal_type") == "action"])
+
+
+def _reduce_execution_request(state: dict[str, Any], event: dict[str, Any]) -> None:
+    proposal_id = event.get("proposal_id")
+    proposal = next((item for item in state.setdefault("approval_queue", []) if item.get("proposal_id") == proposal_id), None)
+    if proposal is None:
+        return
+    receipt = build_execution_receipt(
+        receipt_index=len(state.setdefault("execution_audit_log", [])),
+        proposal=proposal,
+        requested_at=event.get("requested_at") or event.get("timestamp"),
+        reason=event.get("reason") if isinstance(event.get("reason"), str) else None,
+        dry_run_receipt=event.get("dry_run_receipt") if isinstance(event.get("dry_run_receipt"), dict) else None,
+    )
+    state["execution_audit_log"].append(receipt)
+    state["external_action_executed"] = False
+    state["module_health"]["metis_tools"] = "ok"
+    state["last_block_reason"] = receipt["execution_status"]
+    if receipt["execution_status"].startswith("blocked"):
+        state["authority_state"] = "blocked"
 
 
 def _proposal_metadata_from_event(event: dict[str, Any]) -> dict[str, Any]:

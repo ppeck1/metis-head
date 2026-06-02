@@ -548,6 +548,8 @@
         <button onclick="refreshProposals()">Refresh Proposals</button>
         <button onclick="approveProposal()">Approve</button>
         <button onclick="denyProposal()">Deny</button>
+        <button onclick="requestExecution()">Request Execution</button>
+        <button onclick="refreshExecutionReceipts()">Refresh Receipts</button>
       </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
@@ -634,6 +636,7 @@
     let voiceOptionsCatalog = [];
     let toolsCatalog = [];
     let proposalsCatalog = [];
+    let executionReceipts = [];
     let lastSeenTtsOutputCount = 0;
     let radioPulseTimer = null;
     let radioResetTimer = null;
@@ -1043,6 +1046,35 @@
     }
     async function denyProposal() {
       await reviewProposal('deny');
+    }
+    async function requestExecution() {
+      const proposalId = document.getElementById('proposalSelect').value;
+      if (!proposalId) {
+        document.getElementById('toolStatus').textContent = 'No proposal selected';
+        return;
+      }
+      const reason = document.getElementById('proposalReason').value.trim();
+      try {
+        const response = await fetch(`/metis/proposals/${encodeURIComponent(proposalId)}/request_execution`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({reason})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Execution request failed');
+        await refresh();
+        await refreshExecutionReceipts();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
+    async function refreshExecutionReceipts() {
+      const data = await fetch('/metis/execution/receipts').then(r => r.json());
+      executionReceipts = data.receipts || [];
+      document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('toolStatus').textContent = `${executionReceipts.length} execution receipt(s)`;
+      return data;
     }
     async function dryRunTool() {
       const toolId = document.getElementById('toolSelect').value;

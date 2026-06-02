@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0U` (governed proposal review lane; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools`)
+Last phase updated: `0W` (execution receipt and audit contract; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R/0T/0U UI estimate: `89%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, and review proposals. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
+Current Phase 0S/0R/0T/0U/0W UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, and inspect the audit log. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -41,6 +41,7 @@ Before committing any phase:
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
 | `PROPOSAL_SCHEMA_VERSION` | `metis_proposal.v0.1` | `metis_head.proposals` | Structured approval/memory proposal record version. |
 | `PROPOSAL_REVIEW_SCHEMA_VERSION` | `metis_proposal_review.v0.1` | `metis_head.proposals` | Review receipt version for approve/deny proposal transitions. |
+| `EXECUTION_RECEIPT_VERSION` | `metis_execution_receipt.v0.1` | `metis_head.execution` | Audit receipt version for execution requests that do not execute real actions. |
 | `TOOL_REGISTRY_VERSION` | `metis_tool_registry.v0.1` | `metis_head.tool_registry` | Governed tool manifest registry schema. |
 | `TOOL_RECEIPT_VERSION` | `metis_tool_receipt.v0.1` | `metis_head.tool_registry` | Dry-run/blocked tool receipt schema. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
@@ -75,6 +76,7 @@ Before committing any phase:
 | `memory_proposal_count` | integer | 0A | Memory proposals awaiting review. |
 | `tool_queue_count` | integer | 0A | Tool/action proposals queued, not executed. |
 | `approval_queue` | array | 0R | Structured pending proposal records; no execution path in Phase 0R. |
+| `execution_audit_log` | array | 0W | Safe execution request receipts; no raw secrets, file contents, command output, or external receipts. |
 | `module_health` | object | 0A | High-level module status map. |
 | `input_adapters` | object | 0A | Versioned adapter registry. |
 | `event_log` | array | 0S | In-memory event log for replay/testing. |
@@ -110,6 +112,7 @@ Before committing any phase:
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `user_intent` (`tool proposal`) | 0T | `intent`, `action_class`, `policy`, `tool_id`, `tool_arguments`, `risk_class`, `side_effect_class`, `dry_run_available` | Governed tool proposal event. Arguments are sanitized/redacted before proposal storage. |
 | `proposal_review` | 0U | `proposal_id`, `decision`, `reason`, `reviewed_at` | Replayable proposal approve/deny transition. Review does not execute tools or grant execution permission. |
+| `execution_request` | 0W | `proposal_id`, `reason`, `requested_at`, optional `dry_run_receipt` | Replayable execution request. Reducer appends a `metis_execution_receipt.v0.1` receipt and never performs real execution. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
 | `capture_request` | 0S | `device`, `metadata` | Simulated mic/camera capture attempt. |
 | `adapter_health` | 0S | `adapter_id`, `health`, `enabled`, `mode` | Adapter health mutation endpoint input. |
@@ -426,6 +429,21 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `review_reason` | 0U | Optional operator review reason. |
 | `review_receipt` | 0U | `metis_proposal_review.v0.1` receipt; always has `execution_allowed=false` and `execution_status=not_executed`. |
 
+## Execution Audit
+
+| Field | Current Phase | Purpose |
+|---|---|---|
+| `metis_head.execution` | 0W | Builds deterministic execution receipts for execution requests. |
+| `EXECUTION_RECEIPT_VERSION` | 0W | `metis_execution_receipt.v0.1`. |
+| `receipt_id` | 0W | Deterministic ID derived from receipt index, proposal ID, status, and requested timestamp. |
+| `proposal_id` | 0W | Proposal that the operator attempted to execute. |
+| `tool_id` | 0W | Tool associated with the proposal, when present. |
+| `policy_decision` | 0W | `review_required`, `denied`, `blocked_after_review`, or `dry_run_only`. |
+| `execution_status` | 0W | `blocked_unreviewed`, `blocked_denied`, `blocked_side_effect`, or `dry_run_only_not_executed`. |
+| `execution_allowed` | 0W | Always `false`; Phase 0W records receipts only. |
+| `redactions` | 0W | Declares omitted unsafe classes: secrets, raw file contents, command output, external receipts. |
+| `dry_run_receipt` | 0W | Optional nested `metis_tool_receipt.v0.1` only for approved side-effect-free dry-run tools. |
+
 ## Module Health Keys
 
 | Key | Current Values |
@@ -519,6 +537,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `toolsPanel` | 0T | Tool registry, dry-run receipt, or proposal JSON panel. |
 | `proposalSelect` | 0U | Proposal selector populated from `/metis/proposals`. |
 | `proposalReason` | 0U | Optional review reason sent to approve/deny endpoints. |
+| `executionReceipts` | 0W | Dashboard JS cache for `/metis/execution/receipts`. |
 
 ## Dashboard Functions
 
@@ -553,6 +572,8 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `reviewProposal` | 0U | Calls approve/deny endpoints and displays review receipts. |
 | `approveProposal` | 0U | Approves selected proposal as review state only. |
 | `denyProposal` | 0U | Denies selected proposal and recomputes pending counters. |
+| `requestExecution` | 0W | Calls `/metis/proposals/{proposal_id}/request_execution` and displays a receipt; no real execution. |
+| `refreshExecutionReceipts` | 0W | Calls `/metis/execution/receipts` and displays safe audit receipts. |
 
 ## API Routes
 
@@ -576,6 +597,9 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `GET` | `/metis/proposals/{proposal_id}` | `metis_head.brain` | Return one proposal record by deterministic proposal ID. |
 | `POST` | `/metis/proposals/{proposal_id}/approve` | `metis_head.brain` | Review-approve a proposal; emits `proposal_review`, recomputes pending counters, and does not execute. |
 | `POST` | `/metis/proposals/{proposal_id}/deny` | `metis_head.brain` | Review-deny a proposal; emits `proposal_review`, recomputes pending counters, and does not execute. |
+| `GET` | `/metis/execution/receipts` | `metis_head.brain` | Return safe execution audit receipts. |
+| `GET` | `/metis/execution/receipts/{receipt_id}` | `metis_head.brain` | Return one execution receipt by deterministic receipt ID. |
+| `POST` | `/metis/proposals/{proposal_id}/request_execution` | `metis_head.brain` | Records an execution request receipt; blocks unreviewed, denied, side-effectful, and external actions. |
 | `POST` | `/metis/tools/propose` | `metis_head.brain` | Queue a governed tool proposal with sanitized arguments. |
 | `POST` | `/metis/tools/{tool_id}/dry_run` | `metis_head.brain` | Return a safe dry-run receipt for side-effect-free tools in Human Mode; otherwise queue proposal. |
 | `POST` | `/metis/tools/{tool_id}/execute` | `metis_head.brain` | Phase 0T execution boundary; returns dry-run-only receipt or blocked proposal. |
@@ -646,7 +670,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | LED provider | `led_renderer`, `led_provider`, `led_command` | Provider receives already-resolved Metis LED state. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
-| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, and 0U can review proposals. Approval remains separate from execution; future phases may add scoped execution receipts only after explicit governance policy. |
+| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, and 0W records execution receipts. Approval remains separate from execution; future phases may add scoped real execution only after explicit governance policy. |
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
 | BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B (`metis_head.boh_retrieval`); deeper adapter wiring still future. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |

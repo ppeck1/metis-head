@@ -10,10 +10,27 @@ token).
 
 ## Current Phase
 
-Phase scope: `0U` - governed proposal review lane (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools`).
+Phase scope: `0W` - execution receipt and audit contract (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review`).
 
-Status: Metis can now review queued proposals through deterministic approve/deny events and
-FastAPI endpoints. A proposal review changes review state, emits a review receipt, and recomputes
+Status: Metis now records execution requests as safe audit receipts without performing real
+execution. Requesting execution for unreviewed, denied, or side-effectful proposals produces blocked
+receipts; approved side-effect-free dry-run tools produce a dry-run-only receipt. No Phase 0W path
+executes tools, reads files, runs git, promotes memory, calls BOH/Atlas, touches hardware, or performs
+external actions.
+
+Phase 0W implemented:
+
+- Added `metis_head/execution.py` with `metis_execution_receipt.v0.1` receipts.
+- Added canonical `execution_audit_log` state and replayable `execution_request` events.
+- Added `GET /metis/execution/receipts`, `GET /metis/execution/receipts/{receipt_id}`, and
+  `POST /metis/proposals/{proposal_id}/request_execution`.
+- Added dashboard execution-request and receipt-refresh controls in the Tools panel.
+- Preserved redaction boundaries: no secrets, raw file contents, command output, or external
+  receipts are stored in execution receipts.
+- Preserved `external_action_executed=false` for all Phase 0W paths.
+
+Previous Phase 0U status: Metis can review queued proposals through deterministic approve/deny events
+and FastAPI endpoints. A proposal review changes review state, emits a review receipt, and recomputes
 pending counters, but it still does not execute tools, read files, run git, promote memory, call
 BOH/Atlas, or perform external actions. Approval is explicitly not execution in Phase 0U.
 
@@ -562,10 +579,13 @@ Metis — BOH remains the source of truth.
 - `GET /metis/tools`
 - `GET /metis/tools/{tool_id}`
 - `GET /metis/proposals/{proposal_id}`
+- `GET /metis/execution/receipts`
+- `GET /metis/execution/receipts/{receipt_id}`
 - `POST /metis/event`
 - `POST /metis/chat` (selected LLM provider, or `tool_router` for explicit governed tool requests)
 - `POST /metis/proposals/{proposal_id}/approve`
 - `POST /metis/proposals/{proposal_id}/deny`
+- `POST /metis/proposals/{proposal_id}/request_execution`
 - `POST /metis/tools/propose`
 - `POST /metis/tools/{tool_id}/dry_run`
 - `POST /metis/tools/{tool_id}/execute`
@@ -596,7 +616,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-114 passed under Python 3.11 (includes governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+121 passed under Python 3.11 (includes execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
@@ -606,4 +626,4 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R/0T/0U does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0T tools are registry, dry-run, and proposal records only. Phase 0U proposal approval/denial is review state only, not execution permission. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R/0T/0U/0W does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0T tools are registry, dry-run, and proposal records only. Phase 0U proposal approval/denial is review state only, not execution permission. Phase 0W execution requests create audit receipts only, not real execution. Other reference repositories remain pattern donors only.

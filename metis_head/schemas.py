@@ -35,6 +35,7 @@ EVENT_TYPES = {
     "adapter_schema_check",
     "bridge_disconnected",
     "proposal_review",
+    "execution_request",
 }
 
 ACTION_CLASSES = {
@@ -135,6 +136,7 @@ def baseline_state(*, adapters_enabled: bool = False, timestamp: str = "2026-05-
         "memory_proposal_count": 0,
         "tool_queue_count": 0,
         "approval_queue": [],
+        "execution_audit_log": [],
         "module_health": {
             "metis_head_bridge": "ok",
             "metis_core": "ok",

@@ -190,6 +190,59 @@ def deny_proposal(proposal_id: str, payload: dict[str, Any] | None = None) -> di
     return _review_proposal(proposal_id, "denied", payload)
 
 
+def _receipt_by_id(receipt_id: str) -> dict[str, Any] | None:
+    for receipt in STATE.get("execution_audit_log", []):
+        if receipt.get("receipt_id") == receipt_id:
+            return receipt
+    return None
+
+
+@app.get("/metis/execution/receipts")
+def execution_receipts() -> dict[str, Any]:
+    return {"receipts": STATE.get("execution_audit_log", []), "receipt_count": len(STATE.get("execution_audit_log", []))}
+
+
+@app.get("/metis/execution/receipts/{receipt_id}")
+def execution_receipt_detail(receipt_id: str) -> dict[str, Any]:
+    receipt = _receipt_by_id(receipt_id)
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="execution receipt not found")
+    return {"receipt": receipt}
+
+
+@app.post("/metis/proposals/{proposal_id}/request_execution")
+def request_proposal_execution(proposal_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    proposal = _proposal_by_id(proposal_id)
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="proposal not found")
+    reason = ""
+    if isinstance(payload, dict) and isinstance(payload.get("reason"), str):
+        reason = payload["reason"]
+    dry_run_receipt = None
+    if proposal.get("review_status") == "approved" and proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
+        try:
+            dry_run_receipt = dry_run_tool(str(proposal.get("tool_id")), proposal.get("tool_arguments") or {})
+        except ToolRegistryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    event = {
+        "type": "execution_request",
+        "proposal_id": proposal_id,
+        "reason": reason,
+        "requested_at": utc_now(),
+    }
+    if dry_run_receipt:
+        event["dry_run_receipt"] = dry_run_receipt
+    STATE = reduce_metis_event(STATE, event)
+    receipt = STATE.get("execution_audit_log", [])[-1] if STATE.get("execution_audit_log") else None
+    return {
+        "status": receipt.get("execution_status") if receipt else "not_recorded",
+        "receipt": receipt,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
 @app.get("/metis/tools")
 def tools() -> dict[str, Any]:
     return list_tools()
