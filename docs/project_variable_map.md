@@ -2,14 +2,14 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0V/AUDIO9` (time-sliced Piper spectrum frame animation and `#3AA3A7` analyzer color; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction + 0V/AUDIO8 full-panel polish`)
+Last phase updated: `0T` (governed tool registry and dry-run tool lane; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R UI estimate: `86%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, and the dashboard can select locally available Ollama models. The UI testing environment is satisfactory for now; next work shifts toward backend/provider/governance readiness.
+Current Phase 0S/0R/0T UI estimate: `88%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, and queue proposals. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
-Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
+Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
 Virtual Radio is a 3-zone instrument (`grid-template-columns: 58% 19% 23%`): an inert `radio-speaker` grille (visual only), a tuning-window `radio-strip` carrying the activity LED, authority LED, and full-panel vertical mirrored `radio-meter` spectrum analyzer, and a right `radio-controls` stack (Volume + Depth knobs, PWR/LOUD/AFC/AM-FM `radio-switches`, and the large Tuning/Initiative knob). The analyzer is a simulator rendering of the buildspec tuning-window LED/status visualizer, not a selected LCD panel or final LED firmware. Power/audio/mode/authority readouts and the mic/camera cutoff buttons were moved out of the radio face into the `Radio Status` panel. Virtual Chat's Send button is attached to the composer textarea (Enter sends, Shift+Enter inserts a newline, Send disables while generating); Clear Input is a secondary action. Control meanings are unchanged.
 
@@ -40,6 +40,8 @@ Before committing any phase:
 | `LLMResult` | dataclass | `metis_head.llm_providers` | Provider-neutral virtual chat result envelope. |
 | `POLICY_VERSION` | `metis_governance_policy.v0.1` | `metis_head.governance` | Deterministic action-classification policy version. |
 | `PROPOSAL_SCHEMA_VERSION` | `metis_proposal.v0.1` | `metis_head.proposals` | Structured approval/memory proposal record version. |
+| `TOOL_REGISTRY_VERSION` | `metis_tool_registry.v0.1` | `metis_head.tool_registry` | Governed tool manifest registry schema. |
+| `TOOL_RECEIPT_VERSION` | `metis_tool_receipt.v0.1` | `metis_head.tool_registry` | Dry-run/blocked tool receipt schema. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
 
 ## Canonical State Fields
@@ -105,6 +107,7 @@ Before committing any phase:
 | `provider_event` (`tts`) | 0V/AUDIO9 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, `audio_levels`, `audio_level_count`, `audio_spectrum_levels`, `audio_spectrum_count`, `audio_spectrum_frames`, `audio_spectrum_frame_count`, optional `audio_file=local_temp_wav` | Voice output events; raw spoken text, raw audio, and concrete temp paths are not persisted. `audio_spectrum_frames` and `audio_spectrum_levels` are derived from the actual Piper WAV and drive the mirrored analyzer. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
+| `user_intent` (`tool proposal`) | 0T | `intent`, `action_class`, `policy`, `tool_id`, `tool_arguments`, `risk_class`, `side_effect_class`, `dry_run_available` | Governed tool proposal event. Arguments are sanitized/redacted before proposal storage. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
 | `capture_request` | 0S | `device`, `metadata` | Simulated mic/camera capture attempt. |
 | `adapter_health` | 0S | `adapter_id`, `health`, `enabled`, `mode` | Adapter health mutation endpoint input. |
@@ -163,7 +166,7 @@ such as `scenario_replay` are no longer accepted by the parity validator.
 | `tts` | text-to-speech provider | `tts_adapter.v0.1` | disabled mock | 0R provider bakeoff |
 | `vision` | vision provider | `vision_adapter.v0.1` | disabled mock | 0R/vision spike |
 | `memory` | generic memory provider | `memory_adapter.v0.1` | disabled mock | 9 memory lifecycle |
-| `tools` | tool provider | `tools_adapter.v0.1` | disabled mock | governed tool lane |
+| `tools` | tool provider | `tools_adapter.v0.1` | disabled mock, enabled when proposals are queued | governed tool lane |
 | `llm_router` | model router provider | `llm_router_adapter.v0.1` | disabled mock | 0R router review |
 | `project_atlas` | task lifecycle provider | `atlas_adapter.v0.1` | disabled mock | future adapter only |
 | `boh_memory` | memory vault provider | `boh_adapter.v0.1` | disabled mock | future BOH adapter only |
@@ -234,6 +237,30 @@ Boundary: Phase 0V is output-only TTS. It does not imply microphone capture, cam
 listening, wake-word detection, or privacy mode. `output_muted=true` blocks speech but does not
 change mic/camera/logging state. Spoken text is represented in TTS events as `text_len`,
 `text_hash`, and `text_redacted=true`; raw spoken content is not stored in the event log.
+
+## Tool Registry (Phase 0T)
+
+| Name | Current Phase | Purpose |
+|---|---|---|
+| `metis_head.tool_registry` | 0T | Metis-native governed tool registry and dry-run/proposal surface. |
+| `ToolManifest` | 0T | Versioned tool manifest with ID, schemas, risk, side-effect class, permission mode, enabled flag, and source reference. |
+| `TOOLS` | 0T | Seed tool bank inspired by MCP reference categories; no external runtime dependency. |
+| `time.now` | 0T | Side-effect-free dry-run time-shaped result. |
+| `text.summarize` | 0T | Deterministic local summary-shaped dry run. |
+| `math.calculate` | 0T | Narrow arithmetic dry run from explicit operands; no eval. |
+| `filesystem.read_proposed` | 0T | Proposal-only future file-read shape; Phase 0T does not read files. |
+| `git.status_proposed` | 0T | Proposal-only future git-status shape; Phase 0T does not run git. |
+| `memory.propose` | 0T | Proposal-only memory review shape; no promotion. |
+| `dry_run_tool` | 0T | Returns safe `metis_tool_receipt.v0.1` receipts for side-effect-free dry-run tools. |
+| `execute_tool` | 0T | Blocks execution or returns a dry-run receipt; never performs side-effectful execution. |
+| `sanitize_arguments` | 0T | Redacts secret-like argument keys and truncates persisted argument values. |
+
+Permission modes: `disabled`, `dry_run`, `proposal_only`.
+Side-effect classes: `none`, `read_only`, `local_mutation`, `external_mutation`.
+Risk classes: `low`, `medium`, `high`, `blocked`.
+
+Boundary: public MCP repositories are pattern donors only. Metis does not vendor, import, spawn, or
+depend on MCP/Anthropic reference repos in Phase 0T.
 
 ## BOH Retrieval Bridge Environment (Phase 0B)
 
@@ -384,6 +411,11 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `default_decision` | 0R | Policy default decision. |
 | `reasons` | 0R | Human-readable policy reasons. |
 | `execution_allowed` | 0R | Always `false` in this phase. |
+| `tool_id` | 0T | Optional tool proposal ID when proposal came from the governed tool registry. |
+| `tool_arguments` | 0T | Optional sanitized/redacted tool argument snapshot. |
+| `risk_class` | 0T | Optional tool risk label. |
+| `side_effect_class` | 0T | Optional tool side-effect label. |
+| `dry_run_available` | 0T | Optional boolean showing whether a dry-run receipt exists for the tool. |
 
 ## Module Health Keys
 
@@ -472,6 +504,10 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `piperExe` | 0V/AUDIO | Per-request Piper executable path override. |
 | `piperModel` | 0V/AUDIO | Per-request Piper `.onnx` model path override. |
 | `piperConfig` | 0V/AUDIO+ | Per-request Piper `.onnx.json` config path override. |
+| `toolSelect` | 0T | Tool selector populated from `/metis/tools`. |
+| `toolArguments` | 0T | JSON input for dry-run/proposal arguments. |
+| `toolStatus` | 0T | Tool registry/proposal/dry-run status line. |
+| `toolsPanel` | 0T | Tool registry, dry-run receipt, or proposal JSON panel. |
 
 ## Dashboard Functions
 
@@ -498,6 +534,10 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `renderRadioWave` | 0V/AUDIO9 | Renders one vertical mirrored spectrum frame, resamples real bands to fill the panel, normalizes per utterance, and falls back to aggregate levels for compatibility. |
 | `resampleLevels` | 0V/AUDIO8 | Interpolates compact Piper spectrum metadata into the dashboard's full-height analyzer row count without inventing new source signal. |
 | `pulseRadioFromVoice` | 0V/AUDIO9 | Pulses the radio strip from returned voice event metadata, using `audio_spectrum_frames`, `audio_spectrum_levels`, `audio_levels`, and `audio_visualization_hint_ms` when available. |
+| `refreshTools` | 0T | Populates the Tools panel from `/metis/tools`. |
+| `dryRunTool` | 0T | Calls `/metis/tools/{tool_id}/dry_run`. Agent Mode or proposal-only tools queue proposals instead. |
+| `proposeTool` | 0T | Calls `/metis/tools/propose`. |
+| `parseToolArguments` | 0T | Parses dashboard tool argument JSON before dry-run/proposal calls. |
 
 ## API Routes
 
@@ -516,6 +556,11 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `GET` | `/metis/personality/console` | `metis_head.brain` | Serve the supplied personality console HTML. |
 | `GET` | `/metis/boh/status` | `metis_head.brain` | Safe BOH background link state (0C): state enum, last checked/connected, last error (token-scrubbed), probe count, bounded transition events. Never exposes any token. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
+| `GET` | `/metis/tools` | `metis_head.brain` | Governed tool registry listing. |
+| `GET` | `/metis/tools/{tool_id}` | `metis_head.brain` | One governed tool manifest. |
+| `POST` | `/metis/tools/propose` | `metis_head.brain` | Queue a governed tool proposal with sanitized arguments. |
+| `POST` | `/metis/tools/{tool_id}/dry_run` | `metis_head.brain` | Return a safe dry-run receipt for side-effect-free tools in Human Mode; otherwise queue proposal. |
+| `POST` | `/metis/tools/{tool_id}/execute` | `metis_head.brain` | Phase 0T execution boundary; returns dry-run-only receipt or blocked proposal. |
 | `POST` | `/metis/llm/health` | `metis_head.brain` | Probe Mock/Ollama/OpenAI readiness without sending a chat completion. |
 | `POST` | `/metis/governance/classify` | `metis_head.brain` | Return deterministic governance policy for an intent. |
 | `GET` | `/metis/proposals` | `metis_head.brain` | Return structured approval queue records. |
@@ -583,7 +628,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | LED provider | `led_renderer`, `led_provider`, `led_command` | Provider receives already-resolved Metis LED state. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
-| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | No execution without governance approval. |
+| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists; future phases may add scoped approval/execution receipts, but no execution without governance approval. |
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
 | BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B (`metis_head.boh_retrieval`); deeper adapter wiring still future. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |

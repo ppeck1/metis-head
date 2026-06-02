@@ -200,20 +200,30 @@ def _reduce_intent(state: dict[str, Any], event: dict[str, Any]) -> None:
     policy = event.get("policy") if isinstance(event.get("policy"), dict) else classify_intent(intent, state).to_dict()
     if action_class is None:
         action_class = policy["action_class"]
-    if state.get("interaction_mode") == "agent" and action_class in {"external_action", "modify_local", "sensitive_action", "actuator_action"}:
+    is_tool_proposal = bool(event.get("tool_id"))
+    if is_tool_proposal or (state.get("interaction_mode") == "agent" and action_class in {"external_action", "modify_local", "sensitive_action", "actuator_action"}):
+        proposal_type = "memory" if event.get("tool_id") == "memory.propose" else "action"
         proposal = build_proposal(
             queue_index=len(state.setdefault("approval_queue", [])),
             intent=intent,
             action_class=action_class,
             policy=policy,
-            proposal_type="action",
+            proposal_type=proposal_type,
+            metadata=_proposal_metadata_from_event(event),
         )
         state["approval_queue"].append(proposal)
         state["pending_approval_count"] = pending_count(state["approval_queue"])
+        state["memory_proposal_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "memory"])
         state["tool_queue_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "action"])
         state["cognition_state"] = "awaiting_approval"
         state["authority_state"] = "awaiting_approval"
         state["external_action_executed"] = False
+        state["module_health"]["metis_tools"] = "ok"
+        adapter = state["input_adapters"].get("tools")
+        if adapter:
+            adapter["enabled"] = True
+            adapter["health"] = "ok"
+            adapter["mode"] = "dry_run"
         state["last_block_reason"] = "; ".join(policy.get("reasons", []))
     elif action_class == "sensitive_action":
         _set_failure(state, "governance_block", "sensitive action blocked by default")
@@ -245,6 +255,14 @@ def _reduce_memory(state: dict[str, Any], event: dict[str, Any]) -> None:
     elif operation == "delete":
         state["memory_promoted"] = False
         state["last_block_reason"] = "memory deletion audit retained without deleted content"
+
+
+def _proposal_metadata_from_event(event: dict[str, Any]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    for key in ("tool_id", "tool_arguments", "risk_class", "side_effect_class", "dry_run_available"):
+        if key in event:
+            metadata[key] = event[key]
+    return metadata
 
 
 def _reduce_capture(state: dict[str, Any], event: dict[str, Any]) -> None:

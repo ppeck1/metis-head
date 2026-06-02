@@ -10,11 +10,29 @@ token).
 
 ## Current Phase
 
-Phase scope: `0V/AUDIO9` - real-time spectrum frame animation (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V+ voice options + 0V/UI voice controls + 0V/AUDIO Piper provider + 0V/AUDIO+ model wiring + 0V/AUDIO2 playback reliability + 0V/AUDIO3 spoken text normalization + 0V/AUDIO4 async playback alignment + 0V/AUDIO5 PCM envelope + 0V/AUDIO6 reset styling + 0V/AUDIO7 spectrum extraction + 0V/AUDIO8 full-panel polish`).
+Phase scope: `0T` - governed tool registry and dry-run tool lane (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer`).
 
-Status: the tuning-window visualizer now animates through time-sliced spectrum frames from the
-actual Piper WAV instead of holding one aggregate spectrum shape. The dashboard plays those frames
-over the speech duration, keeps the full-height mirrored analyzer, and uses the project color
+Status: Metis now has a native governed tool registry with MCP-inspired manifests, seeded safe
+tools, proposal records, and dry-run receipts. Phase 0T does not spawn MCP servers, vendor public
+repos, read files, run git, mutate memory, call BOH/Atlas/tools, or execute external actions.
+Agent Mode always queues tool proposals with `execution_allowed=false`.
+
+Phase 0T implemented:
+
+- Added `metis_head/tool_registry.py` with `metis_tool_registry.v0.1` manifests and
+  `metis_tool_receipt.v0.1` dry-run receipts.
+- Seeded `time.now`, `text.summarize`, `math.calculate`, `filesystem.read_proposed`,
+  `git.status_proposed`, and `memory.propose`.
+- Added `/metis/tools`, `/metis/tools/{tool_id}`, `/metis/tools/propose`,
+  `/metis/tools/{tool_id}/dry_run`, and `/metis/tools/{tool_id}/execute`.
+- Extended proposal records with tool ID, sanitized arguments, risk class, side-effect class,
+  dry-run availability, and `execution_allowed=false`.
+- Added a compact dashboard Tools panel for registry inspection, dry-run, and proposal queueing.
+- Used public MCP reference servers as pattern donors only; no runtime dependency was added.
+
+Previous Phase 0V/AUDIO9 status: the tuning-window visualizer animated through time-sliced spectrum frames from the
+actual Piper WAV instead of holding one aggregate spectrum shape. The dashboard played those frames
+over the speech duration, kept the full-height mirrored analyzer, and used the project color
 `#3AA3A7` as the primary phosphor/LED tone.
 
 Phase 0V/AUDIO9 implemented:
@@ -322,6 +340,7 @@ Implemented:
 - FastAPI mock Brain with the v0.5 Phase 0S endpoint set.
 - Static dashboard for canonical state, LEDs, adapter health, readiness, scenario results, and event log.
 - Provider harness for deterministic mock STT/TTS/vision/memory/tool/Atlas/LLM/safety operations.
+- Governed tool registry and dry-run/proposal lane for safe tool review without execution.
 - Virtual radio view rebuilt as a 3-zone instrument: an inert speaker grille, a thin vertical LED/visualizer status strip, and a right control stack (Volume + Depth dials, PWR/LOUD/AFC/AM-FM buttons, large Tuning/Initiative dial). Radio status readouts (power/audio/mode/authority) and mic/camera cutoff controls live in a separate Radio Status panel below.
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
@@ -456,7 +475,9 @@ BOH, and never sends BOH's operator token. If BOH is unreachable, the answer is 
 `degraded`/unsourced rather than failing silently.
 
 Tools, Atlas, hardware, mic, camera, and autonomous execution remain disabled. Agent Mode chat
-can queue proposals only and never mutates BOH.
+can queue proposals only and never mutates BOH. Phase 0T tool endpoints expose dry-run receipts and
+proposal records only; filesystem, git, memory promotion, external, hardware, BOH, and Atlas actions
+are not executed.
 
 ## Bridge Emulator (Phase 0S/S4)
 
@@ -515,8 +536,13 @@ Metis — BOH remains the source of truth.
 - `GET /metis/sim/tests`
 - `GET /metis/boh/status`
 - `GET /metis/llm/options`
+- `GET /metis/tools`
+- `GET /metis/tools/{tool_id}`
 - `POST /metis/event`
 - `POST /metis/chat`
+- `POST /metis/tools/propose`
+- `POST /metis/tools/{tool_id}/dry_run`
+- `POST /metis/tools/{tool_id}/execute`
 - `GET /metis/voice`
 - `GET /metis/voice/options`
 - `POST /metis/voice/speak`
@@ -544,7 +570,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-95 passed under Python 3.11 (includes animated Piper spectrum frames, vertical mirrored spectrum analyzer, async playback, spoken-text normalization, and radio reset coverage)
+104 passed under Python 3.11 (includes governed tool registry/dry-run lane, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
@@ -554,4 +580,4 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R does not implement real hardware, microphone, camera, Project Atlas integration, external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R/0T does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis — BOH remains the source of truth. Phase 0T tools are registry, dry-run, and proposal records only. Other reference repositories remain pattern donors only.

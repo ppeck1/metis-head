@@ -533,6 +533,18 @@
         <button onclick="clearChatInput()">Clear Input</button>
       </div>
     </section>
+    <section class="span-12">
+      <h2>Tools</h2>
+      <div class="tool-row">
+        <select id="toolSelect"></select>
+        <input id="toolArguments" type="text" placeholder='Tool arguments JSON, e.g. {"operation":"add","a":2,"b":3}'>
+        <button onclick="refreshTools()">Refresh Tools</button>
+        <button onclick="dryRunTool()">Dry Run</button>
+        <button onclick="proposeTool()">Queue Proposal</button>
+      </div>
+      <div id="toolStatus" class="status-line"></div>
+      <pre id="toolsPanel"></pre>
+    </section>
     <section class="span-4">
       <h2>Radio Status</h2>
       <div class="radio-readouts">
@@ -613,6 +625,7 @@
     let currentLeds = null;
     let bohSeenTransitions = 0;
     let voiceOptionsCatalog = [];
+    let toolsCatalog = [];
     let lastSeenTtsOutputCount = 0;
     let radioPulseTimer = null;
     let radioResetTimer = null;
@@ -948,6 +961,61 @@
       document.getElementById('chatInput').value = '';
       document.getElementById('chatStatus').textContent = '';
     }
+    function parseToolArguments() {
+      const raw = document.getElementById('toolArguments').value.trim();
+      if (!raw) return {};
+      return JSON.parse(raw);
+    }
+    async function refreshTools() {
+      const data = await fetch('/metis/tools').then(r => r.json());
+      toolsCatalog = data.tools || [];
+      const select = document.getElementById('toolSelect');
+      const previous = select.value;
+      select.innerHTML = '';
+      for (const tool of toolsCatalog) {
+        const option = document.createElement('option');
+        option.value = tool.tool_id;
+        option.textContent = `${tool.tool_id} / ${tool.permission_mode} / ${tool.risk_class}`;
+        select.appendChild(option);
+      }
+      if (previous && toolsCatalog.some(tool => tool.tool_id === previous)) {
+        select.value = previous;
+      }
+      document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('toolStatus').textContent = `${toolsCatalog.length} tool(s) registered`;
+    }
+    async function dryRunTool() {
+      const toolId = document.getElementById('toolSelect').value;
+      try {
+        const response = await fetch(`/metis/tools/${encodeURIComponent(toolId)}/dry_run`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({arguments: parseToolArguments()})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Tool dry run failed');
+        await refresh();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
+    async function proposeTool() {
+      const toolId = document.getElementById('toolSelect').value;
+      try {
+        const response = await fetch('/metis/tools/propose', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({tool_id: toolId, arguments: parseToolArguments()})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Tool proposal failed');
+        await refresh();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
     async function postEvent(event) {
       await fetch('/metis/event', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(event)});
       await refresh();
@@ -1130,6 +1198,7 @@
     refresh();
     refreshLlmOptions();
     refreshVoiceOptions();
+    refreshTools();
     refreshBohStatus();
     setInterval(refreshBohStatus, 10000);
   </script>

@@ -351,6 +351,10 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "Virtual Chat" in dashboard
     assert "chatInput" in dashboard
     assert "sendChat" in dashboard
+    assert "Tools" in dashboard
+    assert "toolSelect" in dashboard
+    assert "refreshTools" in dashboard
+    assert "/metis/tools" in dashboard
     assert "chatProvider" in dashboard
     assert "ollamaModel" in dashboard
     assert "refreshLlmOptions" in dashboard

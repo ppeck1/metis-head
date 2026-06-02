@@ -26,6 +26,7 @@ from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
 from .sim_manifest import build_sim_test_manifest
+from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
 
@@ -134,6 +135,74 @@ def sim_tests(include_results: bool = True) -> dict[str, Any]:
 @app.get("/metis/proposals")
 def proposals() -> dict[str, Any]:
     return {"proposals": STATE.get("approval_queue", []), "pending_approval_count": STATE.get("pending_approval_count", 0)}
+
+
+@app.get("/metis/tools")
+def tools() -> dict[str, Any]:
+    return list_tools()
+
+
+@app.get("/metis/tools/{tool_id}")
+def tool_detail(tool_id: str) -> dict[str, Any]:
+    try:
+        return get_tool(tool_id).to_dict()
+    except ToolRegistryError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _queue_tool_proposal(tool_id: str, arguments: Any, reason: str | None = None) -> dict[str, Any]:
+    global STATE
+    event = build_tool_proposal_event(tool_id, arguments, STATE, reason)
+    STATE = reduce_metis_event(STATE, event)
+    return {
+        "status": "proposal_queued",
+        "tool_id": tool_id,
+        "event": event,
+        "proposal": STATE.get("approval_queue", [])[-1] if STATE.get("approval_queue") else None,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
+@app.post("/metis/tools/propose")
+def tool_propose(payload: dict[str, Any]) -> dict[str, Any]:
+    tool_id = payload.get("tool_id")
+    if not isinstance(tool_id, str) or not tool_id.strip():
+        raise HTTPException(status_code=400, detail="tool_id is required")
+    try:
+        return _queue_tool_proposal(tool_id, payload.get("arguments") or {}, payload.get("reason"))
+    except ToolRegistryError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/metis/tools/{tool_id}/dry_run")
+def tool_dry_run(tool_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else payload
+    try:
+        tool = get_tool(tool_id)
+        if STATE.get("interaction_mode") == "agent" or tool.permission_mode != "dry_run" or tool.side_effect_class != "none":
+            return _queue_tool_proposal(tool_id, arguments, payload.get("reason") if isinstance(payload, dict) else None)
+        receipt = dry_run_tool(tool_id, arguments)
+        return {"status": "dry_run_complete", "receipt": receipt, "state": STATE, "leds": resolve_leds(STATE)}
+    except ToolRegistryError as exc:
+        status_code = 404 if str(exc).startswith("unknown tool") else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@app.post("/metis/tools/{tool_id}/execute")
+def tool_execute(tool_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else payload
+    try:
+        receipt = execute_tool(tool_id, arguments, STATE)
+        if receipt.get("proposal_required"):
+            queued = _queue_tool_proposal(tool_id, arguments, payload.get("reason") if isinstance(payload, dict) else None)
+            return {**queued, "execution_status": receipt["status"], "blocked_reason": receipt["blocked_reason"], "execution_allowed": False}
+        return {"status": receipt["status"], "receipt": receipt, "state": STATE, "leds": resolve_leds(STATE)}
+    except ToolRegistryError as exc:
+        status_code = 404 if str(exc).startswith("unknown tool") else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @app.get("/metis/llm/options")

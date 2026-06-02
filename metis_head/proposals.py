@@ -15,9 +15,10 @@ def build_proposal(
     policy: dict[str, Any],
     proposal_type: str = "action",
     status: str = "pending_review",
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     proposal_id = stable_proposal_id(queue_index, intent, action_class)
-    return {
+    proposal = {
         "schema_version": PROPOSAL_SCHEMA_VERSION,
         "proposal_id": proposal_id,
         "proposal_type": proposal_type,
@@ -29,6 +30,9 @@ def build_proposal(
         "reasons": list(policy.get("reasons", [])),
         "execution_allowed": False,
     }
+    if metadata:
+        proposal.update(metadata)
+    return proposal
 
 
 def stable_proposal_id(queue_index: int, intent: str, action_class: str) -> str:
