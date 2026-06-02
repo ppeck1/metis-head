@@ -32,7 +32,52 @@ class ToolManifest:
     source_reference: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema_version": TOOL_REGISTRY_VERSION, **asdict(self)}
+        return {"schema_version": TOOL_REGISTRY_VERSION, **asdict(self), "lifecycle": tool_lifecycle(self)}
+
+
+def tool_lifecycle(tool: ToolManifest) -> dict[str, Any]:
+    if not tool.enabled or tool.permission_mode == "disabled":
+        return {
+            "lifecycle_label": "disabled",
+            "lifecycle_tags": ["disabled"],
+            "operator_summary": "Tool is registered but disabled.",
+            "requires_review": True,
+            "dry_run_available": False,
+            "execution_request_allowed": False,
+            "execution_result": "blocked",
+        }
+    if tool.permission_mode == "dry_run" and tool.side_effect_class == "none":
+        return {
+            "lifecycle_label": "dry_run_available",
+            "lifecycle_tags": ["dry_run_available", "side_effect_free"],
+            "operator_summary": "Safe dry-run receipt is available; execute still returns a dry-run receipt, not external action.",
+            "requires_review": False,
+            "dry_run_available": True,
+            "execution_request_allowed": False,
+            "execution_result": "dry_run_only_not_executed",
+        }
+    if tool.permission_mode == "approved_read_only":
+        return {
+            "lifecycle_label": "approved_read_only",
+            "lifecycle_tags": ["proposal_only", "approved_read_only"],
+            "operator_summary": "Queues a proposal; after approval, only the scoped read-only lane may return an audit receipt.",
+            "requires_review": True,
+            "dry_run_available": False,
+            "execution_request_allowed": True,
+            "execution_result": "executed_read_only",
+        }
+    tags = ["proposal_only", "blocked_after_review"]
+    if tool.tool_id.endswith("_proposed"):
+        tags.append("future_only")
+    return {
+        "lifecycle_label": "proposal_only",
+        "lifecycle_tags": tags,
+        "operator_summary": "Queues a proposal for review; execution requests remain blocked after approval in this phase.",
+        "requires_review": True,
+        "dry_run_available": False,
+        "execution_request_allowed": False,
+        "execution_result": "blocked_after_review",
+    }
 
 
 TOOLS: dict[str, ToolManifest] = {

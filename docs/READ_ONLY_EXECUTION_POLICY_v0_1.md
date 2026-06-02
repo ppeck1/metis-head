@@ -110,5 +110,7 @@ Phase 0J aligns chat routing with the active `time.now`, `git.status`, and `file
 approved read-only lanes. Phase 0F activates `time.now`, `git.status`, and `filesystem.read` as
 approved read-only lanes. Phase 0K adds blocked fetch proposals and visible planning dry-runs only.
 Phase 0N adds deterministic replay and receipt-detail tests for those paths without enabling
-additional execution. Existing Phase 0W behavior remains for every other lane: execution requests
-create blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.
+additional execution. Phase 0D adds lifecycle labels to the tool catalog for operator visibility;
+these labels do not grant permission or bypass review. Existing Phase 0W behavior remains for every
+other lane: execution requests create blocked or dry-run-only audit receipts, and
+`external_action_executed` remains `false`.

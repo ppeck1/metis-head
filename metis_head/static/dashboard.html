@@ -987,7 +987,8 @@
       for (const tool of toolsCatalog) {
         const option = document.createElement('option');
         option.value = tool.tool_id;
-        option.textContent = `${tool.tool_id} / ${tool.permission_mode} / ${tool.risk_class}`;
+        const lifecycleLabel = tool.lifecycle?.lifecycle_label || tool.permission_mode;
+        option.textContent = `${tool.tool_id} / ${lifecycleLabel} / ${tool.risk_class}`;
         select.appendChild(option);
       }
       if (previous && toolsCatalog.some(tool => tool.tool_id === previous)) {
