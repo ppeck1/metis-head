@@ -134,3 +134,65 @@ def test_memory_tool_queues_memory_proposal_without_promotion() -> None:
     assert state["memory_promoted"] is False
     assert state["approval_queue"][0]["proposal_type"] == "memory"
     assert state["approval_queue"][0]["tool_id"] == "memory.propose"
+
+
+def test_chat_routes_clear_math_request_through_tool_dry_run(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    client = _client()
+
+    response = client.post("/metis/chat", json={"message": "calculate 7 + 5"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tool_router"
+    assert body["model"] == "math.calculate"
+    assert body["tool"]["status"] == "dry_run_complete"
+    assert body["tool"]["receipt"]["result"]["result"] == 12.0
+    assert body["state"]["external_action_executed"] is False
+    assert body["state"]["tool_queue_count"] == 0
+
+
+def test_chat_routes_git_status_to_proposal_without_running_git(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = _client()
+
+    response = client.post("/metis/chat", json={"message": "git status please"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tool_router"
+    assert body["tool"]["status"] == "proposal_queued"
+    assert body["proposal_queued"] is True
+    assert body["state"]["approval_queue"][0]["tool_id"] == "git.status_proposed"
+    assert body["state"]["approval_queue"][0]["execution_allowed"] is False
+    assert body["state"]["external_action_executed"] is False
+
+
+def test_chat_tool_routing_can_be_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = _client()
+
+    response = client.post("/metis/chat", json={"message": "calculate 7 + 5", "options": {"tools": {"enabled": False}}})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "mock"
+    assert "tool" not in body
+
+
+def test_agent_mode_tool_chat_queues_one_tool_proposal(monkeypatch) -> None:
+    monkeypatch.setenv("METIS_LLM_PROVIDER", "mock")
+    client = _client()
+    client.post("/metis/event", json={"type": "button_event", "button": "am_fm", "state": "agent"})
+
+    response = client.post("/metis/chat", json={"message": "calculate 7 + 5"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "tool_router"
+    assert body["tool"]["status"] == "proposal_queued"
+    assert body["state"]["tool_queue_count"] == 1
+    assert len(body["state"]["approval_queue"]) == 1
+    assert body["state"]["approval_queue"][0]["tool_id"] == "math.calculate"
+    assert body["state"]["approval_queue"][0]["execution_allowed"] is False

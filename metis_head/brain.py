@@ -26,7 +26,7 @@ from .reducer import clear_failures, reduce_metis_event, replay_events
 from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state
 from .sim_manifest import build_sim_test_manifest
-from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools
+from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
 
@@ -164,6 +164,31 @@ def _queue_tool_proposal(tool_id: str, arguments: Any, reason: str | None = None
     }
 
 
+def _handle_chat_tool_request(user_message: str, options: dict[str, Any]) -> dict[str, Any] | None:
+    tool_options = options.get("tools") if isinstance(options.get("tools"), dict) else {}
+    if tool_options.get("enabled", True) is False:
+        return None
+    route = route_tool_request(user_message)
+    if route is None:
+        return None
+    tool_id = route["tool_id"]
+    arguments = route.get("arguments") or {}
+    tool = get_tool(tool_id)
+    if STATE.get("interaction_mode") == "agent" or tool.permission_mode != "dry_run" or tool.side_effect_class != "none":
+        queued = _queue_tool_proposal(tool_id, arguments, route.get("reason"))
+        return {"status": "proposal_queued", "tool_id": tool_id, "route": route, "proposal": queued.get("proposal")}
+    receipt = dry_run_tool(tool_id, arguments)
+    return {"status": "dry_run_complete", "tool_id": tool_id, "route": route, "receipt": receipt}
+
+
+def _tool_chat_message(tool_result: dict[str, Any]) -> str:
+    tool_id = tool_result["tool_id"]
+    if tool_result["status"] == "proposal_queued":
+        return f"Tool proposal queued: {tool_id}. Execution allowed: false. Review is required before any side-effectful action."
+    receipt = tool_result.get("receipt", {})
+    return f"Tool dry-run complete: {tool_id}\n\nResult: {receipt.get('result')}\n\nNo external action was executed."
+
+
 @app.post("/metis/tools/propose")
 def tool_propose(payload: dict[str, Any]) -> dict[str, Any]:
     tool_id = payload.get("tool_id")
@@ -251,6 +276,16 @@ def _apply_voice_result(result: VoiceResult) -> None:
         STATE = reduce_metis_event(STATE, event)
 
 
+def _speak_chat_response(assistant_message: str, options: dict[str, Any]) -> dict[str, Any] | None:
+    voice_options = options.get("voice") if isinstance(options.get("voice"), dict) else {}
+    if not voice_options.get("speak_response"):
+        return None
+    speak_options = {"voice": {**voice_options, "enabled": True}}
+    voice_result = speak_text(assistant_message, STATE, speak_options)
+    _apply_voice_result(voice_result)
+    return _voice_response_payload(voice_result)
+
+
 @app.post("/metis/chat")
 def chat(payload: dict[str, Any]) -> dict[str, Any]:
     global STATE
@@ -260,12 +295,46 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
     proposal_queued = False
     policy = classify_intent(user_message, STATE)
-    if should_queue_proposal(policy, STATE):
+    tool_result = None
+    try:
+        tool_result = _handle_chat_tool_request(user_message, options)
+    except ToolRegistryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if tool_result is None and should_queue_proposal(policy, STATE):
         STATE = reduce_metis_event(
             STATE,
             {"type": "user_intent", "intent": user_message, "action_class": policy.action_class, "policy": policy.to_dict()},
         )
         proposal_queued = True
+    if tool_result is not None:
+        assistant_message = _tool_chat_message(tool_result)
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "tool_router",
+                "model": tool_result["tool_id"],
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _speak_chat_response(assistant_message, options)
+        return {
+            "message": assistant_message,
+            "provider": "tool_router",
+            "model": tool_result["tool_id"],
+            "proposal_queued": proposal_queued or tool_result["status"] == "proposal_queued",
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": policy.to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"tool": tool_result},
+            "retrieval": None,
+            "voice": voice,
+            "tool": tool_result,
+        }
 
     retrieval = None
     retrieval_context = None
@@ -332,13 +401,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "source_state": source_state,
         },
     )
-    voice = None
-    voice_options = options.get("voice") if isinstance(options.get("voice"), dict) else {}
-    if voice_options.get("speak_response"):
-        speak_options = {"voice": {**voice_options, "enabled": True}}
-        voice_result = speak_text(assistant_message, STATE, speak_options)
-        _apply_voice_result(voice_result)
-        voice = _voice_response_payload(voice_result)
+    voice = _speak_chat_response(assistant_message, options)
     metadata = dict(result.metadata)
     if retrieval is not None:
         metadata["boh"] = retrieval.to_metadata()

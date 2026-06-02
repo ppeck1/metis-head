@@ -10,12 +10,14 @@ token).
 
 ## Current Phase
 
-Phase scope: `0T` - governed tool registry and dry-run tool lane (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer`).
+Phase scope: `0T/CHAT` - governed tool registry, dry-run tool lane, and explicit chat-to-tool routing (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer`).
 
 Status: Metis now has a native governed tool registry with MCP-inspired manifests, seeded safe
-tools, proposal records, and dry-run receipts. Phase 0T does not spawn MCP servers, vendor public
-repos, read files, run git, mutate memory, call BOH/Atlas/tools, or execute external actions.
-Agent Mode always queues tool proposals with `execution_allowed=false`.
+tools, proposal records, dry-run receipts, and deterministic routing for clear tool requests in
+virtual chat. Safe Human Mode chat requests such as simple arithmetic can return a dry-run receipt
+through `tool_router` without requiring an LLM provider; Agent Mode and side-effectful tools always
+queue proposals with `execution_allowed=false`. Phase 0T/CHAT does not spawn MCP servers, vendor
+public repos, read files, run git, mutate memory, call BOH/Atlas/tools, or execute external actions.
 
 Phase 0T implemented:
 
@@ -28,6 +30,10 @@ Phase 0T implemented:
 - Extended proposal records with tool ID, sanitized arguments, risk class, side-effect class,
   dry-run availability, and `execution_allowed=false`.
 - Added a compact dashboard Tools panel for registry inspection, dry-run, and proposal queueing.
+- Added deterministic chat-to-tool routing for explicit `time.now`, `math.calculate`,
+  `text.summarize`, `filesystem.read_proposed`, `git.status_proposed`, and `memory.propose`
+  intents.
+- Added `options.tools.enabled=false` to bypass chat tool routing and use the selected LLM provider.
 - Used public MCP reference servers as pattern donors only; no runtime dependency was added.
 
 Previous Phase 0V/AUDIO9 status: the tuning-window visualizer animated through time-sliced spectrum frames from the
@@ -539,7 +545,7 @@ Metis — BOH remains the source of truth.
 - `GET /metis/tools`
 - `GET /metis/tools/{tool_id}`
 - `POST /metis/event`
-- `POST /metis/chat`
+- `POST /metis/chat` (selected LLM provider, or `tool_router` for explicit governed tool requests)
 - `POST /metis/tools/propose`
 - `POST /metis/tools/{tool_id}/dry_run`
 - `POST /metis/tools/{tool_id}/execute`
@@ -570,7 +576,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-104 passed under Python 3.11 (includes governed tool registry/dry-run lane, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+108 passed under Python 3.11 (includes governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

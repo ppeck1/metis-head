@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from hashlib import sha1
+import re
 from typing import Any
 
 
@@ -238,3 +239,47 @@ def _dry_run_output(tool_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
             raise ToolRegistryError(f"unsupported math operation: {operation}")
         return {"operation": operation, "result": result}
     raise ToolRegistryError(f"no dry-run implementation for: {tool_id}")
+
+
+def route_tool_request(message: str) -> dict[str, Any] | None:
+    text = message.strip()
+    lowered = text.lower()
+    if not text:
+        return None
+    math_route = _route_math(text)
+    if math_route:
+        return math_route
+    if any(phrase in lowered for phrase in ("what time", "current time", "time is it")):
+        return {"tool_id": "time.now", "arguments": {}, "reason": "chat requested current time"}
+    if lowered.startswith("summarize:") or lowered.startswith("summarise:"):
+        return {"tool_id": "text.summarize", "arguments": {"text": text.split(":", 1)[1].strip()}, "reason": "chat requested summarization"}
+    if "git status" in lowered:
+        return {"tool_id": "git.status_proposed", "arguments": {"repository": "."}, "reason": "chat requested git status"}
+    if lowered.startswith("read file ") or lowered.startswith("open file "):
+        path = text.split(" ", 2)[2].strip()
+        return {"tool_id": "filesystem.read_proposed", "arguments": {"path": path}, "reason": "chat requested file read"}
+    if lowered.startswith("remember "):
+        summary = text[len("remember ") :].strip()
+        memory_id = f"chat_memory_{sha1(summary.encode('utf-8')).hexdigest()[:8]}"
+        return {"tool_id": "memory.propose", "arguments": {"memory_id": memory_id, "summary": summary}, "reason": "chat requested memory proposal"}
+    return None
+
+
+def _route_math(text: str) -> dict[str, Any] | None:
+    patterns = [
+        (r"(?:calculate|what is|what's)\s+(-?\d+(?:\.\d+)?)\s*([\+\-\*/])\s*(-?\d+(?:\.\d+)?)", None),
+        (r"(?:add)\s+(-?\d+(?:\.\d+)?)\s+(?:and|to)\s+(-?\d+(?:\.\d+)?)", "add"),
+        (r"(?:multiply)\s+(-?\d+(?:\.\d+)?)\s+(?:and|by)\s+(-?\d+(?:\.\d+)?)", "multiply"),
+    ]
+    for pattern, named_operation in patterns:
+        match = re.search(pattern, text.lower())
+        if not match:
+            continue
+        if named_operation:
+            a, b = match.groups()
+            operation = named_operation
+        else:
+            a, symbol, b = match.groups()
+            operation = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}[symbol]
+        return {"tool_id": "math.calculate", "arguments": {"operation": operation, "a": float(a), "b": float(b)}, "reason": "chat requested calculation"}
+    return None
