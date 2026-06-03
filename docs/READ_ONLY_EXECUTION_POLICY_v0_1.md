@@ -19,8 +19,10 @@ adds a composed policy snapshot for operator review only; it does not approve pr
 execution, or broaden any lane. Phase 0AC validates tool arguments against manifest input schemas
 before proposals, dry-runs, execution requests, or chat-routed tool requests proceed. Phase 0AD adds
 advisory gate evaluation for operator preflight review only; it does not queue, approve, request, or
-execute tools. It does not enable arbitrary filesystem reads, arbitrary git commands, live URL fetch,
-BOH mutation, Atlas, hardware, shell, or external actions.
+execute tools. Phase 0AE makes proposal review scope explicit: approvals and denials are
+single-proposal, non-transferable, non-standing, and still do not directly allow execution. It does
+not enable arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas,
+hardware, shell, or external actions.
 
 ## Non-Goals
 
@@ -134,4 +136,6 @@ execution, or run tools. Phase 0AC adds manifest-backed argument validation and 
 secret-like extra fields without persisting raw values. Existing Phase 0W behavior remains for every
 other lane. Phase 0AD adds `/metis/tools/governance/evaluate` to report the same gates as an
 advisory decision packet; it does not mutate state or grant authority. Execution requests create
-blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.
+blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`. Phase 0AE
+adds `metis_proposal_review_scope.v0.1` to reviewed proposals and review receipts so approval cannot
+be misread as standing, transferable, or autonomous permission.

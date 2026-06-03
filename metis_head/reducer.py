@@ -279,6 +279,7 @@ def _reduce_proposal_review(state: dict[str, Any], event: dict[str, Any]) -> Non
         proposal["review_reason"] = reason or ""
         proposal["reviewed_at"] = event.get("reviewed_at") or event.get("timestamp")
         proposal["review_receipt"] = build_review_receipt(proposal, decision, reason)
+        proposal["review_scope"] = proposal["review_receipt"]["review_scope"]
         proposal["execution_allowed"] = False
         state["external_action_executed"] = False
         _refresh_proposal_counts(state)

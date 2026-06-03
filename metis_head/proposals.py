@@ -6,6 +6,7 @@ from typing import Any
 
 PROPOSAL_SCHEMA_VERSION = "metis_proposal.v0.1"
 PROPOSAL_REVIEW_SCHEMA_VERSION = "metis_proposal_review.v0.1"
+PROPOSAL_REVIEW_SCOPE_VERSION = "metis_proposal_review_scope.v0.1"
 
 
 def build_proposal(
@@ -55,6 +56,16 @@ def pending_count(proposals: list[dict[str, Any]]) -> int:
 
 
 def build_review_receipt(proposal: dict[str, Any], decision: str, reason: str | None = None) -> dict[str, Any]:
+    review_scope = {
+        "schema_version": PROPOSAL_REVIEW_SCOPE_VERSION,
+        "scope_type": "single_proposal",
+        "proposal_id": proposal.get("proposal_id"),
+        "tool_id": proposal.get("tool_id"),
+        "standing_approval": False,
+        "transferable": False,
+        "expires_at": None,
+        "execution_allowed": False,
+    }
     return {
         "schema_version": PROPOSAL_REVIEW_SCHEMA_VERSION,
         "proposal_id": proposal.get("proposal_id"),
@@ -66,4 +77,5 @@ def build_review_receipt(proposal: dict[str, Any], decision: str, reason: str | 
         "risk_class": proposal.get("risk_class"),
         "side_effect_class": proposal.get("side_effect_class"),
         "reason": reason or "",
+        "review_scope": review_scope,
     }
