@@ -31,6 +31,9 @@ requesting, or executing any step. Phase 0AJ reviews persisted plans with approv
 still without creating step proposals, requesting execution, or executing any step. Phase 0AK lets
 an approved plan queue eligible step proposals through the existing governed proposal lane, still
 without approving those proposals, requesting execution, or executing any step.
+Phase 0AL can request execution for approved plan step proposals through the same receipt gates used
+by single proposals. Unapproved steps are skipped, and future-only or side-effectful steps remain
+blocked by their existing proposal/receipt policies.
 
 ## Non-Goals
 
@@ -165,3 +168,7 @@ Phase 0AK adds replayable `tool_plan_step_queue` bookkeeping after proposal even
 eligible steps of an approved plan. The resulting proposals still require their own review and
 execution request gates; blocked/future-only steps remain proposal-only and no step is run by plan
 materialization.
+Phase 0AL adds replayable `tool_plan_execution_request` bookkeeping after execution-request receipts
+are created for individually approved step proposals. It reuses the existing proposal execution
+policy; it does not grant standing approval, bypass review, execute unapproved steps, or expand the
+approved read-only lane set.

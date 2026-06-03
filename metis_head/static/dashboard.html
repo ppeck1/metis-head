@@ -581,6 +581,7 @@
         <button onclick="approveToolPlan()">Approve Plan</button>
         <button onclick="denyToolPlan()">Deny Plan</button>
         <button onclick="queueToolPlanSteps()">Queue Step Proposals</button>
+        <button onclick="requestToolPlanExecution()">Request Plan Execution</button>
       </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
@@ -1183,6 +1184,29 @@
         await refresh();
         await refreshToolPlans();
         await refreshProposals();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
+    async function requestToolPlanExecution() {
+      const planId = document.getElementById('toolPlanSelect').value;
+      if (!planId) {
+        document.getElementById('toolStatus').textContent = 'No tool plan selected';
+        return;
+      }
+      const reason = document.getElementById('toolPlanReason').value.trim();
+      try {
+        const response = await fetch(`/metis/tools/plans/${encodeURIComponent(planId)}/request_execution`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({reason})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Tool plan execution request failed');
+        await refresh();
+        await refreshToolPlans();
+        await refreshExecutionReceipts();
       } catch (error) {
         document.getElementById('toolStatus').textContent = String(error);
       }

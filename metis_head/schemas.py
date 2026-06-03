@@ -39,6 +39,7 @@ EVENT_TYPES = {
     "tool_plan",
     "tool_plan_review",
     "tool_plan_step_queue",
+    "tool_plan_execution_request",
 }
 
 ACTION_CLASSES = {

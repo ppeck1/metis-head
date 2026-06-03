@@ -288,6 +288,69 @@ def queue_tool_plan_steps(plan_id: str, payload: dict[str, Any] | None = None) -
     }
 
 
+@app.post("/metis/tools/plans/{plan_id}/request_execution")
+def request_tool_plan_execution(plan_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    plan = _tool_plan_by_id(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    if plan.get("review_status") != "approved":
+        raise HTTPException(status_code=409, detail="tool plan must be approved before execution can be requested")
+    reason = ""
+    if isinstance(payload, dict) and isinstance(payload.get("reason"), str):
+        reason = payload["reason"]
+    executed_steps: list[dict[str, Any]] = []
+    receipts: list[dict[str, Any]] = []
+    skipped_steps: list[dict[str, Any]] = []
+    try:
+        for step in plan.get("steps", []):
+            if not isinstance(step, dict):
+                continue
+            proposal_id = step.get("proposal_id")
+            if not proposal_id:
+                skipped_steps.append({"step_id": step.get("step_id"), "reason": "no_proposal"})
+                continue
+            if step.get("execution_receipt_id"):
+                skipped_steps.append({"step_id": step.get("step_id"), "proposal_id": proposal_id, "reason": "already_requested"})
+                continue
+            proposal = _proposal_by_id(str(proposal_id))
+            if proposal is None:
+                skipped_steps.append({"step_id": step.get("step_id"), "proposal_id": proposal_id, "reason": "proposal_missing"})
+                continue
+            if proposal.get("review_status") != "approved":
+                skipped_steps.append({"step_id": step.get("step_id"), "proposal_id": proposal_id, "reason": "proposal_not_approved"})
+                continue
+            event = _execution_request_event_for_proposal(proposal, reason or f"plan {plan_id} {step.get('step_id')}")
+            STATE = reduce_metis_event(STATE, event)
+            receipt = STATE.get("execution_audit_log", [])[-1]
+            receipts.append(receipt)
+            executed_steps.append(
+                {
+                    "step_id": step.get("step_id"),
+                    "proposal_id": proposal_id,
+                    "receipt_id": receipt.get("receipt_id"),
+                    "execution_status": receipt.get("execution_status"),
+                }
+            )
+    except (ToolRegistryError, ReadOnlyToolError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if executed_steps:
+        plan_event = {"type": "tool_plan_execution_request", "plan_id": plan_id, "executed_steps": executed_steps, "requested_at": utc_now()}
+        STATE = reduce_metis_event(STATE, plan_event)
+    else:
+        plan_event = None
+    return {
+        "status": "plan_execution_requested" if executed_steps else "no_plan_execution_requested",
+        "plan": _tool_plan_by_id(plan_id),
+        "executed_steps": executed_steps,
+        "receipts": receipts,
+        "skipped_steps": skipped_steps,
+        "event": plan_event,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:
     for proposal in STATE.get("approval_queue", []):
         if proposal.get("proposal_id") == proposal_id:
@@ -366,6 +429,30 @@ def execution_policy() -> dict[str, Any]:
     return read_only_execution_policy()
 
 
+def _execution_request_event_for_proposal(proposal: dict[str, Any], reason: str = "") -> dict[str, Any]:
+    dry_run_receipt = None
+    read_only_result = None
+    if proposal.get("review_status") == "approved" and proposal.get("tool_id") == "time.now":
+        read_only_result = dry_run_tool("time.now", proposal.get("tool_arguments") or {})["result"]
+    elif proposal.get("review_status") == "approved" and proposal.get("tool_id") == "git.status":
+        read_only_result = execute_git_status(proposal.get("tool_arguments") or {})
+    elif proposal.get("review_status") == "approved" and proposal.get("tool_id") == "filesystem.read":
+        read_only_result = execute_filesystem_read(proposal.get("tool_arguments") or {})
+    elif proposal.get("review_status") == "approved" and proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
+        dry_run_receipt = dry_run_tool(str(proposal.get("tool_id")), proposal.get("tool_arguments") or {})
+    event = {
+        "type": "execution_request",
+        "proposal_id": proposal.get("proposal_id"),
+        "reason": reason,
+        "requested_at": utc_now(),
+    }
+    if dry_run_receipt:
+        event["dry_run_receipt"] = dry_run_receipt
+    if read_only_result:
+        event["read_only_result"] = read_only_result
+    return event
+
+
 @app.post("/metis/proposals/{proposal_id}/request_execution")
 def request_proposal_execution(proposal_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
     global STATE
@@ -375,38 +462,10 @@ def request_proposal_execution(proposal_id: str, payload: dict[str, Any] | None 
     reason = ""
     if isinstance(payload, dict) and isinstance(payload.get("reason"), str):
         reason = payload["reason"]
-    dry_run_receipt = None
-    read_only_result = None
-    if proposal.get("review_status") == "approved" and proposal.get("tool_id") == "time.now":
-        try:
-            read_only_result = dry_run_tool("time.now", proposal.get("tool_arguments") or {})["result"]
-        except ToolRegistryError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    elif proposal.get("review_status") == "approved" and proposal.get("tool_id") == "git.status":
-        try:
-            read_only_result = execute_git_status(proposal.get("tool_arguments") or {})
-        except ReadOnlyToolError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    elif proposal.get("review_status") == "approved" and proposal.get("tool_id") == "filesystem.read":
-        try:
-            read_only_result = execute_filesystem_read(proposal.get("tool_arguments") or {})
-        except ReadOnlyToolError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    elif proposal.get("review_status") == "approved" and proposal.get("dry_run_available") and proposal.get("side_effect_class") == "none":
-        try:
-            dry_run_receipt = dry_run_tool(str(proposal.get("tool_id")), proposal.get("tool_arguments") or {})
-        except ToolRegistryError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    event = {
-        "type": "execution_request",
-        "proposal_id": proposal_id,
-        "reason": reason,
-        "requested_at": utc_now(),
-    }
-    if dry_run_receipt:
-        event["dry_run_receipt"] = dry_run_receipt
-    if read_only_result:
-        event["read_only_result"] = read_only_result
+    try:
+        event = _execution_request_event_for_proposal(proposal, reason)
+    except (ToolRegistryError, ReadOnlyToolError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     STATE = reduce_metis_event(STATE, event)
     receipt = STATE.get("execution_audit_log", [])[-1] if STATE.get("execution_audit_log") else None
     return {

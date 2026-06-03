@@ -66,6 +66,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_tool_plan_review(next_state, event)
     elif event_type == "tool_plan_step_queue":
         _reduce_tool_plan_step_queue(next_state, event)
+    elif event_type == "tool_plan_execution_request":
+        _reduce_tool_plan_execution_request(next_state, event)
 
     return next_state
 
@@ -403,6 +405,40 @@ def _reduce_tool_plan_step_queue(state: dict[str, Any], event: dict[str, Any]) -
         _refresh_proposal_counts(state)
         state["authority_state"] = "awaiting_approval" if state.get("pending_approval_count") else "local_governed"
         state["cognition_state"] = "awaiting_approval" if state.get("pending_approval_count") else "idle"
+        state["external_action_executed"] = False
+        state["module_health"]["metis_tools"] = "ok"
+        return
+
+
+def _reduce_tool_plan_execution_request(state: dict[str, Any], event: dict[str, Any]) -> None:
+    plan_id = str(event.get("plan_id") or "")
+    executed_steps = event.get("executed_steps") if isinstance(event.get("executed_steps"), list) else []
+    if not plan_id or not executed_steps:
+        return
+    for plan in state.setdefault("tool_plan_queue", []):
+        if plan.get("plan_id") != plan_id:
+            continue
+        if plan.get("review_status") != "approved":
+            return
+        receipt_ids = list(plan.get("execution_receipt_ids") or [])
+        for executed in executed_steps:
+            if not isinstance(executed, dict):
+                continue
+            proposal_id = executed.get("proposal_id")
+            receipt_id = executed.get("receipt_id")
+            if receipt_id and receipt_id not in receipt_ids:
+                receipt_ids.append(receipt_id)
+            for step in plan.get("steps", []):
+                if isinstance(step, dict) and step.get("proposal_id") == proposal_id:
+                    step["execution_receipt_id"] = receipt_id
+                    step["execution_status"] = executed.get("execution_status")
+                    step["execution_allowed"] = False
+        plan["execution_receipt_ids"] = receipt_ids
+        plan["execution_request_count"] = len(receipt_ids)
+        plan["last_execution_requested_at"] = event.get("requested_at")
+        plan["status"] = "execution_requested" if receipt_ids else plan.get("status", "steps_queued")
+        plan["execution_allowed"] = False
+        _refresh_proposal_counts(state)
         state["external_action_executed"] = False
         state["module_health"]["metis_tools"] = "ok"
         return
