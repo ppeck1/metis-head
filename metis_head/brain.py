@@ -31,6 +31,7 @@ from .sim_manifest import build_sim_test_manifest
 from .tool_contract import build_tool_contract_manifest
 from .tool_governance import evaluate_tool_request
 from .tool_policy_snapshot import build_tool_policy_snapshot
+from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
@@ -312,6 +313,11 @@ def tool_governance_evaluate(payload: dict[str, Any]) -> dict[str, Any]:
     except ToolRegistryError as exc:
         status_code = 404 if str(exc).startswith("unknown tool") else 400
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+
+@app.get("/metis/tools/readiness")
+def tool_readiness() -> dict[str, Any]:
+    return calculate_tool_readiness(STATE)
 
 
 @app.get("/metis/tools/{tool_id}")

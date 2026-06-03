@@ -22,7 +22,8 @@ advisory gate evaluation for operator preflight review only; it does not queue, 
 execute tools. Phase 0AE makes proposal review scope explicit: approvals and denials are
 single-proposal, non-transferable, non-standing, and still do not directly allow execution. It does
 not enable arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas,
-hardware, shell, or external actions.
+hardware, shell, or external actions. Phase 0AF adds a computed governed-tool readiness checklist;
+it is a measurement surface only.
 
 ## Non-Goals
 
@@ -138,4 +139,6 @@ other lane. Phase 0AD adds `/metis/tools/governance/evaluate` to report the same
 advisory decision packet; it does not mutate state or grant authority. Execution requests create
 blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`. Phase 0AE
 adds `metis_proposal_review_scope.v0.1` to reviewed proposals and review receipts so approval cannot
-be misread as standing, transferable, or autonomous permission.
+be misread as standing, transferable, or autonomous permission. Phase 0AF adds
+`metis_tool_readiness.v0.1`, a derived checklist/score for registry, schema, governance, review,
+audit, and boundary readiness. The score does not itself authorize execution.
