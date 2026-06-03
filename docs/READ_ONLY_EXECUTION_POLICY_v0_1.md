@@ -26,7 +26,8 @@ hardware, shell, or external actions. Phase 0AF adds a computed governed-tool re
 it is a measurement surface only. Phase 0AG adds a computed completion report for the current
 simulation-first governed tool substrate; future live integrations remain out of scope. Phase 0AH
 adds a deterministic task planner that produces reviewable tool plans without running or queueing
-tools.
+tools. Phase 0AI persists those plans in canonical state for review, still without approving,
+requesting, or executing any step.
 
 ## Non-Goals
 
@@ -152,3 +153,5 @@ external mutation, or autonomous execution as complete.
 Phase 0AH adds `metis_tool_task_plan.v0.1`, a non-executing task plan surface. Plans may reference
 dry-run, proposal-required, future-only, or blocked steps, but the planner itself does not create
 proposals, approve proposals, request execution, or execute tools.
+Phase 0AI stores plans in `tool_plan_queue` via replayable `tool_plan` events. Persistence is for
+review lifecycle only and does not imply plan approval or step execution.

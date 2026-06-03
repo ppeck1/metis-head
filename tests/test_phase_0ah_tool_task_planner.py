@@ -52,7 +52,7 @@ def test_tool_task_plan_endpoint_and_dashboard_hook_are_available() -> None:
     dashboard = client.get("/").text
 
     assert response.status_code == 200
-    assert response.json()["schema_version"] == TOOL_TASK_PLAN_VERSION
-    assert response.json()["execution_allowed"] is False
+    assert response.json()["plan"]["schema_version"] == TOOL_TASK_PLAN_VERSION
+    assert response.json()["plan"]["execution_allowed"] is False
     assert "planToolTask" in dashboard
     assert "/metis/tools/task/plan" in dashboard

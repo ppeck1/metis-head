@@ -159,6 +159,35 @@ def proposals(status: str | None = None, proposal_type: str | None = None, tool_
     }
 
 
+@app.get("/metis/tools/plans")
+def tool_plans(status: str | None = None) -> dict[str, Any]:
+    plans = list(STATE.get("tool_plan_queue", []))
+    filtered = plans
+    if status:
+        filtered = [plan for plan in filtered if plan.get("review_status") == status or plan.get("status") == status]
+    return {
+        "plans": filtered,
+        "total_count": len(plans),
+        "filtered_count": len(filtered),
+        "filters": {"status": status or ""},
+    }
+
+
+def _tool_plan_by_id(plan_id: str) -> dict[str, Any] | None:
+    for plan in STATE.get("tool_plan_queue", []):
+        if plan.get("plan_id") == plan_id:
+            return plan
+    return None
+
+
+@app.get("/metis/tools/plans/{plan_id}")
+def tool_plan_detail(plan_id: str) -> dict[str, Any]:
+    plan = _tool_plan_by_id(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    return {"plan": plan}
+
+
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:
     for proposal in STATE.get("approval_queue", []):
         if proposal.get("proposal_id") == proposal_id:
@@ -329,10 +358,18 @@ def tool_completion() -> dict[str, Any]:
 
 @app.post("/metis/tools/task/plan")
 def tool_task_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    global STATE
     try:
-        return plan_tool_task(str(payload.get("task") or ""), STATE)
+        plan = plan_tool_task(str(payload.get("task") or ""), STATE)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if payload.get("persist", True) is False:
+        return plan
+    if _tool_plan_by_id(plan["plan_id"]):
+        return {"status": "plan_already_exists", "plan": _tool_plan_by_id(plan["plan_id"]), "state": STATE, "leds": resolve_leds(STATE)}
+    event = {"type": "tool_plan", "plan": plan}
+    STATE = reduce_metis_event(STATE, event)
+    return {"status": "plan_queued", "plan": _tool_plan_by_id(plan["plan_id"]), "event": event, "state": STATE, "leds": resolve_leds(STATE)}
 
 
 @app.get("/metis/tools/{tool_id}")

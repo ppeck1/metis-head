@@ -1163,7 +1163,8 @@
       });
       const data = await response.json();
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
-      document.getElementById('toolStatus').textContent = data.status || data.detail || 'Task planned';
+      const stepCount = data.plan ? data.plan.step_count : data.step_count;
+      document.getElementById('toolStatus').textContent = data.status || `${stepCount || 0} planned step(s)` || data.detail || 'Task planned';
       return data;
     }
     async function dryRunTool() {

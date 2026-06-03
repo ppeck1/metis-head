@@ -59,6 +59,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_proposal_review(next_state, event)
     elif event_type == "execution_request":
         _reduce_execution_request(next_state, event)
+    elif event_type == "tool_plan":
+        _reduce_tool_plan(next_state, event)
 
     return next_state
 
@@ -217,9 +219,7 @@ def _reduce_intent(state: dict[str, Any], event: dict[str, Any]) -> None:
             metadata=_proposal_metadata_from_event(event),
         )
         state["approval_queue"].append(proposal)
-        state["pending_approval_count"] = pending_count(state["approval_queue"])
-        state["memory_proposal_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "memory"])
-        state["tool_queue_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "action"])
+        _refresh_proposal_counts(state)
         state["cognition_state"] = "awaiting_approval"
         state["authority_state"] = "awaiting_approval"
         state["external_action_executed"] = False
@@ -253,8 +253,7 @@ def _reduce_memory(state: dict[str, Any], event: dict[str, Any]) -> None:
             proposal_type="memory",
         )
         state["approval_queue"].append(proposal)
-        state["memory_proposal_count"] = pending_count([item for item in state["approval_queue"] if item.get("proposal_type") == "memory"])
-        state["pending_approval_count"] = pending_count(state["approval_queue"])
+        _refresh_proposal_counts(state)
         state["authority_state"] = "awaiting_approval"
         state["memory_promoted"] = False
     elif operation == "delete":
@@ -294,9 +293,11 @@ def _reduce_proposal_review(state: dict[str, Any], event: dict[str, Any]) -> Non
 
 def _refresh_proposal_counts(state: dict[str, Any]) -> None:
     queue = state.setdefault("approval_queue", [])
-    state["pending_approval_count"] = pending_count(queue)
+    plan_queue = state.setdefault("tool_plan_queue", [])
+    pending_plans = sum(1 for plan in plan_queue if plan.get("review_status", "pending") == "pending")
+    state["pending_approval_count"] = pending_count(queue) + pending_plans
     state["memory_proposal_count"] = pending_count([item for item in queue if item.get("proposal_type") == "memory"])
-    state["tool_queue_count"] = pending_count([item for item in queue if item.get("proposal_type") == "action"])
+    state["tool_queue_count"] = pending_count([item for item in queue if item.get("proposal_type") == "action"]) + pending_plans
 
 
 def _reduce_execution_request(state: dict[str, Any], event: dict[str, Any]) -> None:
@@ -318,6 +319,22 @@ def _reduce_execution_request(state: dict[str, Any], event: dict[str, Any]) -> N
     state["last_block_reason"] = receipt["execution_status"]
     if receipt["execution_status"].startswith("blocked"):
         state["authority_state"] = "blocked"
+
+
+def _reduce_tool_plan(state: dict[str, Any], event: dict[str, Any]) -> None:
+    plan = deepcopy(event.get("plan")) if isinstance(event.get("plan"), dict) else {}
+    if not plan:
+        return
+    plan.setdefault("review_status", "pending")
+    plan.setdefault("execution_allowed", False)
+    plan.setdefault("execution_status", "not_requested")
+    plan["status"] = "pending_review"
+    state.setdefault("tool_plan_queue", []).append(plan)
+    _refresh_proposal_counts(state)
+    state["cognition_state"] = "awaiting_approval"
+    state["authority_state"] = "awaiting_approval"
+    state["external_action_executed"] = False
+    state["module_health"]["metis_tools"] = "ok"
 
 
 def _proposal_metadata_from_event(event: dict[str, Any]) -> dict[str, Any]:
