@@ -23,7 +23,8 @@ execute tools. Phase 0AE makes proposal review scope explicit: approvals and den
 single-proposal, non-transferable, non-standing, and still do not directly allow execution. It does
 not enable arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas,
 hardware, shell, or external actions. Phase 0AF adds a computed governed-tool readiness checklist;
-it is a measurement surface only.
+it is a measurement surface only. Phase 0AG adds a computed completion report for the current
+simulation-first governed tool substrate; future live integrations remain out of scope.
 
 ## Non-Goals
 
@@ -142,3 +143,7 @@ adds `metis_proposal_review_scope.v0.1` to reviewed proposals and review receipt
 be misread as standing, transferable, or autonomous permission. Phase 0AF adds
 `metis_tool_readiness.v0.1`, a derived checklist/score for registry, schema, governance, review,
 audit, and boundary readiness. The score does not itself authorize execution.
+Phase 0AG adds `metis_tool_completion.v0.1`, which reports 100% completion only for the current
+simulation-first governed tool substrate. It does not mark live URL fetch, BOH retrieval-as-tool,
+Atlas execution, filesystem writes, arbitrary git commands, shell execution, hardware actions,
+external mutation, or autonomous execution as complete.

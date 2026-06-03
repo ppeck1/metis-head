@@ -29,6 +29,7 @@ from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state, utc_now
 from .sim_manifest import build_sim_test_manifest
 from .tool_contract import build_tool_contract_manifest
+from .tool_completion import calculate_tool_completion
 from .tool_governance import evaluate_tool_request
 from .tool_policy_snapshot import build_tool_policy_snapshot
 from .tool_readiness import calculate_tool_readiness
@@ -318,6 +319,11 @@ def tool_governance_evaluate(payload: dict[str, Any]) -> dict[str, Any]:
 @app.get("/metis/tools/readiness")
 def tool_readiness() -> dict[str, Any]:
     return calculate_tool_readiness(STATE)
+
+
+@app.get("/metis/tools/completion")
+def tool_completion() -> dict[str, Any]:
+    return calculate_tool_completion(STATE)
 
 
 @app.get("/metis/tools/{tool_id}")
