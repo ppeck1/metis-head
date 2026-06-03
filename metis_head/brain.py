@@ -29,6 +29,7 @@ from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state, utc_now
 from .sim_manifest import build_sim_test_manifest
 from .tool_contract import build_tool_contract_manifest
+from .tool_policy_snapshot import build_tool_policy_snapshot
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
@@ -291,6 +292,11 @@ def tools() -> dict[str, Any]:
 @app.get("/metis/tools/contract")
 def tool_contract() -> dict[str, Any]:
     return build_tool_contract_manifest()
+
+
+@app.get("/metis/tools/policy_snapshot")
+def tool_policy_snapshot() -> dict[str, Any]:
+    return build_tool_policy_snapshot(STATE)
 
 
 @app.get("/metis/tools/{tool_id}")

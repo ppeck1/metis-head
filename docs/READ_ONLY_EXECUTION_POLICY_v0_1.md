@@ -14,9 +14,10 @@ gates. Phase 0J routes explicit chat requests into those active approved read-on
 but chat still never executes them directly. Phase 0K adds a blocked `fetch.url_proposed` lane for
 future URL retrieval review and a side-effect-free visible planning dry-run. Phase 0E adds blocked
 `boh.retrieve_proposed` for future retrieval-as-tool review. Phase 0AA adds a derived tool contract
-manifest for inspection/export only; it does not grant permission or execution authority. It does not enable
-arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas, hardware,
-shell, or external actions.
+manifest for inspection/export only; it does not grant permission or execution authority. Phase 0AB
+adds a composed policy snapshot for operator review only; it does not approve proposals, request
+execution, or broaden any lane. It does not enable arbitrary filesystem reads, arbitrary git
+commands, live URL fetch, BOH mutation, Atlas, hardware, shell, or external actions.
 
 ## Non-Goals
 
@@ -122,6 +123,8 @@ inspection only; filters do not mutate review state or authorize execution. Phas
 `permission_requirements` metadata to the tool catalog for operator review; this metadata does not
 grant permission, standing approval, or execution authority. Phase 0AA adds `/metis/tools/contract`
 as a derived manifest of counts, lanes, matrix rows, and boundaries; it is visibility only and does
-not change any execution gate. Existing Phase 0W behavior remains for every other lane: execution
-requests create blocked or dry-run-only audit receipts, and `external_action_executed` remains
-`false`.
+not change any execution gate. Phase 0AB adds `/metis/tools/policy_snapshot`, which composes the
+tool contract, read-only policy, proposal queue, execution receipts, and explicit authority flags
+into one packet for review. It is visibility only and does not mutate review state, request
+execution, or run tools. Existing Phase 0W behavior remains for every other lane: execution requests
+create blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.

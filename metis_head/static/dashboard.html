@@ -542,6 +542,7 @@
         <button onclick="dryRunTool()">Dry Run</button>
         <button onclick="proposeTool()">Queue Proposal</button>
         <button onclick="refreshToolContract()">Tool Contract</button>
+        <button onclick="refreshToolPolicySnapshot()">Policy Snapshot</button>
       </div>
       <div class="status-line">Tool catalog includes lifecycle and permission_requirements metadata; labels do not grant execution.</div>
       <div class="tool-row">
@@ -1114,6 +1115,12 @@
       const data = await fetch('/metis/tools/contract').then(r => r.json());
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
       document.getElementById('toolStatus').textContent = `${data.summary.tool_count} tool contract lane(s)`;
+      return data;
+    }
+    async function refreshToolPolicySnapshot() {
+      const data = await fetch('/metis/tools/policy_snapshot').then(r => r.json());
+      document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('toolStatus').textContent = `${data.proposal_queue.total_count} proposal(s), ${data.execution_audit.receipt_count} receipt(s)`;
       return data;
     }
     async function dryRunTool() {
