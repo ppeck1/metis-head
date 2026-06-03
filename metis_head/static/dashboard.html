@@ -580,6 +580,7 @@
         <button onclick="refreshToolPlans()">Refresh Plans</button>
         <button onclick="approveToolPlan()">Approve Plan</button>
         <button onclick="denyToolPlan()">Deny Plan</button>
+        <button onclick="queueToolPlanSteps()">Queue Step Proposals</button>
       </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
@@ -1162,6 +1163,29 @@
     }
     async function denyToolPlan() {
       await reviewToolPlan('deny');
+    }
+    async function queueToolPlanSteps() {
+      const planId = document.getElementById('toolPlanSelect').value;
+      if (!planId) {
+        document.getElementById('toolStatus').textContent = 'No tool plan selected';
+        return;
+      }
+      const reason = document.getElementById('toolPlanReason').value.trim();
+      try {
+        const response = await fetch(`/metis/tools/plans/${encodeURIComponent(planId)}/queue_steps`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({reason})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || 'Tool plan step queue failed');
+        await refresh();
+        await refreshToolPlans();
+        await refreshProposals();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
     }
     async function refreshExecutionReceipts() {
       const data = await fetch('/metis/execution/receipts').then(r => r.json());

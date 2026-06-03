@@ -226,6 +226,68 @@ def deny_tool_plan(plan_id: str, payload: dict[str, Any] | None = None) -> dict[
     return _review_tool_plan(plan_id, "denied", payload)
 
 
+def _plan_step_queue_candidates(plan: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    candidates: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for step in plan.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        step_id = str(step.get("step_id") or "")
+        tool_id = step.get("tool_id")
+        if not tool_id:
+            skipped.append({"step_id": step_id, "reason": "no_tool"})
+        elif step.get("proposal_id"):
+            skipped.append({"step_id": step_id, "tool_id": tool_id, "reason": "already_queued"})
+        elif step.get("status") in {"blocked_no_tool", "blocked_invalid_arguments"}:
+            skipped.append({"step_id": step_id, "tool_id": tool_id, "reason": step.get("status")})
+        else:
+            candidates.append(step)
+    return candidates, skipped
+
+
+@app.post("/metis/tools/plans/{plan_id}/queue_steps")
+def queue_tool_plan_steps(plan_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    plan = _tool_plan_by_id(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    if plan.get("review_status") != "approved":
+        raise HTTPException(status_code=409, detail="tool plan must be approved before steps can be queued")
+    candidates, skipped = _plan_step_queue_candidates(plan)
+    queued_steps: list[dict[str, Any]] = []
+    queued_proposals: list[dict[str, Any]] = []
+    reason_prefix = ""
+    if isinstance(payload, dict) and isinstance(payload.get("reason"), str) and payload["reason"].strip():
+        reason_prefix = f"{payload['reason'].strip()}; "
+    try:
+        for step in candidates:
+            tool_id = str(step["tool_id"])
+            reason = f"{reason_prefix}plan {plan_id} {step.get('step_id')}: {step.get('reason', 'planned tool step')}"
+            queued = _queue_tool_proposal(tool_id, step.get("arguments") or {}, reason)
+            proposal = queued.get("proposal") or {}
+            queued_steps.append({"step_id": step.get("step_id"), "tool_id": tool_id, "proposal_id": proposal.get("proposal_id")})
+            queued_proposals.append(proposal)
+    except ToolRegistryError as exc:
+        status_code = 404 if str(exc).startswith("unknown tool") else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    if queued_steps:
+        event = {"type": "tool_plan_step_queue", "plan_id": plan_id, "queued_steps": queued_steps, "queued_at": utc_now()}
+        STATE = reduce_metis_event(STATE, event)
+    else:
+        event = None
+    reviewed_plan = _tool_plan_by_id(plan_id)
+    return {
+        "status": "plan_step_proposals_queued" if queued_steps else "no_plan_steps_queued",
+        "plan": reviewed_plan,
+        "queued_steps": queued_steps,
+        "queued_proposals": queued_proposals,
+        "skipped_steps": skipped,
+        "event": event,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:
     for proposal in STATE.get("approval_queue", []):
         if proposal.get("proposal_id") == proposal_id:

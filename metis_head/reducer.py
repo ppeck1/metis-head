@@ -64,6 +64,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_tool_plan(next_state, event)
     elif event_type == "tool_plan_review":
         _reduce_tool_plan_review(next_state, event)
+    elif event_type == "tool_plan_step_queue":
+        _reduce_tool_plan_step_queue(next_state, event)
 
     return next_state
 
@@ -364,6 +366,43 @@ def _reduce_tool_plan_review(state: dict[str, Any], event: dict[str, Any]) -> No
         _refresh_proposal_counts(state)
         state["authority_state"] = "awaiting_approval" if state.get("pending_approval_count") else "local_governed"
         state["cognition_state"] = "idle" if not state.get("pending_approval_count") else "awaiting_approval"
+        state["external_action_executed"] = False
+        state["module_health"]["metis_tools"] = "ok"
+        return
+
+
+def _reduce_tool_plan_step_queue(state: dict[str, Any], event: dict[str, Any]) -> None:
+    plan_id = str(event.get("plan_id") or "")
+    queued_steps = event.get("queued_steps") if isinstance(event.get("queued_steps"), list) else []
+    if not plan_id or not queued_steps:
+        return
+    for plan in state.setdefault("tool_plan_queue", []):
+        if plan.get("plan_id") != plan_id:
+            continue
+        if plan.get("review_status") != "approved":
+            return
+        materialized_ids = list(plan.get("materialized_proposal_ids") or [])
+        for queued in queued_steps:
+            if not isinstance(queued, dict):
+                continue
+            step_id = queued.get("step_id")
+            proposal_id = queued.get("proposal_id")
+            if proposal_id and proposal_id not in materialized_ids:
+                materialized_ids.append(proposal_id)
+            for step in plan.get("steps", []):
+                if isinstance(step, dict) and step.get("step_id") == step_id:
+                    step["proposal_id"] = proposal_id
+                    step["proposal_status"] = "queued"
+                    step["status"] = "proposal_queued"
+                    step["execution_allowed"] = False
+        plan["materialized_proposal_ids"] = materialized_ids
+        plan["materialized_step_count"] = len(materialized_ids)
+        plan["last_materialized_at"] = event.get("queued_at")
+        plan["status"] = "steps_queued" if materialized_ids else plan.get("status", "reviewed")
+        plan["execution_allowed"] = False
+        _refresh_proposal_counts(state)
+        state["authority_state"] = "awaiting_approval" if state.get("pending_approval_count") else "local_governed"
+        state["cognition_state"] = "awaiting_approval" if state.get("pending_approval_count") else "idle"
         state["external_action_executed"] = False
         state["module_health"]["metis_tools"] = "ok"
         return

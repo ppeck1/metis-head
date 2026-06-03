@@ -28,7 +28,9 @@ simulation-first governed tool substrate; future live integrations remain out of
 adds a deterministic task planner that produces reviewable tool plans without running or queueing
 tools. Phase 0AI persists those plans in canonical state for review, still without approving,
 requesting, or executing any step. Phase 0AJ reviews persisted plans with approve/deny receipts,
-still without creating step proposals, requesting execution, or executing any step.
+still without creating step proposals, requesting execution, or executing any step. Phase 0AK lets
+an approved plan queue eligible step proposals through the existing governed proposal lane, still
+without approving those proposals, requesting execution, or executing any step.
 
 ## Non-Goals
 
@@ -159,3 +161,7 @@ review lifecycle only and does not imply plan approval or step execution.
 Phase 0AJ adds `metis_tool_plan_review.v0.1` receipts through replayable `tool_plan_review` events.
 Approval or denial is scoped to one persisted plan, is non-transferable and non-standing, and still
 does not create proposals for plan steps, request execution, or run tools.
+Phase 0AK adds replayable `tool_plan_step_queue` bookkeeping after proposal events are created for
+eligible steps of an approved plan. The resulting proposals still require their own review and
+execution request gates; blocked/future-only steps remain proposal-only and no step is run by plan
+materialization.
