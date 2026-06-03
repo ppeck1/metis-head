@@ -9,6 +9,7 @@ from .tool_registry import ToolRegistryError, get_tool, validate_tool_arguments
 
 
 TOOL_TASK_PLAN_VERSION = "metis_tool_task_plan.v0.1"
+TOOL_PLAN_REVIEW_VERSION = "metis_tool_plan_review.v0.1"
 
 
 def plan_tool_task(task: str, state: dict[str, Any]) -> dict[str, Any]:
@@ -32,6 +33,31 @@ def plan_tool_task(task: str, state: dict[str, Any]) -> dict[str, Any]:
             "future_or_blocked_count": sum(1 for step in planned_steps if step["status"] in {"future_only_blocked", "blocked_no_tool"}),
         },
         "boundary": "Task plans are reviewable only; no tools are run, queued, approved, or executed by this endpoint.",
+    }
+
+
+def build_tool_plan_review_receipt(plan: dict[str, Any], decision: str, reason: str | None = None) -> dict[str, Any]:
+    step_count = len(plan.get("steps", [])) if isinstance(plan.get("steps"), list) else 0
+    return {
+        "schema_version": TOOL_PLAN_REVIEW_VERSION,
+        "plan_id": plan.get("plan_id"),
+        "decision": decision,
+        "execution_allowed": False,
+        "execution_status": "not_executed",
+        "next_allowed_action": "request_step_proposals" if decision == "approved" else "none",
+        "standing_approval": False,
+        "transferable": False,
+        "step_count": step_count,
+        "reason": reason or "",
+        "review_scope": {
+            "schema_version": TOOL_PLAN_REVIEW_VERSION,
+            "scope_type": "single_tool_plan",
+            "plan_id": plan.get("plan_id"),
+            "standing_approval": False,
+            "transferable": False,
+            "expires_at": None,
+            "execution_allowed": False,
+        },
     }
 
 

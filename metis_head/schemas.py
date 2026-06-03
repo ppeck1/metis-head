@@ -37,6 +37,7 @@ EVENT_TYPES = {
     "proposal_review",
     "execution_request",
     "tool_plan",
+    "tool_plan_review",
 }
 
 ACTION_CLASSES = {

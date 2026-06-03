@@ -6,6 +6,7 @@ from typing import Any
 from .execution import build_execution_receipt
 from .governance import classify_intent
 from .proposals import build_proposal, build_review_receipt, pending_count
+from .tool_task_planner import build_tool_plan_review_receipt
 from .schemas import FAILURE_TABLE, SUPPORTED_ADAPTER_SCHEMAS, validate_event
 
 
@@ -61,6 +62,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_execution_request(next_state, event)
     elif event_type == "tool_plan":
         _reduce_tool_plan(next_state, event)
+    elif event_type == "tool_plan_review":
+        _reduce_tool_plan_review(next_state, event)
 
     return next_state
 
@@ -335,6 +338,35 @@ def _reduce_tool_plan(state: dict[str, Any], event: dict[str, Any]) -> None:
     state["authority_state"] = "awaiting_approval"
     state["external_action_executed"] = False
     state["module_health"]["metis_tools"] = "ok"
+
+
+def _reduce_tool_plan_review(state: dict[str, Any], event: dict[str, Any]) -> None:
+    plan_id = str(event.get("plan_id") or "")
+    decision = str(event.get("decision") or "").lower()
+    if decision not in {"approved", "denied"}:
+        return
+    for plan in state.setdefault("tool_plan_queue", []):
+        if plan.get("plan_id") != plan_id:
+            continue
+        if plan.get("review_status", "pending") != "pending":
+            return
+        reason = str(event.get("reason") or "")
+        plan["review_status"] = decision
+        plan["reviewed_at"] = event.get("reviewed_at")
+        plan["review_decision"] = decision
+        plan["review_reason"] = reason
+        plan["review_receipt"] = build_tool_plan_review_receipt(plan, decision, reason)
+        plan["status"] = "reviewed"
+        plan["execution_allowed"] = False
+        for step in plan.get("steps", []):
+            if isinstance(step, dict):
+                step["execution_allowed"] = False
+        _refresh_proposal_counts(state)
+        state["authority_state"] = "awaiting_approval" if state.get("pending_approval_count") else "local_governed"
+        state["cognition_state"] = "idle" if not state.get("pending_approval_count") else "awaiting_approval"
+        state["external_action_executed"] = False
+        state["module_health"]["metis_tools"] = "ok"
+        return
 
 
 def _proposal_metadata_from_event(event: dict[str, Any]) -> dict[str, Any]:

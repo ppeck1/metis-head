@@ -574,6 +574,13 @@
         <button onclick="refreshExecutionReceipts()">Refresh Receipts</button>
         <button onclick="refreshExecutionPolicy()">Policy</button>
       </div>
+      <div class="tool-row">
+        <select id="toolPlanSelect"></select>
+        <input id="toolPlanReason" type="text" placeholder="Plan review reason (optional)">
+        <button onclick="refreshToolPlans()">Refresh Plans</button>
+        <button onclick="approveToolPlan()">Approve Plan</button>
+        <button onclick="denyToolPlan()">Deny Plan</button>
+      </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
     </section>
@@ -1102,6 +1109,60 @@
         document.getElementById('toolStatus').textContent = String(error);
       }
     }
+    async function refreshToolPlans(status = '') {
+      const suffix = status ? `?status=${encodeURIComponent(status)}` : '';
+      const data = await fetch(`/metis/tools/plans${suffix}`).then(r => r.json());
+      const plans = data.plans || [];
+      const select = document.getElementById('toolPlanSelect');
+      const previous = select.value;
+      select.innerHTML = '';
+      for (const plan of plans) {
+        const option = document.createElement('option');
+        option.value = plan.plan_id;
+        option.textContent = `${plan.plan_id} / ${plan.review_status || plan.status} / ${plan.step_count || 0} step(s)`;
+        select.appendChild(option);
+      }
+      if (previous && plans.some(plan => plan.plan_id === previous)) {
+        select.value = previous;
+      }
+      if (!plans.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No tool plans queued';
+        select.appendChild(option);
+      }
+      document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('toolStatus').textContent = `${data.filtered_count ?? plans.length}/${data.total_count ?? plans.length} tool plan(s) shown`;
+      return data;
+    }
+    async function reviewToolPlan(decision) {
+      const planId = document.getElementById('toolPlanSelect').value;
+      if (!planId) {
+        document.getElementById('toolStatus').textContent = 'No tool plan selected';
+        return;
+      }
+      const reason = document.getElementById('toolPlanReason').value.trim();
+      try {
+        const response = await fetch(`/metis/tools/plans/${encodeURIComponent(planId)}/${decision}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({reason})
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? result.status : String(result.detail || `Tool plan ${decision} failed`);
+        await refresh();
+        await refreshToolPlans();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
+    async function approveToolPlan() {
+      await reviewToolPlan('approve');
+    }
+    async function denyToolPlan() {
+      await reviewToolPlan('deny');
+    }
     async function refreshExecutionReceipts() {
       const data = await fetch('/metis/execution/receipts').then(r => r.json());
       executionReceipts = data.receipts || [];
@@ -1165,6 +1226,7 @@
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
       const stepCount = data.plan ? data.plan.step_count : data.step_count;
       document.getElementById('toolStatus').textContent = data.status || `${stepCount || 0} planned step(s)` || data.detail || 'Task planned';
+      await refreshToolPlans();
       return data;
     }
     async function dryRunTool() {
@@ -1384,6 +1446,7 @@
     refreshLlmOptions();
     refreshVoiceOptions();
     refreshTools();
+    refreshToolPlans();
     refreshBohStatus();
     setInterval(refreshBohStatus, 10000);
   </script>

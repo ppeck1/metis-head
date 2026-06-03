@@ -27,7 +27,8 @@ it is a measurement surface only. Phase 0AG adds a computed completion report fo
 simulation-first governed tool substrate; future live integrations remain out of scope. Phase 0AH
 adds a deterministic task planner that produces reviewable tool plans without running or queueing
 tools. Phase 0AI persists those plans in canonical state for review, still without approving,
-requesting, or executing any step.
+requesting, or executing any step. Phase 0AJ reviews persisted plans with approve/deny receipts,
+still without creating step proposals, requesting execution, or executing any step.
 
 ## Non-Goals
 
@@ -155,3 +156,6 @@ dry-run, proposal-required, future-only, or blocked steps, but the planner itsel
 proposals, approve proposals, request execution, or execute tools.
 Phase 0AI stores plans in `tool_plan_queue` via replayable `tool_plan` events. Persistence is for
 review lifecycle only and does not imply plan approval or step execution.
+Phase 0AJ adds `metis_tool_plan_review.v0.1` receipts through replayable `tool_plan_review` events.
+Approval or denial is scoped to one persisted plan, is non-transferable and non-standing, and still
+does not create proposals for plan steps, request execution, or run tools.

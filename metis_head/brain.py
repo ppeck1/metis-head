@@ -188,6 +188,44 @@ def tool_plan_detail(plan_id: str) -> dict[str, Any]:
     return {"plan": plan}
 
 
+def _review_tool_plan(plan_id: str, decision: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    plan = _tool_plan_by_id(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    if plan.get("review_status", "pending") != "pending":
+        raise HTTPException(status_code=409, detail="tool plan already reviewed")
+    reason = ""
+    if isinstance(payload, dict) and isinstance(payload.get("reason"), str):
+        reason = payload["reason"]
+    event = {
+        "type": "tool_plan_review",
+        "plan_id": plan_id,
+        "decision": decision,
+        "reason": reason,
+        "reviewed_at": utc_now(),
+    }
+    STATE = reduce_metis_event(STATE, event)
+    reviewed = _tool_plan_by_id(plan_id)
+    return {
+        "status": f"tool_plan_{decision}",
+        "plan": reviewed,
+        "review_receipt": reviewed.get("review_receipt") if reviewed else None,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
+@app.post("/metis/tools/plans/{plan_id}/approve")
+def approve_tool_plan(plan_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _review_tool_plan(plan_id, "approved", payload)
+
+
+@app.post("/metis/tools/plans/{plan_id}/deny")
+def deny_tool_plan(plan_id: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _review_tool_plan(plan_id, "denied", payload)
+
+
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:
     for proposal in STATE.get("approval_queue", []):
         if proposal.get("proposal_id") == proposal_id:
