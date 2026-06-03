@@ -32,7 +32,47 @@ class ToolManifest:
     source_reference: str
 
     def to_dict(self) -> dict[str, Any]:
-        return {"schema_version": TOOL_REGISTRY_VERSION, **asdict(self), "lifecycle": tool_lifecycle(self)}
+        return {
+            "schema_version": TOOL_REGISTRY_VERSION,
+            **asdict(self),
+            "lifecycle": tool_lifecycle(self),
+            "permission_requirements": tool_permission_requirements(self),
+        }
+
+
+def tool_permission_requirements(tool: ToolManifest) -> dict[str, Any]:
+    if tool.permission_mode == "approved_read_only":
+        gates = ["proposal_queued", "human_review_approved", "lane_scope_match", "redaction_before_display", "audit_receipt"]
+        blocked = ["autonomous_execution", "external_mutation", "local_mutation", "shell_execution"]
+    elif tool.permission_mode == "dry_run" and tool.side_effect_class == "none":
+        gates = ["schema_valid_arguments", "dry_run_receipt"]
+        blocked = ["external_action", "mutation", "shell_execution"]
+    elif tool.permission_mode == "proposal_only":
+        gates = ["proposal_queued", "human_review_recorded"]
+        blocked = ["execution_after_review", "external_action", "mutation", "network_io", "shell_execution"]
+    else:
+        gates = ["disabled"]
+        blocked = ["all_execution"]
+    if tool.tool_id == "memory.propose":
+        blocked = sorted(set(blocked + ["memory_promotion"]))
+    if tool.tool_id.startswith("boh."):
+        blocked = sorted(set(blocked + ["boh_http_call", "boh_mutation", "operator_token_use"]))
+    if tool.tool_id.startswith("fetch."):
+        blocked = sorted(set(blocked + ["dns_lookup", "http_request"]))
+    if tool.tool_id.startswith("filesystem."):
+        gates = gates + ["repo_path_allowlist"] if tool.permission_mode == "approved_read_only" else gates
+        blocked = sorted(set(blocked + ["arbitrary_filesystem_access"]))
+    if tool.tool_id.startswith("git."):
+        gates = gates + ["fixed_no_shell_arguments"] if tool.permission_mode == "approved_read_only" else gates
+        blocked = sorted(set(blocked + ["arbitrary_git_command"]))
+    return {
+        "mode": tool.permission_mode,
+        "required_gates": gates,
+        "blocked_capabilities": blocked,
+        "requires_human_review": tool.permission_mode != "dry_run" or tool.side_effect_class != "none",
+        "standing_approval_supported": False,
+        "notes": "Metadata only; reducer, proposal review, and execution receipt gates remain authoritative.",
+    }
 
 
 def tool_lifecycle(tool: ToolManifest) -> dict[str, Any]:

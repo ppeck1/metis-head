@@ -117,6 +117,8 @@ Phase 0N adds deterministic replay and receipt-detail tests for those paths with
 additional execution. Phase 0D adds lifecycle labels to the tool catalog for operator visibility;
 these labels do not grant permission or bypass review. Phase 0E adds blocked BOH retrieval proposals
 only; BOH retrieval-as-tool remains future work. Phase 0I adds proposal listing filters for operator
-inspection only; filters do not mutate review state or authorize execution. Existing Phase 0W
-behavior remains for every other lane: execution requests create blocked or dry-run-only audit receipts, and
+inspection only; filters do not mutate review state or authorize execution. Phase 0H adds
+`permission_requirements` metadata to the tool catalog for operator review; this metadata does not
+grant permission, standing approval, or execution authority. Existing Phase 0W behavior remains for
+every other lane: execution requests create blocked or dry-run-only audit receipts, and
 `external_action_executed` remains `false`.
