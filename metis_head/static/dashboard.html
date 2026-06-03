@@ -546,6 +546,7 @@
         <button onclick="evaluateToolGate()">Evaluate Gate</button>
         <button onclick="refreshToolReadiness()">Tool Readiness</button>
         <button onclick="refreshToolCompletion()">Tool Completion</button>
+        <button onclick="planToolTask()">Plan Task</button>
       </div>
       <div class="status-line">Tool catalog includes lifecycle and permission_requirements metadata; labels do not grant execution.</div>
       <div class="tool-row">
@@ -1151,6 +1152,18 @@
       const data = await fetch('/metis/tools/completion').then(r => r.json());
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
       document.getElementById('toolStatus').textContent = `${data.completion_percent}% ${data.track_scope}`;
+      return data;
+    }
+    async function planToolTask() {
+      const task = document.getElementById('chatInput').value || 'plan a governed tool task';
+      const response = await fetch('/metis/tools/task/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task })
+      });
+      const data = await response.json();
+      document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('toolStatus').textContent = data.status || data.detail || 'Task planned';
       return data;
     }
     async function dryRunTool() {

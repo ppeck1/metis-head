@@ -24,7 +24,9 @@ single-proposal, non-transferable, non-standing, and still do not directly allow
 not enable arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas,
 hardware, shell, or external actions. Phase 0AF adds a computed governed-tool readiness checklist;
 it is a measurement surface only. Phase 0AG adds a computed completion report for the current
-simulation-first governed tool substrate; future live integrations remain out of scope.
+simulation-first governed tool substrate; future live integrations remain out of scope. Phase 0AH
+adds a deterministic task planner that produces reviewable tool plans without running or queueing
+tools.
 
 ## Non-Goals
 
@@ -147,3 +149,6 @@ Phase 0AG adds `metis_tool_completion.v0.1`, which reports 100% completion only 
 simulation-first governed tool substrate. It does not mark live URL fetch, BOH retrieval-as-tool,
 Atlas execution, filesystem writes, arbitrary git commands, shell execution, hardware actions,
 external mutation, or autonomous execution as complete.
+Phase 0AH adds `metis_tool_task_plan.v0.1`, a non-executing task plan surface. Plans may reference
+dry-run, proposal-required, future-only, or blocked steps, but the planner itself does not create
+proposals, approve proposals, request execution, or execute tools.

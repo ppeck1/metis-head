@@ -34,6 +34,7 @@ from .tool_governance import evaluate_tool_request
 from .tool_policy_snapshot import build_tool_policy_snapshot
 from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
+from .tool_task_planner import plan_tool_task
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
 
@@ -324,6 +325,14 @@ def tool_readiness() -> dict[str, Any]:
 @app.get("/metis/tools/completion")
 def tool_completion() -> dict[str, Any]:
     return calculate_tool_completion(STATE)
+
+
+@app.post("/metis/tools/task/plan")
+def tool_task_plan(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return plan_tool_task(str(payload.get("task") or ""), STATE)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/metis/tools/{tool_id}")
