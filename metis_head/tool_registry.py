@@ -9,9 +9,11 @@ from typing import Any
 
 TOOL_REGISTRY_VERSION = "metis_tool_registry.v0.1"
 TOOL_RECEIPT_VERSION = "metis_tool_receipt.v0.1"
+TOOL_ARGUMENT_VALIDATION_VERSION = "metis_tool_arguments.v0.1"
 PERMISSION_MODES = {"disabled", "dry_run", "proposal_only", "approved_read_only"}
 SIDE_EFFECT_CLASSES = {"none", "read_only", "local_mutation", "external_mutation"}
 RISK_CLASSES = {"low", "medium", "high", "blocked"}
+SENSITIVE_ARGUMENT_MARKERS = ("token", "password", "secret", "key", "credential")
 
 
 class ToolRegistryError(ValueError):
@@ -272,8 +274,7 @@ def sanitize_arguments(arguments: Any) -> dict[str, Any]:
         return {}
     sanitized: dict[str, Any] = {}
     for key, value in arguments.items():
-        lowered = str(key).lower()
-        if any(marker in lowered for marker in ("token", "password", "secret", "key", "credential")):
+        if _is_sensitive_argument(str(key)):
             sanitized[str(key)] = "***"
         elif isinstance(value, str):
             sanitized[str(key)] = value[:240]
@@ -282,6 +283,63 @@ def sanitize_arguments(arguments: Any) -> dict[str, Any]:
         else:
             sanitized[str(key)] = str(value)[:240]
     return sanitized
+
+
+def validate_tool_arguments(tool_id: str, arguments: Any) -> dict[str, Any]:
+    tool = get_tool(tool_id)
+    schema = tool.input_schema
+    if schema.get("type") != "object":
+        raise ToolRegistryError(f"unsupported input schema for tool: {tool_id}")
+    if not isinstance(arguments, dict):
+        raise ToolRegistryError(f"arguments must be an object for tool: {tool_id}")
+    properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+    required = set(schema.get("required", []))
+    missing = sorted(name for name in required if name not in arguments)
+    if missing:
+        raise ToolRegistryError(f"missing required argument(s) for {tool_id}: {', '.join(missing)}")
+    warnings: list[str] = []
+    allowed: dict[str, Any] = {}
+    for key, value in arguments.items():
+        key = str(key)
+        if key not in properties:
+            if schema.get("additionalProperties", True) is False:
+                if _is_sensitive_argument(key):
+                    warnings.append(f"dropped_sensitive_argument:{key}")
+                    continue
+                raise ToolRegistryError(f"unexpected argument for {tool_id}: {key}")
+            allowed[key] = value
+            continue
+        expected = properties[key].get("type") if isinstance(properties[key], dict) else None
+        if expected and not _matches_schema_type(value, str(expected)):
+            raise ToolRegistryError(f"invalid argument type for {tool_id}.{key}: expected {expected}")
+        allowed[key] = value
+    return {
+        "schema_version": TOOL_ARGUMENT_VALIDATION_VERSION,
+        "valid": True,
+        "arguments": sanitize_arguments(allowed),
+        "warnings": warnings,
+    }
+
+
+def _matches_schema_type(value: Any, expected: str) -> bool:
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "object":
+        return isinstance(value, dict)
+    return True
+
+
+def _is_sensitive_argument(key: str) -> bool:
+    lowered = key.lower()
+    return any(marker in lowered for marker in SENSITIVE_ARGUMENT_MARKERS)
 
 
 def tool_policy(tool: ToolManifest, *, agent_mode: bool) -> dict[str, Any]:
@@ -297,7 +355,8 @@ def tool_policy(tool: ToolManifest, *, agent_mode: bool) -> dict[str, Any]:
 
 def build_tool_proposal_event(tool_id: str, arguments: Any, state: dict[str, Any], reason: str | None = None) -> dict[str, Any]:
     tool = get_tool(tool_id)
-    sanitized = sanitize_arguments(arguments)
+    validation = validate_tool_arguments(tool_id, arguments)
+    sanitized = validation["arguments"]
     policy = tool_policy(tool, agent_mode=state.get("interaction_mode") == "agent")
     intent = reason or f"tool proposal: {tool_id}"
     return {
@@ -310,6 +369,7 @@ def build_tool_proposal_event(tool_id: str, arguments: Any, state: dict[str, Any
         "risk_class": tool.risk_class,
         "side_effect_class": tool.side_effect_class,
         "dry_run_available": tool.permission_mode == "dry_run",
+        "argument_validation": {"schema_version": validation["schema_version"], "valid": True, "warnings": validation["warnings"]},
     }
 
 
@@ -325,7 +385,8 @@ def _action_class_for_tool(tool: ToolManifest) -> str:
 
 def dry_run_tool(tool_id: str, arguments: Any) -> dict[str, Any]:
     tool = get_tool(tool_id)
-    sanitized = sanitize_arguments(arguments)
+    validation = validate_tool_arguments(tool_id, arguments)
+    sanitized = validation["arguments"]
     if not tool.enabled:
         raise ToolRegistryError(f"tool disabled: {tool_id}")
     if tool.permission_mode != "dry_run" or tool.side_effect_class != "none":
@@ -337,6 +398,7 @@ def dry_run_tool(tool_id: str, arguments: Any) -> dict[str, Any]:
         "status": "dry_run_complete",
         "execution_allowed": False,
         "arguments": sanitized,
+        "argument_validation": {"schema_version": validation["schema_version"], "valid": True, "warnings": validation["warnings"]},
         "result": output,
         "result_hash": sha1(repr(output).encode("utf-8")).hexdigest()[:16],
     }
@@ -344,6 +406,7 @@ def dry_run_tool(tool_id: str, arguments: Any) -> dict[str, Any]:
 
 def execute_tool(tool_id: str, arguments: Any, state: dict[str, Any]) -> dict[str, Any]:
     tool = get_tool(tool_id)
+    validate_tool_arguments(tool_id, arguments)
     if tool.permission_mode == "dry_run" and tool.side_effect_class == "none" and state.get("interaction_mode") != "agent":
         receipt = dry_run_tool(tool_id, arguments)
         return {**receipt, "status": "dry_run_complete_not_executed", "blocked_reason": "Phase 0T execute returns dry-run receipts only"}

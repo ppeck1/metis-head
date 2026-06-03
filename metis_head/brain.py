@@ -354,7 +354,8 @@ def tool_propose(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return _queue_tool_proposal(tool_id, payload.get("arguments") or {}, payload.get("reason"))
     except ToolRegistryError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        status_code = 404 if str(exc).startswith("unknown tool") else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @app.post("/metis/tools/{tool_id}/dry_run")

@@ -321,7 +321,7 @@ def _reduce_execution_request(state: dict[str, Any], event: dict[str, Any]) -> N
 
 def _proposal_metadata_from_event(event: dict[str, Any]) -> dict[str, Any]:
     metadata: dict[str, Any] = {}
-    for key in ("tool_id", "tool_arguments", "risk_class", "side_effect_class", "dry_run_available"):
+    for key in ("tool_id", "tool_arguments", "risk_class", "side_effect_class", "dry_run_available", "argument_validation"):
         if key in event:
             metadata[key] = event[key]
     return metadata

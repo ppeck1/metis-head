@@ -16,8 +16,10 @@ future URL retrieval review and a side-effect-free visible planning dry-run. Pha
 `boh.retrieve_proposed` for future retrieval-as-tool review. Phase 0AA adds a derived tool contract
 manifest for inspection/export only; it does not grant permission or execution authority. Phase 0AB
 adds a composed policy snapshot for operator review only; it does not approve proposals, request
-execution, or broaden any lane. It does not enable arbitrary filesystem reads, arbitrary git
-commands, live URL fetch, BOH mutation, Atlas, hardware, shell, or external actions.
+execution, or broaden any lane. Phase 0AC validates tool arguments against manifest input schemas
+before proposals, dry-runs, execution requests, or chat-routed tool requests proceed. It does not
+enable arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas,
+hardware, shell, or external actions.
 
 ## Non-Goals
 
@@ -126,5 +128,8 @@ as a derived manifest of counts, lanes, matrix rows, and boundaries; it is visib
 not change any execution gate. Phase 0AB adds `/metis/tools/policy_snapshot`, which composes the
 tool contract, read-only policy, proposal queue, execution receipts, and explicit authority flags
 into one packet for review. It is visibility only and does not mutate review state, request
-execution, or run tools. Existing Phase 0W behavior remains for every other lane: execution requests
-create blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.
+execution, or run tools. Phase 0AC adds manifest-backed argument validation and persists
+`argument_validation` metadata on proposal/dry-run records; it rejects malformed arguments and drops
+secret-like extra fields without persisting raw values. Existing Phase 0W behavior remains for every
+other lane: execution requests create blocked or dry-run-only audit receipts, and
+`external_action_executed` remains `false`.
