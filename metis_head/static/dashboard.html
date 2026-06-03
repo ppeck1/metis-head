@@ -543,6 +543,7 @@
         <button onclick="proposeTool()">Queue Proposal</button>
         <button onclick="refreshToolContract()">Tool Contract</button>
         <button onclick="refreshToolPolicySnapshot()">Policy Snapshot</button>
+        <button onclick="evaluateToolGate()">Evaluate Gate</button>
       </div>
       <div class="status-line">Tool catalog includes lifecycle and permission_requirements metadata; labels do not grant execution.</div>
       <div class="tool-row">
@@ -1122,6 +1123,21 @@
       document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
       document.getElementById('toolStatus').textContent = `${data.proposal_queue.total_count} proposal(s), ${data.execution_audit.receipt_count} receipt(s)`;
       return data;
+    }
+    async function evaluateToolGate() {
+      const toolId = document.getElementById('toolSelect').value;
+      try {
+        const response = await fetch('/metis/tools/governance/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tool_id: toolId, arguments: parseToolArguments(), request_type: 'dry_run' })
+        });
+        const data = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(data, null, 2);
+        document.getElementById('toolStatus').textContent = data.decision || data.detail || 'Gate evaluated';
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = error.message;
+      }
     }
     async function dryRunTool() {
       const toolId = document.getElementById('toolSelect').value;

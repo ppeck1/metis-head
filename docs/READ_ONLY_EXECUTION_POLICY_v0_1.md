@@ -17,9 +17,10 @@ future URL retrieval review and a side-effect-free visible planning dry-run. Pha
 manifest for inspection/export only; it does not grant permission or execution authority. Phase 0AB
 adds a composed policy snapshot for operator review only; it does not approve proposals, request
 execution, or broaden any lane. Phase 0AC validates tool arguments against manifest input schemas
-before proposals, dry-runs, execution requests, or chat-routed tool requests proceed. It does not
-enable arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas,
-hardware, shell, or external actions.
+before proposals, dry-runs, execution requests, or chat-routed tool requests proceed. Phase 0AD adds
+advisory gate evaluation for operator preflight review only; it does not queue, approve, request, or
+execute tools. It does not enable arbitrary filesystem reads, arbitrary git commands, live URL fetch,
+BOH mutation, Atlas, hardware, shell, or external actions.
 
 ## Non-Goals
 
@@ -131,5 +132,6 @@ into one packet for review. It is visibility only and does not mutate review sta
 execution, or run tools. Phase 0AC adds manifest-backed argument validation and persists
 `argument_validation` metadata on proposal/dry-run records; it rejects malformed arguments and drops
 secret-like extra fields without persisting raw values. Existing Phase 0W behavior remains for every
-other lane: execution requests create blocked or dry-run-only audit receipts, and
-`external_action_executed` remains `false`.
+other lane. Phase 0AD adds `/metis/tools/governance/evaluate` to report the same gates as an
+advisory decision packet; it does not mutate state or grant authority. Execution requests create
+blocked or dry-run-only audit receipts, and `external_action_executed` remains `false`.

@@ -29,6 +29,7 @@ from .scenarios import SCENARIOS, run_all_scenarios, run_scenario
 from .schemas import FAILURE_TABLE, baseline_state, utc_now
 from .sim_manifest import build_sim_test_manifest
 from .tool_contract import build_tool_contract_manifest
+from .tool_governance import evaluate_tool_request
 from .tool_policy_snapshot import build_tool_policy_snapshot
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
@@ -297,6 +298,20 @@ def tool_contract() -> dict[str, Any]:
 @app.get("/metis/tools/policy_snapshot")
 def tool_policy_snapshot() -> dict[str, Any]:
     return build_tool_policy_snapshot(STATE)
+
+
+@app.post("/metis/tools/governance/evaluate")
+def tool_governance_evaluate(payload: dict[str, Any]) -> dict[str, Any]:
+    tool_id = payload.get("tool_id")
+    if not isinstance(tool_id, str) or not tool_id.strip():
+        raise HTTPException(status_code=400, detail="tool_id is required")
+    try:
+        return evaluate_tool_request(tool_id, payload.get("arguments") or {}, STATE, str(payload.get("request_type") or "dry_run"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ToolRegistryError as exc:
+        status_code = 404 if str(exc).startswith("unknown tool") else 400
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @app.get("/metis/tools/{tool_id}")
