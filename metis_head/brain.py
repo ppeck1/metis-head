@@ -351,6 +351,101 @@ def request_tool_plan_execution(plan_id: str, payload: dict[str, Any] | None = N
     }
 
 
+def _receipt_for_step(step: dict[str, Any]) -> dict[str, Any] | None:
+    receipt_id = step.get("execution_receipt_id")
+    if receipt_id:
+        return _receipt_by_id(str(receipt_id))
+    proposal_id = step.get("proposal_id")
+    if not proposal_id:
+        return None
+    for receipt in reversed(STATE.get("execution_audit_log", [])):
+        if receipt.get("proposal_id") == proposal_id:
+            return receipt
+    return None
+
+
+def _binding_text_from_receipt(receipt: dict[str, Any]) -> str:
+    summary = receipt.get("output_summary") if isinstance(receipt.get("output_summary"), dict) else {}
+    preview = summary.get("preview") if isinstance(summary.get("preview"), dict) else {}
+    preview_items: list[str] = []
+    for key in sorted(preview):
+        value = str(preview[key])
+        preview_items.append(f"{key}: {value[:180]}")
+    text = "; ".join(preview_items)
+    return (
+        f"Governed receipt summary from {receipt.get('tool_id')} "
+        f"({receipt.get('receipt_id')}, hash {receipt.get('output_hash', 'none')}): {text}"
+    )[:900]
+
+
+def _plan_result_bindings(plan: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    bindings: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    source_step: dict[str, Any] | None = None
+    source_receipt: dict[str, Any] | None = None
+    for step in plan.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        receipt = _receipt_for_step(step)
+        if receipt and receipt.get("execution_status") in {"executed_read_only", "dry_run_only_not_executed"}:
+            source_step = step
+            source_receipt = receipt
+        if step.get("tool_id") != "text.summarize":
+            continue
+        proposal_id = step.get("proposal_id")
+        proposal = _proposal_by_id(str(proposal_id)) if proposal_id else None
+        if proposal is None:
+            skipped.append({"step_id": step.get("step_id"), "reason": "proposal_missing"})
+            continue
+        if proposal.get("review_status", "pending") != "pending":
+            skipped.append({"step_id": step.get("step_id"), "proposal_id": proposal_id, "reason": "proposal_already_reviewed"})
+            continue
+        current_text = str(proposal.get("tool_arguments", {}).get("text") or "")
+        step_text = str(step.get("arguments", {}).get("text") or "")
+        if "<requires approved" not in current_text and "<requires approved" not in step_text and not step.get("bound_arguments"):
+            skipped.append({"step_id": step.get("step_id"), "proposal_id": proposal_id, "reason": "no_binding_placeholder"})
+            continue
+        if source_step is None or source_receipt is None:
+            skipped.append({"step_id": step.get("step_id"), "proposal_id": proposal_id, "reason": "source_receipt_missing"})
+            continue
+        bindings.append(
+            {
+                "step_id": step.get("step_id"),
+                "proposal_id": proposal_id,
+                "source_step_id": source_step.get("step_id"),
+                "source_receipt_id": source_receipt.get("receipt_id"),
+                "source_output_hash": source_receipt.get("output_hash"),
+                "arguments": {"text": _binding_text_from_receipt(source_receipt), "max_words": 48},
+            }
+        )
+    return bindings, skipped
+
+
+@app.post("/metis/tools/plans/{plan_id}/bind_results")
+def bind_tool_plan_results(plan_id: str) -> dict[str, Any]:
+    global STATE
+    plan = _tool_plan_by_id(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    if plan.get("review_status") != "approved":
+        raise HTTPException(status_code=409, detail="tool plan must be approved before results can be bound")
+    bindings, skipped = _plan_result_bindings(plan)
+    if bindings:
+        event = {"type": "tool_plan_result_binding", "plan_id": plan_id, "bindings": bindings, "bound_at": utc_now()}
+        STATE = reduce_metis_event(STATE, event)
+    else:
+        event = None
+    return {
+        "status": "plan_results_bound" if bindings else "no_plan_results_bound",
+        "plan": _tool_plan_by_id(plan_id),
+        "bindings": bindings,
+        "skipped_steps": skipped,
+        "event": event,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:
     for proposal in STATE.get("approval_queue", []):
         if proposal.get("proposal_id") == proposal_id:

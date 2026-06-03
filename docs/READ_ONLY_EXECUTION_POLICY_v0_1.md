@@ -34,6 +34,9 @@ without approving those proposals, requesting execution, or executing any step.
 Phase 0AL can request execution for approved plan step proposals through the same receipt gates used
 by single proposals. Unapproved steps are skipped, and future-only or side-effectful steps remain
 blocked by their existing proposal/receipt policies.
+Phase 0AM can bind bounded receipt summaries and output hashes from completed approved steps into
+later pending dry-run proposals. It must not bind raw file contents, raw command output, external
+receipts, secrets, or reviewed/immutable proposals.
 
 ## Non-Goals
 
@@ -172,3 +175,7 @@ Phase 0AL adds replayable `tool_plan_execution_request` bookkeeping after execut
 are created for individually approved step proposals. It reuses the existing proposal execution
 policy; it does not grant standing approval, bypass review, execute unapproved steps, or expand the
 approved read-only lane set.
+Phase 0AM adds replayable `tool_plan_result_binding` events. Bindings may update only pending
+dependent dry-run proposals using bounded `output_summary.preview` and `output_hash` data from prior
+receipts. Binding does not approve the dependent proposal, request execution, or expose raw source
+content.

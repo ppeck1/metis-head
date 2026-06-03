@@ -68,6 +68,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_tool_plan_step_queue(next_state, event)
     elif event_type == "tool_plan_execution_request":
         _reduce_tool_plan_execution_request(next_state, event)
+    elif event_type == "tool_plan_result_binding":
+        _reduce_tool_plan_result_binding(next_state, event)
 
     return next_state
 
@@ -437,6 +439,48 @@ def _reduce_tool_plan_execution_request(state: dict[str, Any], event: dict[str, 
         plan["execution_request_count"] = len(receipt_ids)
         plan["last_execution_requested_at"] = event.get("requested_at")
         plan["status"] = "execution_requested" if receipt_ids else plan.get("status", "steps_queued")
+        plan["execution_allowed"] = False
+        _refresh_proposal_counts(state)
+        state["external_action_executed"] = False
+        state["module_health"]["metis_tools"] = "ok"
+        return
+
+
+def _reduce_tool_plan_result_binding(state: dict[str, Any], event: dict[str, Any]) -> None:
+    plan_id = str(event.get("plan_id") or "")
+    bindings = event.get("bindings") if isinstance(event.get("bindings"), list) else []
+    if not plan_id or not bindings:
+        return
+    proposals = state.setdefault("approval_queue", [])
+    for plan in state.setdefault("tool_plan_queue", []):
+        if plan.get("plan_id") != plan_id:
+            continue
+        bound_count = int(plan.get("result_binding_count") or 0)
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                continue
+            proposal_id = binding.get("proposal_id")
+            arguments = binding.get("arguments") if isinstance(binding.get("arguments"), dict) else {}
+            proposal = next((item for item in proposals if item.get("proposal_id") == proposal_id), None)
+            if proposal is None or proposal.get("review_status", "pending") != "pending":
+                continue
+            proposal["tool_arguments"] = arguments
+            proposal["result_binding"] = {
+                "source_step_id": binding.get("source_step_id"),
+                "source_receipt_id": binding.get("source_receipt_id"),
+                "source_output_hash": binding.get("source_output_hash"),
+                "bound_at": event.get("bound_at"),
+                "raw_content_included": False,
+            }
+            for step in plan.get("steps", []):
+                if isinstance(step, dict) and step.get("proposal_id") == proposal_id:
+                    step["bound_arguments"] = arguments
+                    step["result_binding"] = proposal["result_binding"]
+                    step["status"] = "result_bound"
+                    step["execution_allowed"] = False
+                    bound_count += 1
+        plan["result_binding_count"] = bound_count
+        plan["last_result_bound_at"] = event.get("bound_at")
         plan["execution_allowed"] = False
         _refresh_proposal_counts(state)
         state["external_action_executed"] = False

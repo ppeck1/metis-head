@@ -10,12 +10,25 @@ token).
 
 ## Current Phase
 
-Phase scope: `0AL` - approved plan execution requests (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals`).
+Phase scope: `0AM` - governed plan result binding (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests`).
 
-Status: Metis can now request execution for approved step proposals in an approved governed tool
-plan. The endpoint reuses existing execution receipts and lane gates; unapproved steps are skipped,
-side-effectful/future-only steps remain blocked by their receipts, and `external_action_executed`
-stays false.
+Status: Metis can now bind safe receipt summaries from completed approved plan steps into later
+pending dry-run step proposals. The first supported handoff is approved `filesystem.read` /
+`git.status` receipt summaries into a pending `text.summarize` step. Binding uses bounded receipt
+previews and hashes only; it does not expose raw file contents, command output, or external receipts.
+
+Phase 0AM implemented:
+
+- Added replayable `tool_plan_result_binding` reducer events.
+- Added `POST /metis/tools/plans/{plan_id}/bind_results`.
+- Added dashboard `Bind Results` control.
+- Added tests for safe binding, dependent summarize execution, reviewed-proposal immutability,
+  deterministic replay, dashboard hooks, and no raw-content leakage.
+
+Previous Phase 0AL status: Metis can request execution for approved step proposals in an approved
+governed tool plan. The endpoint reuses existing execution receipts and lane gates; unapproved steps
+are skipped, side-effectful/future-only steps remain blocked by their receipts, and
+`external_action_executed` stays false.
 
 Phase 0AL implemented:
 
@@ -230,9 +243,9 @@ Phase 0D implemented:
 
 Current estimate: the overall simulation-first Metis mock brain/UI is about `90%` complete for the
 current review target. The governed tools substrate is `100%` complete for the current
-simulation-first scope. Practical tool-using task requests are about `70%` complete: Metis can plan
-multi-step governed tool tasks, persist/review them, queue eligible step proposals, and request execution for individually approved step proposals through existing receipt gates, but cannot yet run
-data-dependent multi-step plans, live fetch URLs, use BOH as a tool, mutate files, call Atlas, run shell commands,
+simulation-first scope. Practical tool-using task requests are about `78%` complete: Metis can plan
+multi-step governed tool tasks, persist/review them, queue eligible step proposals, request execution for individually approved step proposals, and bind safe receipt summaries into later dry-run steps, but cannot yet run
+general data-dependent multi-step plans, live fetch URLs, use BOH as a tool, mutate files, call Atlas, run shell commands,
 or act autonomously.
 
 Previous Phase 0N status: Metis has deterministic replay and receipt-detail coverage for the newest tool lanes:
@@ -923,6 +936,7 @@ Metis — BOH remains the source of truth.
 - `POST /metis/tools/plans/{plan_id}/deny`
 - `POST /metis/tools/plans/{plan_id}/queue_steps`
 - `POST /metis/tools/plans/{plan_id}/request_execution`
+- `POST /metis/tools/plans/{plan_id}/bind_results`
 - `POST /metis/tools/governance/evaluate`
 - `POST /metis/tools/propose`
 - `POST /metis/tools/task/plan`
@@ -955,7 +969,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-211 passed under Python 3.11 (includes approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+216 passed under Python 3.11 (includes governed plan result binding, approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
@@ -965,4 +979,4 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K/0N/0D/0E/0I/0H/0AA/0AB/0AC/0AD/0AE/0AF/0AG/0AH/0AI/0AJ/0AK/0AL does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis; BOH remains the source of truth. Phase 0L allows approved internal `time.now` read-only execution. Phase 0G allows approved current-repo `git.status` only. Phase 0F allows approved current-repo text-file previews only. Phase 0J routes chat requests into those active read-only proposal lanes but still requires separate review/request execution. Phase 0K adds blocked fetch proposals and visible planning dry-runs only. Phase 0N hardens deterministic replay and receipt inspection for those tool lanes. Phase 0D adds lifecycle visibility only. Phase 0E adds BOH retrieval proposals only; it does not call BOH through the tool registry. Phase 0I adds proposal filtering only. Phase 0H adds permission requirement visibility only. Phase 0AA adds tool contract manifest visibility only. Phase 0AB adds a composed policy snapshot only. Phase 0AC adds schema validation for tool arguments only. Phase 0AD adds advisory gate evaluation only. Phase 0AE makes review scope explicit and single-proposal only. Phase 0AF adds computed governed-tool readiness only. Phase 0AG adds computed completion reporting for the current governed simulation substrate only. Phase 0AH adds reviewable task planning only. Phase 0AI adds persistent plan storage only. Phase 0AJ adds plan review only. Phase 0AK queues proposal records for approved plan steps only. Phase 0AL requests execution only for already-approved step proposals through existing receipt gates. Arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH-as-tool execution, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
+Phase 0A/0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K/0N/0D/0E/0I/0H/0AA/0AB/0AC/0AD/0AE/0AF/0AG/0AH/0AI/0AJ/0AK/0AL/0AM does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis; BOH remains the source of truth. Phase 0L allows approved internal `time.now` read-only execution. Phase 0G allows approved current-repo `git.status` only. Phase 0F allows approved current-repo text-file previews only. Phase 0J routes chat requests into those active read-only proposal lanes but still requires separate review/request execution. Phase 0K adds blocked fetch proposals and visible planning dry-runs only. Phase 0N hardens deterministic replay and receipt inspection for those tool lanes. Phase 0D adds lifecycle visibility only. Phase 0E adds BOH retrieval proposals only; it does not call BOH through the tool registry. Phase 0I adds proposal filtering only. Phase 0H adds permission requirement visibility only. Phase 0AA adds tool contract manifest visibility only. Phase 0AB adds a composed policy snapshot only. Phase 0AC adds schema validation for tool arguments only. Phase 0AD adds advisory gate evaluation only. Phase 0AE makes review scope explicit and single-proposal only. Phase 0AF adds computed governed-tool readiness only. Phase 0AG adds computed completion reporting for the current governed simulation substrate only. Phase 0AH adds reviewable task planning only. Phase 0AI adds persistent plan storage only. Phase 0AJ adds plan review only. Phase 0AK queues proposal records for approved plan steps only. Phase 0AL requests execution only for already-approved step proposals through existing receipt gates. Phase 0AM binds bounded receipt summaries into pending dependent proposals only; it does not expose raw content or bypass review. Arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH-as-tool execution, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
