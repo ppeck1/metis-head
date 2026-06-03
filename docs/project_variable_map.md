@@ -2,12 +2,12 @@
 
 Version: `metis_variable_map.v0.1`
 
-Last phase updated: `0H` (tool permission requirement visibility; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters`)
+Last phase updated: `0AA` (tool contract manifest visibility; builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata`)
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
 
-Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K/0N/0D/0E/0I/0H UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, and exercise approved `time.now`, `git.status`, and `filesystem.read` read-only lanes. As of Phase 0J, chat `git status` and `read/open file` intents queue the active approved read-only proposal lanes, not the legacy placeholder lanes. As of Phase 0K, chat `fetch ...` queues blocked fetch proposals and `plan:` returns visible planning dry-runs. As of Phase 0N, replay and receipt-detail tests cover blocked fetch proposals and dry-run-only planning receipts. As of Phase 0D, tool catalog/detail responses expose lifecycle labels. As of Phase 0E, `search boh`, `retrieve boh`, and `search library` chat intents queue `boh.retrieve_proposed` without live BOH retrieval. As of Phase 0I, proposal listings can be filtered by status, proposal type, and tool ID. As of Phase 0H, tool catalog/detail responses expose `permission_requirements` metadata. Governed tools estimate: `45%` complete toward the eventual tool system. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
+Current Phase 0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K/0N/0D/0E/0I/0H/0AA UI estimate: `90%` functional for simulation review. Core state/API/scenario panels work, the virtual radio can emit canonical events, event logs can be exported/replayed, virtual chat can call a governed LLM router or route explicit tool requests through `tool_router`, the dashboard can select locally available Ollama models, and the Tools panel can inspect the registry, dry-run safe tools, queue proposals, review proposals, request execution receipts, inspect the audit log, review the read-only execution policy, view the tool contract manifest, and exercise approved `time.now`, `git.status`, and `filesystem.read` read-only lanes. As of Phase 0J, chat `git status` and `read/open file` intents queue the active approved read-only proposal lanes, not the legacy placeholder lanes. As of Phase 0K, chat `fetch ...` queues blocked fetch proposals and `plan:` returns visible planning dry-runs. As of Phase 0N, replay and receipt-detail tests cover blocked fetch proposals and dry-run-only planning receipts. As of Phase 0D, tool catalog/detail responses expose lifecycle labels. As of Phase 0E, `search boh`, `retrieve boh`, and `search library` chat intents queue `boh.retrieve_proposed` without live BOH retrieval. As of Phase 0I, proposal listings can be filtered by status, proposal type, and tool ID. As of Phase 0H, tool catalog/detail responses expose `permission_requirements` metadata. As of Phase 0AA, `/metis/tools/contract` exports a governed contract manifest with registry counts, lanes, matrix rows, and boundary text. Governed tools estimate: `48%` complete toward the eventual tool system. The UI testing environment is satisfactory for now; next work shifts toward deeper backend/provider/governance readiness.
 
 Dashboard order: `Virtual Radio` -> `Virtual Chat` -> `Tools` -> `Radio Status` -> `BOH Library Link` -> readiness/LED/adapter/state/scenario panels -> `Export and Replay` -> `Event Log`.
 
@@ -45,6 +45,7 @@ Before committing any phase:
 | `READ_ONLY_EXECUTION_POLICY_VERSION` | `metis_read_only_execution_policy.v0.1` | `metis_head.execution_policy` | Draft contract for future approved read-only execution lanes. |
 | `TOOL_REGISTRY_VERSION` | `metis_tool_registry.v0.1` | `metis_head.tool_registry` | Governed tool manifest registry schema. |
 | `TOOL_RECEIPT_VERSION` | `metis_tool_receipt.v0.1` | `metis_head.tool_registry` | Dry-run/blocked tool receipt schema. |
+| `TOOL_CONTRACT_VERSION` | `metis_tool_contract.v0.1` | `metis_head.tool_contract` | Derived governed tool contract manifest schema. |
 | `metis_variable_map.v0.1` | `metis_variable_map.v0.1` | `docs/project_variable_map.md` | Documentation map version. |
 
 ## Canonical State Fields
@@ -249,8 +250,12 @@ change mic/camera/logging state. Spoken text is represented in TTS events as `te
 | Name | Current Phase | Purpose |
 |---|---|---|
 | `metis_head.tool_registry` | 0T | Metis-native governed tool registry and dry-run/proposal surface. |
+| `metis_head.tool_contract` | 0AA | Derived governed tool contract manifest builder; visibility only, not enforcement. |
 | `ToolManifest` | 0T | Versioned tool manifest with ID, schemas, risk, side-effect class, permission mode, enabled flag, and source reference. |
 | `TOOLS` | 0T | Seed tool bank inspired by MCP reference categories; no external runtime dependency. |
+| `build_tool_contract_manifest()` | 0AA | Builds `metis_tool_contract.v0.1` with registry counts, lanes, governance matrix rows, and boundary statements. |
+| `governance_matrix` | 0AA | Per-tool contract rows summarizing permission mode, risk, side-effect class, lifecycle label, execution result, gates, and blocked capabilities. |
+| `lanes.active_read_only` / `lanes.dry_run_only` / `lanes.proposal_only` / `lanes.future_only` | 0AA | Derived tool lane lists for operator inspection; not permission grants. |
 | `tool_lifecycle(tool)` | 0D | Derived operator lifecycle metadata for catalog/detail responses; visibility only, not enforcement. |
 | `lifecycle_label` | 0D | Tool catalog label: `disabled`, `dry_run_available`, `approved_read_only`, or `proposal_only`. |
 | `lifecycle_tags` | 0D | Tool catalog tags including `proposal_only`, `blocked_after_review`, `future_only`, and `approved_read_only` where applicable. |
@@ -608,6 +613,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `requestExecution` | 0W | Calls `/metis/proposals/{proposal_id}/request_execution` and displays a receipt; no real execution. |
 | `refreshExecutionReceipts` | 0W | Calls `/metis/execution/receipts` and displays safe audit receipts. |
 | `refreshExecutionPolicy` | 0Q | Calls `/metis/execution/policy` and displays the read-only execution policy contract. |
+| `refreshToolContract` | 0AA | Calls `/metis/tools/contract` and displays the governed tool contract manifest. |
 
 ## API Routes
 
@@ -627,6 +633,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | `GET` | `/metis/boh/status` | `metis_head.brain` | Safe BOH background link state (0C): state enum, last checked/connected, last error (token-scrubbed), probe count, bounded transition events. Never exposes any token. |
 | `GET` | `/metis/llm/options` | `metis_head.brain` | Provider defaults and available Ollama models. |
 | `GET` | `/metis/tools` | `metis_head.brain` | Governed tool registry listing. |
+| `GET` | `/metis/tools/contract` | `metis_head.brain` | Derived governed tool contract manifest with counts, lanes, matrix rows, and boundaries; visibility only. |
 | `GET` | `/metis/tools/{tool_id}` | `metis_head.brain` | One governed tool manifest. |
 | `GET` | `/metis/proposals/{proposal_id}` | `metis_head.brain` | Return one proposal record by deterministic proposal ID. |
 | `POST` | `/metis/proposals/{proposal_id}/approve` | `metis_head.brain` | Review-approve a proposal; emits `proposal_review`, recomputes pending counters, and does not execute. |
@@ -705,7 +712,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | LED provider | `led_renderer`, `led_provider`, `led_command` | Provider receives already-resolved Metis LED state. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
-| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, 0W records execution receipts, 0Q documents the future read-only execution policy, 0J routes chat `git.status`/`filesystem.read` requests to active approved read-only proposal lanes, 0K adds blocked fetch proposals plus visible planning dry-runs, 0N hardens replay/receipt coverage for those lanes, 0D exposes lifecycle labels for operator visibility, 0E adds blocked BOH retrieval proposals, 0I adds proposal filters, and 0H exposes permission requirement metadata. Approval remains separate from execution; future phases may add additional scoped execution only after explicit governance gates. |
+| External tool lane | `tool_proposal`, `approval_request`, `execution_receipt` | 0T registry/dry-run/proposal lane exists, 0T/CHAT can route clear chat intents into that lane, 0U can review proposals, 0W records execution receipts, 0Q documents the future read-only execution policy, 0J routes chat `git.status`/`filesystem.read` requests to active approved read-only proposal lanes, 0K adds blocked fetch proposals plus visible planning dry-runs, 0N hardens replay/receipt coverage for those lanes, 0D exposes lifecycle labels for operator visibility, 0E adds blocked BOH retrieval proposals, 0I adds proposal filters, 0H exposes permission requirement metadata, and 0AA exports the derived tool contract manifest. Approval remains separate from execution; future phases may add additional scoped execution only after explicit governance gates. |
 | Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only, no internal imports. |
 | BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B (`metis_head.boh_retrieval`); deeper adapter wiring still future. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |

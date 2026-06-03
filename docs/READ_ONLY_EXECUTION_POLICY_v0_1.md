@@ -13,7 +13,8 @@ Phase 0F activates `filesystem.read` for current-repo text preview with path, ex
 gates. Phase 0J routes explicit chat requests into those active approved read-only proposal lanes,
 but chat still never executes them directly. Phase 0K adds a blocked `fetch.url_proposed` lane for
 future URL retrieval review and a side-effect-free visible planning dry-run. Phase 0E adds blocked
-`boh.retrieve_proposed` for future retrieval-as-tool review. It does not enable
+`boh.retrieve_proposed` for future retrieval-as-tool review. Phase 0AA adds a derived tool contract
+manifest for inspection/export only; it does not grant permission or execution authority. It does not enable
 arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH mutation, Atlas, hardware,
 shell, or external actions.
 
@@ -119,6 +120,8 @@ these labels do not grant permission or bypass review. Phase 0E adds blocked BOH
 only; BOH retrieval-as-tool remains future work. Phase 0I adds proposal listing filters for operator
 inspection only; filters do not mutate review state or authorize execution. Phase 0H adds
 `permission_requirements` metadata to the tool catalog for operator review; this metadata does not
-grant permission, standing approval, or execution authority. Existing Phase 0W behavior remains for
-every other lane: execution requests create blocked or dry-run-only audit receipts, and
-`external_action_executed` remains `false`.
+grant permission, standing approval, or execution authority. Phase 0AA adds `/metis/tools/contract`
+as a derived manifest of counts, lanes, matrix rows, and boundaries; it is visibility only and does
+not change any execution gate. Existing Phase 0W behavior remains for every other lane: execution
+requests create blocked or dry-run-only audit receipts, and `external_action_executed` remains
+`false`.
