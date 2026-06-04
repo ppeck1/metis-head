@@ -10,8 +10,11 @@ READ_ONLY_EXECUTION_POLICY_VERSION = "metis_read_only_execution_policy.v0.1"
 READ_ONLY_EXECUTION_POLICY: dict[str, Any] = {
     "schema_version": READ_ONLY_EXECUTION_POLICY_VERSION,
     "phase": "0Q",
-    "status": "draft_contract_not_runtime_execution",
+    "status": "active_contract_with_scoped_read_only_receipts",
     "execution_enabled": False,
+    "execution_enabled_meaning": "Arbitrary or autonomous execution is disabled; only scoped approved read-only receipt lanes listed here may run after proposal review.",
+    "scoped_read_only_receipts_enabled": True,
+    "active_approved_read_only_lanes": ["time.now", "filesystem.read", "git.status"],
     "contract_path": "docs/READ_ONLY_EXECUTION_POLICY_v0_1.md",
     "candidate_lanes": [
         {
@@ -72,7 +75,7 @@ READ_ONLY_EXECUTION_POLICY: dict[str, Any] = {
         "output_hash",
         "output_summary",
     ],
-    "phase_boundary": "Phase 0Q publishes the policy contract only; execution requests still create audit receipts only.",
+    "phase_boundary": "Arbitrary execution remains disabled. Scoped approved read-only lanes may return bounded audit receipts only after proposal review and lane gates.",
 }
 
 

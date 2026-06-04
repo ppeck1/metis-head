@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 from hashlib import sha1
+import os
+from pathlib import Path
 import subprocess
 from typing import Any
 
@@ -69,8 +70,8 @@ def execute_git_status(arguments: dict[str, Any] | None = None) -> dict[str, Any
 
 
 def _allowed_repository(raw_repository: Any) -> Path:
-    repo = Path(str(raw_repository or ".")).expanduser().resolve()
-    allowed = Path.cwd().resolve()
+    allowed = _repo_root()
+    repo = _resolve_inside_repo(raw_repository or ".")
     if repo != allowed:
         raise ReadOnlyToolError("repository is outside the Phase 0G allowlist")
     if not (repo / ".git").exists():
@@ -81,11 +82,8 @@ def _allowed_repository(raw_repository: Any) -> Path:
 def _allowed_file(raw_path: Any) -> Path:
     if not raw_path:
         raise ReadOnlyToolError("path is required")
-    path = Path(str(raw_path)).expanduser()
-    if not path.is_absolute():
-        path = Path.cwd() / path
-    resolved = path.resolve()
-    allowed_root = Path.cwd().resolve()
+    resolved = _resolve_inside_repo(raw_path)
+    allowed_root = _repo_root()
     if allowed_root not in (resolved, *resolved.parents):
         raise ReadOnlyToolError("path is outside the Phase 0F allowlist")
     if not resolved.is_file():
@@ -93,6 +91,19 @@ def _allowed_file(raw_path: Any) -> Path:
     if resolved.suffix.lower() not in ALLOWED_TEXT_EXTENSIONS:
         raise ReadOnlyToolError("file extension is outside the Phase 0F allowlist")
     return resolved
+
+
+def _repo_root() -> Path:
+    configured = os.environ.get("METIS_REPO_ROOT")
+    root = Path(configured).expanduser() if configured else Path.cwd()
+    return root.resolve()
+
+
+def _resolve_inside_repo(raw_path: Any) -> Path:
+    path = Path(str(raw_path)).expanduser()
+    if not path.is_absolute():
+        path = _repo_root() / path
+    return path.resolve()
 
 
 def _redact_line(line: str) -> str:

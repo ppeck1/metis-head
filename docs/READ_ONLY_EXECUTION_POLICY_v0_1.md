@@ -2,7 +2,7 @@
 
 Phase: `0Q`
 
-Status: draft contract with three active read-only lanes.
+Status: active contract with three scoped approved read-only receipt lanes.
 
 ## Purpose
 
@@ -44,6 +44,9 @@ first next-action recommendation. Chat planning must not approve plans, queue st
 execution, bind results, or execute tools.
 Phase 0AP can describe governed tool capabilities in LLM system context. This is prompt accuracy
 only; it does not let LLM providers call tools directly or add execution authority.
+Phase 0AQ clarifies the policy language: arbitrary/autonomous execution remains disabled, while
+scoped approved read-only receipt lanes may run only after proposal review and lane gates. It also
+anchors current-repo local read-only lanes to `METIS_REPO_ROOT` when configured.
 
 ## Non-Goals
 
@@ -61,8 +64,8 @@ only; it does not let LLM providers call tools directly or add execution authori
 | Lane | Status | Minimum Gate |
 |---|---|---|
 | `time.now` | active approved read-only | Side-effect class must be `none`; proposal must be reviewed; no shell, network, filesystem, or external process may be used. |
-| `filesystem.read` | active approved read-only | Current repo path allowlist, text extension allowlist, 32KB size limit, redacted/truncated preview, explicit operator approval. |
-| `git.status` | active approved read-only | Current repo allowlist, fixed `git status --short --branch`, output truncation, no porcelain mutation commands. |
+| `filesystem.read` | active approved read-only | Current repo path allowlist anchored to `METIS_REPO_ROOT` when configured, text extension allowlist, 32KB size limit, redacted/truncated preview, explicit operator approval. |
+| `git.status` | active approved read-only | Current repo allowlist anchored to `METIS_REPO_ROOT` when configured, fixed `git status --short --branch`, output truncation, no porcelain mutation commands. |
 | `fetch.url_proposed` | proposal-only blocked | Queues a future URL-fetch proposal for review; performs no DNS, HTTP, or network I/O in Phase 0K. |
 | `boh.retrieve_proposed` | proposal-only blocked | Queues a future BOH retrieval-as-tool proposal for review; performs no BOH HTTP call in Phase 0E. |
 | `fetch.url` | future only | Domain allowlist, timeout, size limit, content-type filter, no credential forwarding. |
