@@ -744,6 +744,131 @@ def _chat_plan_advance(plan_id: str | None) -> dict[str, Any]:
     return {"status": "plan_advance_requested", "plan": latest, "advance": advanced, "next_action": advanced.get("next_action") or next_plan_action(latest, STATE)}
 
 
+def _route_chat_queue_status_request(message: str) -> str | None:
+    lowered = message.strip().lower()
+    proposal_phrases = (
+        "what needs approval",
+        "what is waiting for approval",
+        "what's waiting for approval",
+        "pending approvals",
+        "pending proposals",
+        "approval queue",
+        "proposal status",
+        "what needs review",
+    )
+    receipt_phrases = (
+        "execution receipts",
+        "receipt summary",
+        "receipt status",
+        "audit receipts",
+        "tool receipts",
+        "what receipts",
+    )
+    if any(phrase in lowered for phrase in receipt_phrases):
+        return "receipts"
+    if any(phrase in lowered for phrase in proposal_phrases):
+        return "proposals"
+    return None
+
+
+def _proposal_status_summary(limit: int = 6) -> dict[str, Any]:
+    proposals_queue = list(STATE.get("approval_queue", []))
+    counts: dict[str, int] = {}
+    pending: list[dict[str, Any]] = []
+    for proposal in proposals_queue:
+        review_status = str(proposal.get("review_status") or proposal.get("status") or "unknown")
+        counts[review_status] = counts.get(review_status, 0) + 1
+        if review_status == "pending":
+            arguments = proposal.get("tool_arguments") if isinstance(proposal.get("tool_arguments"), dict) else {}
+            pending.append(
+                {
+                    "proposal_id": proposal.get("proposal_id"),
+                    "proposal_type": proposal.get("proposal_type"),
+                    "tool_id": proposal.get("tool_id"),
+                    "review_status": review_status,
+                    "risk_class": proposal.get("risk_class"),
+                    "side_effect_class": proposal.get("side_effect_class"),
+                    "dry_run_available": bool(proposal.get("dry_run_available")),
+                    "execution_allowed": False,
+                    "argument_keys": sorted(str(key) for key in arguments),
+                }
+            )
+    return {
+        "status": "approval_queue_status",
+        "total_count": len(proposals_queue),
+        "pending_count": len(pending),
+        "counts_by_review_status": counts,
+        "pending_proposals": pending[:limit],
+        "truncated": len(pending) > limit,
+    }
+
+
+def _receipt_status_summary(limit: int = 6) -> dict[str, Any]:
+    receipts = list(STATE.get("execution_audit_log", []))
+    counts: dict[str, int] = {}
+    safe_receipts: list[dict[str, Any]] = []
+    for receipt in receipts[-limit:]:
+        execution_status = str(receipt.get("execution_status") or "unknown")
+        counts[execution_status] = counts.get(execution_status, 0) + 1
+        output_summary = receipt.get("output_summary") if isinstance(receipt.get("output_summary"), dict) else {}
+        safe_receipts.append(
+            {
+                "receipt_id": receipt.get("receipt_id"),
+                "proposal_id": receipt.get("proposal_id"),
+                "tool_id": receipt.get("tool_id"),
+                "execution_status": execution_status,
+                "policy_decision": receipt.get("policy_decision"),
+                "review_status": receipt.get("review_status"),
+                "execution_allowed": False,
+                "output_hash": receipt.get("output_hash"),
+                "output_keys": output_summary.get("keys", []),
+                "redactions": receipt.get("redactions", []),
+            }
+        )
+    return {
+        "status": "execution_receipt_status",
+        "receipt_count": len(receipts),
+        "counts_by_execution_status": counts,
+        "receipts": safe_receipts,
+        "truncated": len(receipts) > limit,
+    }
+
+
+def _proposal_status_message(summary: dict[str, Any]) -> str:
+    pending = summary["pending_proposals"]
+    if not pending:
+        return (
+            f"Approval queue: {summary['pending_count']} pending of {summary['total_count']} total proposals. "
+            "Chat can report queue status, but cannot approve, deny, or request execution."
+        )
+    parts = [
+        f"{item.get('proposal_id')} ({item.get('tool_id') or item.get('proposal_type')}, "
+        f"{item.get('risk_class')}, {item.get('side_effect_class')})"
+        for item in pending
+    ]
+    suffix = " More pending proposals are omitted from this summary." if summary.get("truncated") else ""
+    return (
+        f"Approval queue: {summary['pending_count']} pending of {summary['total_count']} total proposals. "
+        f"Pending: {'; '.join(parts)}.{suffix} "
+        "Chat can report queue status, but cannot approve, deny, or request execution."
+    )
+
+
+def _receipt_status_message(summary: dict[str, Any]) -> str:
+    receipts = summary["receipts"]
+    if not receipts:
+        return "Execution receipts: 0 recorded. Chat can summarize receipts, but cannot create approvals or execution authority."
+    parts = [
+        f"{item.get('receipt_id')} ({item.get('tool_id')}, {item.get('execution_status')}, {item.get('policy_decision')})"
+        for item in receipts
+    ]
+    suffix = " Older receipts are omitted from this summary." if summary.get("truncated") else ""
+    return (
+        f"Execution receipts: {summary['receipt_count']} recorded. Latest: {'; '.join(parts)}.{suffix} "
+        "Raw file contents, command output, secrets, and external receipts are not included."
+    )
+
+
 @app.get("/metis/tools/{tool_id}")
 def tool_detail(tool_id: str) -> dict[str, Any]:
     try:
@@ -978,6 +1103,44 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "retrieval": None,
             "voice": voice,
             "tool_plan": controlled,
+        }
+    queue_status_request = _route_chat_queue_status_request(user_message)
+    if queue_status_request is not None:
+        if queue_status_request == "receipts":
+            queue_summary = _receipt_status_summary()
+            model = "metis_tool_receipt_status.v0.1"
+            assistant_message = _receipt_status_message(queue_summary)
+        else:
+            queue_summary = _proposal_status_summary()
+            model = "metis_tool_approval_status.v0.1"
+            assistant_message = _proposal_status_message(queue_summary)
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "tool_planner",
+                "model": model,
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _speak_chat_response(assistant_message, options)
+        return {
+            "message": assistant_message,
+            "provider": "tool_planner",
+            "model": model,
+            "proposal_queued": False,
+            "plan_queued": False,
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": classify_intent(user_message, STATE).to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"queue_status": queue_summary},
+            "retrieval": None,
+            "voice": voice,
+            "queue_status": queue_summary,
         }
     proposal_queued = False
     policy = classify_intent(user_message, STATE)

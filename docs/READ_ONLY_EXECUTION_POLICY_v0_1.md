@@ -204,3 +204,7 @@ Phase 0AR adds chat-facing plan status and explicit plan advance prompts. Status
 read-only reports over the latest or named plan. Advance prompts invoke only the existing guided
 advance path, which still stops at plan/proposal review gates and cannot approve plans, approve
 proposals, create standing authority, or execute unreviewed work.
+Phase 0AS adds chat-facing proposal and receipt awareness. Approval-queue prompts and receipt-summary
+prompts return bounded observational metadata only. They do not approve proposals, deny proposals,
+request execution, create receipts, expose raw file contents, expose command output, or grant any new
+authority.
