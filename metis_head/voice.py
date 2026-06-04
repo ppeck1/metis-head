@@ -655,27 +655,47 @@ def _wav_spectrum_envelope(wav_path: Path, bands: int = 20) -> list[float]:
     return _spectrum_for_samples(samples, sample_rate, bands)
 
 
-def _wav_spectrum_frames(wav_path: Path, frame_count: int = 48, bands: int = 20) -> list[list[float]]:
+def _wav_spectrum_frames(wav_path: Path, frame_count: int | None = None, bands: int = 20) -> list[list[float]]:
     sample_data = _read_wav_samples(wav_path)
     if sample_data is None:
         return []
     samples, sample_rate = sample_data
     if not samples or sample_rate <= 0:
         return []
-    frame_count = max(8, min(96, frame_count))
+    frame_count = _spectrum_frame_count(len(samples), sample_rate) if frame_count is None else max(8, min(360, frame_count))
     window_size = max(512, min(4096, int(sample_rate * 0.09)))
     if len(samples) <= window_size:
         spectrum = _spectrum_for_samples(samples, sample_rate, bands)
         return [spectrum] if spectrum else []
-    frames: list[list[float]] = []
+    sampled_frames: list[tuple[list[float], float]] = []
     max_start = max(0, len(samples) - window_size)
     for frame_index in range(frame_count):
         start = round((frame_index / max(1, frame_count - 1)) * max_start)
         segment = samples[start : start + window_size]
         spectrum = _spectrum_for_samples(segment, sample_rate, bands)
         if spectrum:
-            frames.append(spectrum)
+            sampled_frames.append((spectrum, _rms_level(segment)))
+    peak_energy = max((energy for _spectrum, energy in sampled_frames), default=0.0)
+    if peak_energy <= 0:
+        return [[0.0 for _ in spectrum] for spectrum, _energy in sampled_frames]
+    frames: list[list[float]] = []
+    for spectrum, energy in sampled_frames:
+        scale = min(1.0, energy / peak_energy)
+        frames.append([round(min(1.0, level * scale), 3) for level in spectrum])
     return frames
+
+
+def _spectrum_frame_count(sample_count: int, sample_rate: int) -> int:
+    if sample_rate <= 0:
+        return 48
+    duration_seconds = sample_count / sample_rate
+    return max(24, min(360, math.ceil(duration_seconds * 16)))
+
+
+def _rms_level(samples: list[float]) -> float:
+    if not samples:
+        return 0.0
+    return (sum(sample * sample for sample in samples) / len(samples)) ** 0.5
 
 
 def _spectrum_for_samples(samples: list[float], sample_rate: int, bands: int = 20) -> list[float]:

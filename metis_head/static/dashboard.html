@@ -677,6 +677,7 @@
     let radioFrameTimer = null;
     let lastVoiceLevels = [];
     let lastVoiceFrames = [];
+    let lastVoiceVisualGain = null;
 
     const BOH_TRANSITION_MESSAGES = {
       connected: 'BOH library connected. Read-only retrieval available.',
@@ -1412,17 +1413,18 @@
       const meter = document.getElementById('radioMeter');
       const voiceActive = ['queued', 'synthesizing', 'speaking'].includes(state.voice_output_state);
       const voiceRecent = (state.tts_output_count || 0) > previousTtsOutputCount;
-      renderRadioWave(lastVoiceLevels, voiceActive || voiceRecent, state.volume_level || 0.6);
+      renderRadioWave(lastVoiceLevels, voiceActive || voiceRecent, state.volume_level || 0.6, false, lastVoiceVisualGain);
       if (voiceActive || voiceRecent) {
         pulseRadioAudio(voiceActive ? 1200 : 2200);
       }
     }
-    function renderRadioWave(levels, active, volume, decay = false) {
+    function renderRadioWave(levels, active, volume, decay = false, visualGain = null) {
       const meter = document.getElementById('radioMeter');
       const sourceLevels = Array.isArray(levels) && levels.length ? levels : [];
       const safeLevels = sourceLevels.length ? resampleLevels(sourceLevels, 36) : Array.from({length: 36}, () => 0.015);
       const strongest = Math.max(...safeLevels.map(level => Math.max(0, Number(level) || 0)), 0.015);
-      const gain = active || decay ? Math.min(3.2, 0.96 / strongest) : 1;
+      const providedGain = Number(visualGain);
+      const gain = active || decay ? (Number.isFinite(providedGain) && providedGain > 0 ? providedGain : Math.min(3.2, 0.96 / strongest)) : 1;
       meter.innerHTML = '';
       meter.classList.toggle('voice-decay', decay);
       safeLevels.forEach((level, index) => {
@@ -1485,20 +1487,21 @@
       if (Array.isArray(frames) && frames.length > 1) {
         let frameIndex = 0;
         const frameDelay = Math.max(36, Math.floor(durationMs / frames.length));
-        renderRadioWave(frames[0], true, currentState?.volume_level || 0.6);
+        renderRadioWave(frames[0], true, currentState?.volume_level || 0.6, false, lastVoiceVisualGain);
         radioFrameTimer = setInterval(() => {
           frameIndex = (frameIndex + 1) % frames.length;
-          renderRadioWave(frames[frameIndex], true, currentState?.volume_level || 0.6);
+          renderRadioWave(frames[frameIndex], true, currentState?.volume_level || 0.6, false, lastVoiceVisualGain);
         }, frameDelay);
       }
       radioPulseTimer = setTimeout(() => {
         clearInterval(radioFrameTimer);
         meter.classList.remove('voice-active');
         strip.classList.remove('voice-active');
-        renderRadioWave(lastVoiceLevels, false, currentState?.volume_level || 0.6, true);
+        renderRadioWave(lastVoiceLevels, false, currentState?.volume_level || 0.6, true, lastVoiceVisualGain);
         radioResetTimer = setTimeout(() => {
           lastVoiceLevels = [];
           lastVoiceFrames = [];
+          lastVoiceVisualGain = null;
           meter.classList.remove('voice-decay');
           renderRadioWave([], false, currentState?.volume_level || 0.6);
         }, 850);
@@ -1512,11 +1515,24 @@
       lastVoiceLevels = Array.isArray(speaking.audio_spectrum_levels)
         ? speaking.audio_spectrum_levels
         : (Array.isArray(speaking.audio_levels) ? speaking.audio_levels : []);
-      renderRadioWave(lastVoiceFrames[0] || lastVoiceLevels, true, currentState?.volume_level || 0.6);
+      lastVoiceVisualGain = visualGainForVoice(lastVoiceFrames, lastVoiceLevels);
+      renderRadioWave(lastVoiceFrames[0] || lastVoiceLevels, true, currentState?.volume_level || 0.6, false, lastVoiceVisualGain);
       const hinted = Number(speaking.audio_visualization_hint_ms || 0);
       const textLen = Number(speaking.text_len || 0);
       const duration = hinted || Math.max(2200, Math.min(30000, 900 + (textLen * 70)));
       pulseRadioAudio(duration, lastVoiceFrames);
+    }
+    function visualGainForVoice(frames, levels) {
+      const values = [];
+      if (Array.isArray(frames) && frames.length) {
+        for (const frame of frames) {
+          if (Array.isArray(frame)) values.push(...frame);
+        }
+      } else if (Array.isArray(levels)) {
+        values.push(...levels);
+      }
+      const strongest = Math.max(...values.map(level => Math.max(0, Number(level) || 0)), 0.015);
+      return Math.min(3.2, 0.96 / strongest);
     }
     async function refresh() {
       const data = await fetch('/metis/state').then(r => r.json());

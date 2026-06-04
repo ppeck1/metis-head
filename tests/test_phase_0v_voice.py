@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import math
+from pathlib import Path
 import struct
 import wave
 from typing import Any
@@ -289,7 +290,55 @@ def test_wav_spectrum_frames_follow_actual_audio_over_time(tmp_path) -> None:
     assert all(len(frame) == 12 for frame in frames)
     assert frames[0] != frames[-1]
     assert max(frames[0]) == 1.0
-    assert max(frames[-1]) == 1.0
+    assert max(frames[-1]) >= 0.99
+
+
+def test_wav_spectrum_frames_scale_with_audio_duration(tmp_path) -> None:
+    wav_path = tmp_path / "long_spectrum_frames.wav"
+    sample_rate = 16000
+    samples = []
+    for index in range(sample_rate * 3):
+        t = index / sample_rate
+        samples.append(int(math.sin(2 * math.pi * 440 * t) * 9000))
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    frames = voice_module._wav_spectrum_frames(wav_path, bands=12)
+
+    assert len(frames) == 48
+    assert all(len(frame) == 12 for frame in frames)
+
+
+def test_wav_spectrum_frames_preserve_frame_loudness(tmp_path) -> None:
+    wav_path = tmp_path / "loudness_spectrum_frames.wav"
+    sample_rate = 22050
+    samples = []
+    for index in range(sample_rate):
+        t = index / sample_rate
+        amplitude = 2500 if index < sample_rate // 2 else 12000
+        samples.append(int(math.sin(2 * math.pi * 440 * t) * amplitude))
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    frames = voice_module._wav_spectrum_frames(wav_path, frame_count=12, bands=12)
+    first_half_peak = max(max(frame) for frame in frames[:4])
+    second_half_peak = max(max(frame) for frame in frames[-4:])
+
+    assert first_half_peak < 0.35
+    assert second_half_peak == 1.0
+
+
+def test_dashboard_uses_utterance_level_visual_gain() -> None:
+    dashboard = (Path(__file__).resolve().parents[1] / "metis_head" / "static" / "dashboard.html").read_text(encoding="utf-8")
+
+    assert "lastVoiceVisualGain" in dashboard
+    assert "visualGainForVoice" in dashboard
 
 
 def test_mock_speak_returns_events_and_final_idle_state() -> None:

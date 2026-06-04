@@ -10,9 +10,23 @@ token).
 
 ## Current Phase
 
-Phase scope: `0AP` - truthful LLM tool capability context (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning`).
+Phase scope: `0V/AUDIO10` - duration-scaled Piper spectrum frames (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning + 0AP truthful tool context`).
 
-Status: Metis now gives Ollama/OpenAI/mock chat providers an explicit governed-tool capability
+Status: Piper voice visualization now generates spectrum frames based on actual WAV duration instead
+of a fixed 48-frame packet. Frame amplitudes preserve real segment loudness, and the dashboard uses
+one utterance-level visual gain so quiet/loud differences survive animation while the panel still
+fills like an old stereo analyzer.
+
+Phase 0V/AUDIO10 implemented:
+
+- Replaced fixed default `audio_spectrum_frames=48` with duration-scaled frame counts at about 16 fps,
+  capped for event-log size.
+- Scaled each spectrum frame by actual segment RMS relative to the utterance peak instead of
+  normalizing every frame to max brightness.
+- Added dashboard utterance-level visual gain via `lastVoiceVisualGain` and `visualGainForVoice()`.
+- Added tests for duration-scaled frames, loudness preservation, and dashboard gain hooks.
+
+Previous Phase 0AP status: Metis gives Ollama/OpenAI/mock chat providers an explicit governed-tool capability
 context derived from the canonical tool registry. Broad questions like "what tools can you use?"
 should no longer produce stale "I have no tools" answers; the model is instructed to describe the
 governed lanes truthfully while preserving the boundary that LLM providers do not call tools
@@ -1015,7 +1029,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-230 passed under Python 3.11 (includes truthful LLM tool capability context, chat-facing governed task planning, guided governed plan advance, governed plan result binding, approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+233 passed under Python 3.11 (includes duration-scaled loudness-preserving Piper spectrum frames, truthful LLM tool capability context, chat-facing governed task planning, guided governed plan advance, governed plan result binding, approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
