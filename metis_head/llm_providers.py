@@ -7,6 +7,7 @@ from typing import Any
 from urllib import error, request
 
 from .personality import PERSONALITY_VERSION, personality_system_prompt
+from .tool_registry import list_tools
 
 
 @dataclass
@@ -208,7 +209,8 @@ def governed_messages(
     system = (
         f"{personality_system_prompt(personality_mode)}\n\n"
         "You are Metis Head's governed virtual chat router. "
-        "Do not execute tools, hardware, BOH, Project Atlas, microphone, camera, or external actions. "
+        "Do not execute hardware, BOH, Project Atlas, microphone, camera, shell, arbitrary filesystem, network, or external actions. "
+        f"{_governed_tool_capability_context(state)} "
         f"Conversation depth is {state.get('conversation_depth_bucket')}. "
         f"Initiative is {state.get('initiative_bucket')}. "
         f"Interaction mode is {state.get('interaction_mode')}. "
@@ -227,6 +229,25 @@ def governed_messages(
     messages.extend(_clean_history(history))
     messages.append({"role": "user", "content": user_message})
     return messages
+
+
+def _governed_tool_capability_context(state: dict[str, Any]) -> str:
+    tools = list_tools()["tools"]
+    active = [tool["tool_id"] for tool in tools if tool["enabled"] and tool["permission_mode"] == "approved_read_only"]
+    dry_run = [tool["tool_id"] for tool in tools if tool["enabled"] and tool["permission_mode"] == "dry_run" and tool["side_effect_class"] == "none"]
+    proposal = [tool["tool_id"] for tool in tools if tool["enabled"] and tool["permission_mode"] == "proposal_only"]
+    mode = state.get("interaction_mode", "human")
+    agent_boundary = " In Agent Mode every tool request becomes proposal-only." if mode == "agent" else ""
+    return (
+        "Tool capability context: Metis has a governed native tool lane, but the LLM provider does not call tools directly. "
+        "Explicit tool intents are intercepted by deterministic Metis routes before LLM generation. "
+        f"Available safe dry-run tools: {', '.join(dry_run) or 'none'}. "
+        f"Approved read-only lanes after proposal and human review: {', '.join(active) or 'none'}. "
+        f"Proposal-only or future lanes: {', '.join(proposal) or 'none'}. "
+        "Task requests can be planned as persisted governed tool plans with review, step proposal, execution-request, result-binding, and advance gates. "
+        "When asked about tools, describe these governed capabilities truthfully; do not say there are no tools, and do not claim autonomous execution."
+        f"{agent_boundary}"
+    )
 
 
 def _clean_history(history: list[dict[str, str]]) -> list[dict[str, str]]:

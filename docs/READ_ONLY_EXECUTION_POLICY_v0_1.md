@@ -42,6 +42,8 @@ plan review and proposal review gates, and must not approve, deny, or execute un
 Phase 0AO can route explicit chat planning requests into persisted governed tool plans and return the
 first next-action recommendation. Chat planning must not approve plans, queue step proposals, request
 execution, bind results, or execute tools.
+Phase 0AP can describe governed tool capabilities in LLM system context. This is prompt accuracy
+only; it does not let LLM providers call tools directly or add execution authority.
 
 ## Non-Goals
 
@@ -192,3 +194,6 @@ Phase 0AO adds a chat-facing planner route for explicit prefixes such as `plan t
 reuses a persisted governed plan, returns `tool_planner` metadata and the first next action, and then
 stops. Later review, proposal materialization, execution requests, and result binding remain separate
 operator actions.
+Phase 0AP adds registry-derived tool capability context to governed chat messages so broad tool
+questions do not receive stale "no tools" answers. The LLM prompt must still state that deterministic
+Metis routes own tool handling and that providers must not claim autonomous execution.
