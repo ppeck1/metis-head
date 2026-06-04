@@ -975,6 +975,8 @@
         }
         const labels = [`${result.provider}:${result.model}`];
         if (result.proposal_queued) labels.push('proposal queued');
+        if (result.plan_queued) labels.push('plan_queued');
+        if (result.provider === 'tool_planner') labels.push('tool_planner');
         if (result.source_state) labels.push(result.source_state);
         if (result.voice) labels.push(result.voice.spoken ? 'voice queued' : result.voice.block_reason || 'voice off');
         document.getElementById('chatStatus').textContent = labels.join(' / ');

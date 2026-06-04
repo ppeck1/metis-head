@@ -645,6 +645,30 @@ def tool_task_plan(payload: dict[str, Any]) -> dict[str, Any]:
     return {"status": "plan_queued", "plan": _tool_plan_by_id(plan["plan_id"]), "event": event, "state": STATE, "leds": resolve_leds(STATE)}
 
 
+def _route_chat_plan_request(message: str) -> str | None:
+    text = message.strip()
+    lowered = text.lower()
+    prefixes = ("plan task:", "plan tool task:", "task plan:", "create tool plan:", "make tool plan:")
+    for prefix in prefixes:
+        if lowered.startswith(prefix):
+            return text[len(prefix) :].strip()
+    return None
+
+
+def _queue_chat_tool_plan(task: str) -> dict[str, Any]:
+    global STATE
+    if not task:
+        raise ValueError("task is required")
+    plan = plan_tool_task(task, STATE)
+    existing = _tool_plan_by_id(plan["plan_id"])
+    if existing:
+        return {"status": "plan_already_exists", "plan": existing, "next_action": next_plan_action(existing, STATE)}
+    event = {"type": "tool_plan", "plan": plan}
+    STATE = reduce_metis_event(STATE, event)
+    queued_plan = _tool_plan_by_id(plan["plan_id"])
+    return {"status": "plan_queued", "plan": queued_plan, "event": event, "next_action": next_plan_action(queued_plan, STATE)}
+
+
 @app.get("/metis/tools/{tool_id}")
 def tool_detail(tool_id: str) -> dict[str, Any]:
     try:
@@ -797,6 +821,47 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(user_message, str) or not user_message.strip():
         raise HTTPException(status_code=400, detail="message is required")
     options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    plan_task = _route_chat_plan_request(user_message)
+    if plan_task is not None:
+        try:
+            planned = _queue_chat_tool_plan(plan_task)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        plan = planned["plan"]
+        next_action = planned["next_action"]
+        plan_status = "queued" if planned["status"] == "plan_queued" else "already exists"
+        assistant_message = (
+            f"Governed tool plan {plan_status}: {plan['plan_id']} with {plan['step_count']} step(s). "
+            f"Next action: {next_action['action']}. Execution allowed: false."
+        )
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "tool_planner",
+                "model": "metis_tool_task_plan.v0.1",
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _speak_chat_response(assistant_message, options)
+        return {
+            "message": assistant_message,
+            "provider": "tool_planner",
+            "model": "metis_tool_task_plan.v0.1",
+            "proposal_queued": False,
+            "plan_queued": planned["status"] == "plan_queued",
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": classify_intent(user_message, STATE).to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"tool_plan": planned},
+            "retrieval": None,
+            "voice": voice,
+            "tool_plan": planned,
+        }
     proposal_queued = False
     policy = classify_intent(user_message, STATE)
     tool_result = None

@@ -39,6 +39,9 @@ later pending dry-run proposals. It must not bind raw file contents, raw command
 receipts, secrets, or reviewed/immutable proposals.
 Phase 0AN can guide the next plan transition by calling already-governed endpoints. It must stop at
 plan review and proposal review gates, and must not approve, deny, or execute unreviewed work.
+Phase 0AO can route explicit chat planning requests into persisted governed tool plans and return the
+first next-action recommendation. Chat planning must not approve plans, queue step proposals, request
+execution, bind results, or execute tools.
 
 ## Non-Goals
 
@@ -185,3 +188,7 @@ Phase 0AN adds `metis_tool_plan_advance.v0.1`, a visibility and orchestration la
 plan endpoints. It may queue step proposals, request execution for already-approved proposals, or
 bind safe summaries when the preceding gates are satisfied. It must return `waiting` at human review
 gates and does not create standing approval or autonomous execution authority.
+Phase 0AO adds a chat-facing planner route for explicit prefixes such as `plan task:`. It creates or
+reuses a persisted governed plan, returns `tool_planner` metadata and the first next action, and then
+stops. Later review, proposal materialization, execution requests, and result binding remain separate
+operator actions.
