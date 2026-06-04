@@ -208,3 +208,7 @@ Phase 0AS adds chat-facing proposal and receipt awareness. Approval-queue prompt
 prompts return bounded observational metadata only. They do not approve proposals, deny proposals,
 request execution, create receipts, expose raw file contents, expose command output, or grant any new
 authority.
+Phase 0AT adds chat-guided approval instructions. Next-step prompts may name the relevant UI action
+and API route for reviewing a plan, reviewing a proposal, requesting an execution receipt, binding
+safe summaries, or inspecting a clear workspace. The chat route must not perform any of those actions
+itself.

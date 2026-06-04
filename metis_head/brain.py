@@ -679,9 +679,9 @@ def _latest_tool_plan() -> dict[str, Any] | None:
 
 def _plan_id_from_text(message: str) -> str | None:
     for token in re.split(r"[\s,;]+", message):
-        cleaned = token.strip().strip(".:()[]{}")
+        cleaned = token.strip().strip(".:?!()[]{}'\"")
         if cleaned.startswith("plan_id="):
-            return cleaned.split("=", 1)[1].strip(".:()[]{}") or None
+            return cleaned.split("=", 1)[1].strip(".:?!()[]{}'\"") or None
         if cleaned.startswith("plan_"):
             return cleaned
     return None
@@ -769,6 +769,200 @@ def _route_chat_queue_status_request(message: str) -> str | None:
     if any(phrase in lowered for phrase in proposal_phrases):
         return "proposals"
     return None
+
+
+def _proposal_id_from_text(message: str) -> str | None:
+    for token in re.split(r"[\s,;]+", message):
+        cleaned = token.strip().strip(".:?!()[]{}'\"")
+        if cleaned.startswith("proposal_id="):
+            return cleaned.split("=", 1)[1].strip(".:?!()[]{}'\"") or None
+        if cleaned.startswith("proposal_"):
+            return cleaned
+    return None
+
+
+def _route_chat_next_action_request(message: str) -> dict[str, str | None] | None:
+    text = message.strip()
+    lowered = text.lower()
+    phrases = (
+        "what should i do next",
+        "what do i do next",
+        "next governed action",
+        "next approval step",
+        "what is the next approval step",
+        "how do i approve",
+        "how do i deny",
+        "how do i request execution",
+        "how should i proceed",
+    )
+    if not any(phrase in lowered for phrase in phrases):
+        return None
+    return {"plan_id": _plan_id_from_text(text), "proposal_id": _proposal_id_from_text(text)}
+
+
+def _receipt_exists_for_proposal(proposal_id: str) -> bool:
+    return any(receipt.get("proposal_id") == proposal_id for receipt in STATE.get("execution_audit_log", []))
+
+
+def _instruction_payload(
+    *,
+    recommended_action: str,
+    target_type: str,
+    target_id: str | None,
+    ui_instruction: str,
+    api_instruction: dict[str, str | None],
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "status": "next_action_instruction",
+        "recommended_action": recommended_action,
+        "target": {"type": target_type, "id": target_id},
+        "ui_instruction": ui_instruction,
+        "api_instruction": api_instruction,
+        "reason": reason,
+        "execution_allowed": False,
+        "chat_may_perform_action": False,
+    }
+
+
+def _proposal_instruction(proposal: dict[str, Any]) -> dict[str, Any]:
+    proposal_id = str(proposal.get("proposal_id") or "")
+    review_status = str(proposal.get("review_status") or "pending")
+    if review_status == "pending":
+        return _instruction_payload(
+            recommended_action="review_proposal",
+            target_type="proposal",
+            target_id=proposal_id,
+            ui_instruction=f"Open the Tools panel, select proposal {proposal_id}, then click Approve or Deny.",
+            api_instruction={"approve": f"POST /metis/proposals/{proposal_id}/approve", "deny": f"POST /metis/proposals/{proposal_id}/deny"},
+            reason="Proposal is pending human review.",
+        )
+    if review_status == "approved" and not _receipt_exists_for_proposal(proposal_id):
+        return _instruction_payload(
+            recommended_action="request_execution_receipt",
+            target_type="proposal",
+            target_id=proposal_id,
+            ui_instruction=f"Open the Tools panel, select proposal {proposal_id}, then click Request Execution.",
+            api_instruction={"request_execution": f"POST /metis/proposals/{proposal_id}/request_execution"},
+            reason="Proposal is approved and can move to the existing execution-request receipt gate.",
+        )
+    if review_status == "approved":
+        return _instruction_payload(
+            recommended_action="inspect_receipt",
+            target_type="proposal",
+            target_id=proposal_id,
+            ui_instruction="Open the Tools panel and refresh Execution Receipts.",
+            api_instruction={"list_receipts": "GET /metis/execution/receipts"},
+            reason="Proposal is already approved and has at least one receipt.",
+        )
+    return _instruction_payload(
+        recommended_action="no_action_available",
+        target_type="proposal",
+        target_id=proposal_id,
+        ui_instruction="No governed action is available for this proposal.",
+        api_instruction={"detail": f"GET /metis/proposals/{proposal_id}"},
+        reason=f"Proposal review status is {review_status}.",
+    )
+
+
+def _plan_instruction(plan: dict[str, Any]) -> dict[str, Any]:
+    plan_id = str(plan.get("plan_id") or "")
+    action = next_plan_action(plan, STATE)
+    action_name = action.get("action")
+    if action_name == "needs_plan_review":
+        return _instruction_payload(
+            recommended_action="review_tool_plan",
+            target_type="tool_plan",
+            target_id=plan_id,
+            ui_instruction=f"Open the Tools panel, select plan {plan_id}, then click Approve Plan or Deny Plan.",
+            api_instruction={"approve": f"POST /metis/tools/plans/{plan_id}/approve", "deny": f"POST /metis/tools/plans/{plan_id}/deny"},
+            reason=str(action.get("detail") or "Plan requires review."),
+        )
+    if action_name == "can_queue_step_proposals":
+        return _instruction_payload(
+            recommended_action="advance_plan_queue_steps",
+            target_type="tool_plan",
+            target_id=plan_id,
+            ui_instruction=f"Open the Tools panel, select plan {plan_id}, then click Advance Plan.",
+            api_instruction={"advance": f"POST /metis/tools/plans/{plan_id}/advance", "queue_steps": f"POST /metis/tools/plans/{plan_id}/queue_steps"},
+            reason=str(action.get("detail") or "Approved plan can queue step proposals."),
+        )
+    if action_name == "needs_step_proposal_review":
+        waiting = action.get("waiting_on", [])
+        proposal_id = waiting[0].get("proposal_id") if waiting and isinstance(waiting[0], dict) else None
+        return _instruction_payload(
+            recommended_action="review_step_proposal",
+            target_type="proposal",
+            target_id=proposal_id,
+            ui_instruction=f"Open the Tools panel, select proposal {proposal_id}, then click Approve or Deny.",
+            api_instruction={"approve": f"POST /metis/proposals/{proposal_id}/approve", "deny": f"POST /metis/proposals/{proposal_id}/deny"},
+            reason=str(action.get("detail") or "A step proposal requires review."),
+        )
+    if action_name == "can_request_step_execution":
+        ready = action.get("ready_steps", [])
+        proposal_id = ready[0].get("proposal_id") if ready and isinstance(ready[0], dict) else None
+        return _instruction_payload(
+            recommended_action="request_step_execution_receipt",
+            target_type="proposal",
+            target_id=proposal_id,
+            ui_instruction=f"Open the Tools panel, select proposal {proposal_id}, then click Request Execution, or select plan {plan_id} and click Advance Plan.",
+            api_instruction={"request_execution": f"POST /metis/proposals/{proposal_id}/request_execution", "advance": f"POST /metis/tools/plans/{plan_id}/advance"},
+            reason=str(action.get("detail") or "Approved step proposal can move to the receipt gate."),
+        )
+    if action_name == "can_bind_results":
+        return _instruction_payload(
+            recommended_action="bind_plan_results",
+            target_type="tool_plan",
+            target_id=plan_id,
+            ui_instruction=f"Open the Tools panel, select plan {plan_id}, then click Bind Results or Advance Plan.",
+            api_instruction={"bind_results": f"POST /metis/tools/plans/{plan_id}/bind_results", "advance": f"POST /metis/tools/plans/{plan_id}/advance"},
+            reason=str(action.get("detail") or "Safe receipt summaries can be bound into dependent steps."),
+        )
+    return _instruction_payload(
+        recommended_action=str(action_name or "no_action_available"),
+        target_type="tool_plan",
+        target_id=plan_id,
+        ui_instruction="No governed operator action is currently required for this plan.",
+        api_instruction={"detail": f"GET /metis/tools/plans/{plan_id}"},
+        reason=str(action.get("detail") or "No next action."),
+    )
+
+
+def _next_action_instruction(plan_id: str | None = None, proposal_id: str | None = None) -> dict[str, Any]:
+    if proposal_id:
+        proposal = _proposal_by_id(proposal_id)
+        if proposal is None:
+            raise HTTPException(status_code=404, detail="proposal not found")
+        return _proposal_instruction(proposal)
+    if plan_id:
+        return _plan_instruction(_resolve_chat_plan(plan_id))
+    for plan in STATE.get("tool_plan_queue", []):
+        if isinstance(plan, dict):
+            instruction = _plan_instruction(plan)
+            if instruction["recommended_action"] not in {"complete_for_current_scope", "plan_denied", "no_action_available"}:
+                return instruction
+    for proposal in STATE.get("approval_queue", []):
+        if isinstance(proposal, dict) and proposal.get("review_status", "pending") == "pending":
+            return _proposal_instruction(proposal)
+    for proposal in STATE.get("approval_queue", []):
+        if isinstance(proposal, dict) and proposal.get("review_status") == "approved" and not _receipt_exists_for_proposal(str(proposal.get("proposal_id") or "")):
+            return _proposal_instruction(proposal)
+    return _instruction_payload(
+        recommended_action="no_action_available",
+        target_type="workspace",
+        target_id=None,
+        ui_instruction="No governed approval or receipt action is currently waiting.",
+        api_instruction={"proposals": "GET /metis/proposals", "plans": "GET /metis/tools/plans", "receipts": "GET /metis/execution/receipts"},
+        reason="There are no pending plan reviews, proposal reviews, or approved proposals awaiting receipt requests.",
+    )
+
+
+def _next_action_message(instruction: dict[str, Any]) -> str:
+    return (
+        f"Next governed action: {instruction['recommended_action']} for "
+        f"{instruction['target']['type']} {instruction['target']['id'] or 'current workspace'}. "
+        f"{instruction['ui_instruction']} Chat cannot perform this action."
+    )
 
 
 def _proposal_status_summary(limit: int = 6) -> dict[str, Any]:
@@ -1103,6 +1297,38 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "retrieval": None,
             "voice": voice,
             "tool_plan": controlled,
+        }
+    next_action_request = _route_chat_next_action_request(user_message)
+    if next_action_request is not None:
+        instruction = _next_action_instruction(next_action_request["plan_id"], next_action_request["proposal_id"])
+        assistant_message = _next_action_message(instruction)
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "tool_planner",
+                "model": "metis_tool_next_action.v0.1",
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _speak_chat_response(assistant_message, options)
+        return {
+            "message": assistant_message,
+            "provider": "tool_planner",
+            "model": "metis_tool_next_action.v0.1",
+            "proposal_queued": False,
+            "plan_queued": False,
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": classify_intent(user_message, STATE).to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"next_action": instruction},
+            "retrieval": None,
+            "voice": voice,
+            "next_action": instruction,
         }
     queue_status_request = _route_chat_queue_status_request(user_message)
     if queue_status_request is not None:
