@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import re
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -669,6 +670,80 @@ def _queue_chat_tool_plan(task: str) -> dict[str, Any]:
     return {"status": "plan_queued", "plan": queued_plan, "event": event, "next_action": next_plan_action(queued_plan, STATE)}
 
 
+def _latest_tool_plan() -> dict[str, Any] | None:
+    plans = STATE.get("tool_plan_queue", [])
+    if not plans:
+        return None
+    return plans[-1]
+
+
+def _plan_id_from_text(message: str) -> str | None:
+    for token in re.split(r"[\s,;]+", message):
+        cleaned = token.strip().strip(".:()[]{}")
+        if cleaned.startswith("plan_id="):
+            return cleaned.split("=", 1)[1].strip(".:()[]{}") or None
+        if cleaned.startswith("plan_"):
+            return cleaned
+    return None
+
+
+def _route_chat_plan_control_request(message: str) -> dict[str, str | None] | None:
+    text = message.strip()
+    lowered = text.lower()
+    plan_id = _plan_id_from_text(text)
+    advance_phrases = (
+        "advance tool plan",
+        "continue tool plan",
+        "advance plan",
+        "continue plan",
+        "move tool plan forward",
+    )
+    status_phrases = (
+        "tool plan status",
+        "plan status",
+        "what is next for my tool plan",
+        "what's next for my tool plan",
+        "next tool plan step",
+        "tool plan next",
+    )
+    if any(phrase in lowered for phrase in advance_phrases):
+        return {"action": "advance", "plan_id": plan_id}
+    if any(phrase in lowered for phrase in status_phrases):
+        return {"action": "status", "plan_id": plan_id}
+    return None
+
+
+def _resolve_chat_plan(plan_id: str | None) -> dict[str, Any]:
+    plan = _tool_plan_by_id(plan_id) if plan_id else _latest_tool_plan()
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    return plan
+
+
+def _plan_control_message(plan: dict[str, Any], next_action: dict[str, Any], status: str) -> str:
+    review_status = plan.get("review_status", "pending")
+    action = next_action.get("action", "unknown")
+    reason = next_action.get("reason") or next_action.get("message") or "No additional detail."
+    return (
+        f"Governed tool plan {status}: {plan['plan_id']} is {review_status} with "
+        f"{plan.get('step_count', 0)} step(s). Next action: {action}. {reason} "
+        "Chat cannot approve plans, approve proposals, or grant standing execution."
+    )
+
+
+def _chat_plan_status(plan_id: str | None) -> dict[str, Any]:
+    plan = _resolve_chat_plan(plan_id)
+    action = next_plan_action(plan, STATE)
+    return {"status": "plan_status", "plan": plan, "next_action": action}
+
+
+def _chat_plan_advance(plan_id: str | None) -> dict[str, Any]:
+    plan = _resolve_chat_plan(plan_id)
+    advanced = advance_tool_plan(plan["plan_id"])
+    latest = _tool_plan_by_id(plan["plan_id"]) or plan
+    return {"status": "plan_advance_requested", "plan": latest, "advance": advanced, "next_action": advanced.get("next_action") or next_plan_action(latest, STATE)}
+
+
 @app.get("/metis/tools/{tool_id}")
 def tool_detail(tool_id: str) -> dict[str, Any]:
     try:
@@ -861,6 +936,48 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "retrieval": None,
             "voice": voice,
             "tool_plan": planned,
+        }
+    plan_control = _route_chat_plan_control_request(user_message)
+    if plan_control is not None:
+        if plan_control["action"] == "advance":
+            controlled = _chat_plan_advance(plan_control["plan_id"])
+            model = "metis_tool_plan_advance.v0.1"
+            plan = controlled["plan"]
+            next_action = controlled["next_action"]
+            assistant_message = _plan_control_message(plan, next_action, "advance checked")
+        else:
+            controlled = _chat_plan_status(plan_control["plan_id"])
+            model = "metis_tool_plan_status.v0.1"
+            plan = controlled["plan"]
+            next_action = controlled["next_action"]
+            assistant_message = _plan_control_message(plan, next_action, "status")
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "tool_planner",
+                "model": model,
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _speak_chat_response(assistant_message, options)
+        return {
+            "message": assistant_message,
+            "provider": "tool_planner",
+            "model": model,
+            "proposal_queued": False,
+            "plan_queued": False,
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": classify_intent(user_message, STATE).to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"tool_plan": controlled},
+            "retrieval": None,
+            "voice": voice,
+            "tool_plan": controlled,
         }
     proposal_queued = False
     policy = classify_intent(user_message, STATE)

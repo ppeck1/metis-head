@@ -200,3 +200,7 @@ operator actions.
 Phase 0AP adds registry-derived tool capability context to governed chat messages so broad tool
 questions do not receive stale "no tools" answers. The LLM prompt must still state that deterministic
 Metis routes own tool handling and that providers must not claim autonomous execution.
+Phase 0AR adds chat-facing plan status and explicit plan advance prompts. Status prompts are
+read-only reports over the latest or named plan. Advance prompts invoke only the existing guided
+advance path, which still stops at plan/proposal review gates and cannot approve plans, approve
+proposals, create standing authority, or execute unreviewed work.
