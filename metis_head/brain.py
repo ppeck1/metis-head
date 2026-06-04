@@ -32,6 +32,7 @@ from .tool_contract import build_tool_contract_manifest
 from .tool_completion import calculate_tool_completion
 from .tool_governance import evaluate_tool_request
 from .tool_policy_snapshot import build_tool_policy_snapshot
+from .tool_plan_runner import next_plan_action
 from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .tool_task_planner import plan_tool_task
@@ -444,6 +445,24 @@ def bind_tool_plan_results(plan_id: str) -> dict[str, Any]:
         "state": STATE,
         "leds": resolve_leds(STATE),
     }
+
+
+@app.post("/metis/tools/plans/{plan_id}/advance")
+def advance_tool_plan(plan_id: str) -> dict[str, Any]:
+    plan = _tool_plan_by_id(plan_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail="tool plan not found")
+    action = next_plan_action(plan, STATE)
+    if action["action"] == "can_queue_step_proposals":
+        result = queue_tool_plan_steps(plan_id, {"reason": "guided advance queued step proposals"})
+        return {"status": "advanced", "advanced_action": action, "result": result, "next_action": next_plan_action(_tool_plan_by_id(plan_id), STATE)}
+    if action["action"] == "can_request_step_execution":
+        result = request_tool_plan_execution(plan_id, {"reason": "guided advance requested approved step execution"})
+        return {"status": "advanced", "advanced_action": action, "result": result, "next_action": next_plan_action(_tool_plan_by_id(plan_id), STATE)}
+    if action["action"] == "can_bind_results":
+        result = bind_tool_plan_results(plan_id)
+        return {"status": "advanced", "advanced_action": action, "result": result, "next_action": next_plan_action(_tool_plan_by_id(plan_id), STATE)}
+    return {"status": "waiting", "next_action": action, "plan": plan, "state": STATE, "leds": resolve_leds(STATE)}
 
 
 def _proposal_by_id(proposal_id: str) -> dict[str, Any] | None:

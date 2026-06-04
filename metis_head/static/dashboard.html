@@ -583,6 +583,7 @@
         <button onclick="queueToolPlanSteps()">Queue Step Proposals</button>
         <button onclick="requestToolPlanExecution()">Request Plan Execution</button>
         <button onclick="bindToolPlanResults()">Bind Results</button>
+        <button onclick="advanceToolPlan()">Advance Plan</button>
       </div>
       <div id="toolStatus" class="status-line"></div>
       <pre id="toolsPanel"></pre>
@@ -1230,6 +1231,29 @@
         await refresh();
         await refreshToolPlans();
         await refreshProposals();
+      } catch (error) {
+        document.getElementById('toolStatus').textContent = String(error);
+      }
+    }
+    async function advanceToolPlan() {
+      const planId = document.getElementById('toolPlanSelect').value;
+      if (!planId) {
+        document.getElementById('toolStatus').textContent = 'No tool plan selected';
+        return;
+      }
+      try {
+        const response = await fetch(`/metis/tools/plans/${encodeURIComponent(planId)}/advance`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: '{}'
+        });
+        const result = await response.json();
+        document.getElementById('toolsPanel').textContent = JSON.stringify(result, null, 2);
+        document.getElementById('toolStatus').textContent = response.ok ? `${result.status}: ${(result.next_action || {}).action || (result.advanced_action || {}).action}` : String(result.detail || 'Tool plan advance failed');
+        await refresh();
+        await refreshToolPlans();
+        await refreshProposals();
+        await refreshExecutionReceipts();
       } catch (error) {
         document.getElementById('toolStatus').textContent = String(error);
       }

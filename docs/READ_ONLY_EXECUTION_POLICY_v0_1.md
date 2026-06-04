@@ -37,6 +37,8 @@ blocked by their existing proposal/receipt policies.
 Phase 0AM can bind bounded receipt summaries and output hashes from completed approved steps into
 later pending dry-run proposals. It must not bind raw file contents, raw command output, external
 receipts, secrets, or reviewed/immutable proposals.
+Phase 0AN can guide the next plan transition by calling already-governed endpoints. It must stop at
+plan review and proposal review gates, and must not approve, deny, or execute unreviewed work.
 
 ## Non-Goals
 
@@ -179,3 +181,7 @@ Phase 0AM adds replayable `tool_plan_result_binding` events. Bindings may update
 dependent dry-run proposals using bounded `output_summary.preview` and `output_hash` data from prior
 receipts. Binding does not approve the dependent proposal, request execution, or expose raw source
 content.
+Phase 0AN adds `metis_tool_plan_advance.v0.1`, a visibility and orchestration layer over existing
+plan endpoints. It may queue step proposals, request execution for already-approved proposals, or
+bind safe summaries when the preceding gates are satisfied. It must return `waiting` at human review
+gates and does not create standing approval or autonomous execution authority.
