@@ -220,3 +220,6 @@ Phase 0AV adds simulated voice-command ingress for the radio form factor. Recogn
 by the caller, not captured from a real microphone. The route emits redacted STT-style events, reuses
 the canonical chat/tool governance path, defaults to spoken replies, respects mic cutoff, and adds no
 new execution authority.
+Handoff QA hardening keeps `filesystem.read` rejection deterministic by evaluating allowlist and file
+extension gates before file existence. This preserves security-relevant rejection reasons across
+clean exports, Windows paths, and POSIX-style test environments.

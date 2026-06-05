@@ -86,10 +86,10 @@ def _allowed_file(raw_path: Any) -> Path:
     allowed_root = _repo_root()
     if allowed_root not in (resolved, *resolved.parents):
         raise ReadOnlyToolError("path is outside the Phase 0F allowlist")
-    if not resolved.is_file():
-        raise ReadOnlyToolError("path is not a file")
     if resolved.suffix.lower() not in ALLOWED_TEXT_EXTENSIONS:
         raise ReadOnlyToolError("file extension is outside the Phase 0F allowlist")
+    if not resolved.is_file():
+        raise ReadOnlyToolError("path is not a file")
     return resolved
 
 

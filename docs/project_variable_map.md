@@ -502,7 +502,8 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | Field | Current Phase | Purpose |
 |---|---|---|
 | `metis_head.execution` | 0W | Builds deterministic execution receipts for execution requests. |
-| `metis_head.read_only_tools` | 0G/0F/0AQ | Narrow approved read-only local executors; currently current-repo `git.status` and current-repo `filesystem.read` text preview, anchored to `METIS_REPO_ROOT` when configured. |
+| `metis_head.read_only_tools` | 0G/0F/0AQ/handoff-QA | Narrow approved read-only local executors; currently current-repo `git.status` and current-repo `filesystem.read` text preview, anchored to `METIS_REPO_ROOT` when configured. Filesystem reads gate allowlist and extension before file existence. |
+| `tests/conftest.py` | handoff-QA | Sets `METIS_REPO_ROOT` during tests and initializes `.git` only when a clean export lacks git metadata, so read-only git tests are reproducible after unzip. |
 | `METIS_REPO_ROOT` | 0AQ | Optional environment allowlist anchor for current-repo `filesystem.read` and `git.status`; set by `scripts/launch_metis.ps1`. |
 | `EXECUTION_RECEIPT_VERSION` | 0W | `metis_execution_receipt.v0.1`. |
 | `receipt_id` | 0W | Deterministic ID derived from receipt index, proposal ID, status, and requested timestamp. |

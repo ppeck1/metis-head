@@ -50,9 +50,11 @@ def test_approved_filesystem_read_returns_redacted_preview_receipt() -> None:
     assert body["state"]["external_action_executed"] is False
 
 
-def test_filesystem_read_blocks_outside_allowlist() -> None:
+def test_filesystem_read_blocks_outside_allowlist(tmp_path) -> None:
     client = _client()
-    queued = client.post("/metis/tools/propose", json={"tool_id": "filesystem.read", "arguments": {"path": "B:\\not_allowed.txt"}}).json()
+    outside_file = tmp_path / "not_allowed.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    queued = client.post("/metis/tools/propose", json={"tool_id": "filesystem.read", "arguments": {"path": str(outside_file)}}).json()
     proposal_id = _first_proposal_id(queued["state"])
     client.post(f"/metis/proposals/{proposal_id}/approve", json={"reason": "not allowed"})
 

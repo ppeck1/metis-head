@@ -29,6 +29,15 @@ Phase 0AV implemented:
 - Added tests proving voice-command `git status`, next-action guidance, tool-awareness questions,
   mic cutoff blocking, transcript aliases, and no external execution.
 
+Opus review follow-up:
+
+- `filesystem.read` now evaluates allowlist and extension gates before file existence checks, keeping
+  governance rejection reasons deterministic across environments.
+- The test suite now sets `METIS_REPO_ROOT` and initializes a local `.git` directory only when a clean
+  export is missing one, so read-only git-status tests are reproducible after unzip.
+- The outside-allowlist filesystem test now uses a `tmp_path` outside the repo instead of a
+  Windows-drive-specific `B:\...` assumption.
+
 Handoff:
 
 - Current handoff report: `docs/HANDOFF_REPORT_2026-06-05.md`.

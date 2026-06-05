@@ -8,6 +8,7 @@
 - Current phase documented: `0AV` - simulated voice-command tool awareness
 - Verification: `257 passed` under Python 3.11 before this handoff pass
 - Clean-export target: tracked source/docs/tests only; no caches, local voice models, temp WAVs, or virtual environments
+- Opus review follow-up: clean-export test reproducibility was hardened after review; see the notes below.
 
 ## Current Capability State
 
@@ -117,3 +118,15 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/voice/command `
 - Keep docs updated before each commit.
 - Preserve the approval boundary: guidance may select or describe, but must not approve or execute.
 - Treat the radio form factor as the target UX: dashboard controls are development scaffolding, not the final operator path.
+
+## Opus Review Follow-Up
+
+The Opus 4.8 review correctly identified that the clean export omitted `.git`, while several tests
+expected a git checkout. The test suite now initializes `.git` only when missing and sets
+`METIS_REPO_ROOT` during tests, so unzip-and-test runs can reproduce the current verification state.
+
+The review also flagged filesystem read gate ordering. `filesystem.read` now evaluates allowlist and
+extension gates before file existence, so rejection reasons are deterministic and security-relevant
+gates are checked first.
+
+The Windows-specific outside-allowlist test path was replaced with a `tmp_path` outside the repo root.
