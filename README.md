@@ -10,12 +10,28 @@ token).
 
 ## Current Phase
 
-Phase scope: `0AV` - simulated voice-command tool awareness (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning + 0AP truthful tool context + 0V/AUDIO10 spectrum fidelity + 0AQ launch-root hardening + 0AR chat plan control + 0AS proposal/receipt awareness + 0AT next-action guidance + 0AU dashboard guided shortcuts`).
+Phase scope: `0AW` - voice-first deterministic tool awareness (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning + 0AP truthful tool context + 0V/AUDIO10 spectrum fidelity + 0AQ launch-root hardening + 0AR chat plan control + 0AS proposal/receipt awareness + 0AT next-action guidance + 0AU dashboard guided shortcuts + 0AV simulated voice-command routing`).
 
-Status: Metis now has a simulation-first voice-command route for the future radio form factor.
+Status: Metis now answers tool/capability questions through a deterministic Brain-owned route,
+not by hoping the selected LLM provider follows the prompt. Typed chat and simulated voice commands
+that ask what tools are available return a registry-derived `metis_tool_capability_awareness.v0.1`
+summary, speak it when voice reply is enabled, and preserve the boundary that the LLM provider does
+not call tools directly. There is still no real microphone, wake word, or STT runtime in this phase.
+
+Phase 0AW implemented:
+
+- Added deterministic detection for tool/capability awareness prompts in `/metis/chat`.
+- Added `metis_tool_capability_awareness.v0.1` response metadata listing safe dry-run tools,
+  approved read-only lanes, proposal-only lanes, voice-instruction support, and execution boundaries.
+- Routed simulated voice-command tool-awareness questions through the same deterministic answer and
+  existing governed TTS path.
+- Added tests proving provider-independent typed answers, registry-derived metadata, voice-route
+  awareness, Agent Mode proposal-only boundary wording, and no proposal/execution side effects.
+- Verification after Phase 0AW: `261 passed` under Python 3.11.
+
+Previous Phase 0AV status: Metis has a simulation-first voice-command route for the future radio form factor.
 `POST /metis/voice/command` accepts a recognized text command, emits redacted STT-style events, routes
 the command through the same governed chat/tool paths, and requests a spoken response by default.
-There is still no real microphone, wake word, or STT runtime in this phase.
 
 Phase 0AV implemented:
 

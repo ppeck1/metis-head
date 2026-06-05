@@ -1064,6 +1064,72 @@ def _receipt_status_message(summary: dict[str, Any]) -> str:
     )
 
 
+def _route_chat_tool_capability_request(message: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9.\s_-]+", " ", message.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    if not normalized:
+        return False
+    tool_terms = ("tool", "tools", "capability", "capabilities", "can you do", "available to you")
+    if not any(term in normalized for term in tool_terms):
+        return False
+    awareness_terms = (
+        "what",
+        "which",
+        "list",
+        "show",
+        "available",
+        "access",
+        "use",
+        "can you",
+        "do you have",
+        "current capabilities",
+    )
+    return any(term in normalized for term in awareness_terms)
+
+
+def _tool_capability_summary() -> dict[str, Any]:
+    tools = list_tools()["tools"]
+    safe_dry_run = [
+        tool["tool_id"]
+        for tool in tools
+        if tool.get("enabled") and tool.get("permission_mode") == "dry_run" and tool.get("side_effect_class") == "none"
+    ]
+    approved_read_only = [
+        tool["tool_id"]
+        for tool in tools
+        if tool.get("enabled") and tool.get("permission_mode") == "approved_read_only"
+    ]
+    proposal_only = [
+        tool["tool_id"]
+        for tool in tools
+        if tool.get("enabled") and tool.get("permission_mode") == "proposal_only"
+    ]
+    return {
+        "schema_version": "metis_tool_capability_awareness.v0.1",
+        "safe_dry_run_tools": safe_dry_run,
+        "approved_read_only_lanes": approved_read_only,
+        "proposal_only_lanes": proposal_only,
+        "llm_direct_tool_calling": False,
+        "voice_instruction_supported": True,
+        "execution_boundary": "Tool use is routed through deterministic governed lanes; chat and voice do not create autonomous execution authority.",
+        "agent_mode_boundary": "Agent Mode queues proposals only and never executes tools directly.",
+    }
+
+
+def _tool_capability_message(summary: dict[str, Any]) -> str:
+    safe = ", ".join(summary["safe_dry_run_tools"]) or "none"
+    read_only = ", ".join(summary["approved_read_only_lanes"]) or "none"
+    proposals = ", ".join(summary["proposal_only_lanes"]) or "none"
+    return (
+        "Metis has governed tools available through native tool lanes. "
+        f"Safe dry-run tools: {safe}. "
+        f"Approved read-only lanes after proposal and human review: {read_only}. "
+        f"Proposal-only or future lanes: {proposals}. "
+        "I do not call tools directly as an LLM, and I do not perform autonomous external actions. "
+        "Typed or spoken tool requests are routed into proposals, dry-runs, plans, review gates, and bounded receipts."
+    )
+
+
 @app.get("/metis/tools/{tool_id}")
 def tool_detail(tool_id: str) -> dict[str, Any]:
     try:
@@ -1371,6 +1437,38 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         }
     proposal_queued = False
     policy = classify_intent(user_message, STATE)
+    capability_request = _route_chat_tool_capability_request(user_message)
+    if capability_request:
+        capability_summary = _tool_capability_summary()
+        assistant_message = _tool_capability_message(capability_summary)
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "tool_capability",
+                "model": capability_summary["schema_version"],
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _speak_chat_response(assistant_message, options)
+        return {
+            "message": assistant_message,
+            "provider": "tool_capability",
+            "model": capability_summary["schema_version"],
+            "proposal_queued": False,
+            "plan_queued": False,
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": policy.to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"tool_capabilities": capability_summary},
+            "retrieval": None,
+            "voice": voice,
+            "tool_capabilities": capability_summary,
+        }
     tool_result = None
     try:
         tool_result = _handle_chat_tool_request(user_message, options)
