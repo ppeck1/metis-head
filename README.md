@@ -29,6 +29,10 @@ Phase 0AV implemented:
 - Added tests proving voice-command `git status`, next-action guidance, tool-awareness questions,
   mic cutoff blocking, transcript aliases, and no external execution.
 
+Handoff:
+
+- Current handoff report: `docs/HANDOFF_REPORT_2026-06-05.md`.
+
 Previous Phase 0AU status: The dashboard now turns chat `metis_tool_next_action.v0.1` guidance into a visible guided
 action strip and selects the referenced proposal or tool plan in the Tools panel. It does not click
 Approve, Deny, Request Execution, Bind Results, or Advance Plan; those remain explicit operator
@@ -401,12 +405,16 @@ Phase 0D implemented:
 - Updated the dashboard tool selector to show lifecycle labels.
 - Added tests proving lifecycle visibility does not enable fetch/network execution.
 
-Current estimate: the overall simulation-first Metis mock brain/UI is about `90%` complete for the
+Current estimate: the overall simulation-first Metis mock brain/UI is about `92%` complete for the
 current review target. The governed tools substrate is `100%` complete for the current
-simulation-first scope. Practical tool-using task requests are about `88%` complete: Metis can plan
-multi-step governed tool tasks from chat or API, persist/review them, queue eligible step proposals, request execution for individually approved step proposals, bind safe receipt summaries into later dry-run steps, and guide the next governed action, but cannot yet run
+simulation-first scope. Practical tool-using task requests are about `95%` complete: Metis can plan
+multi-step governed tool tasks from chat, voice-command simulation, or API, persist/review them,
+queue eligible step proposals, request execution for individually approved step proposals, bind safe
+receipt summaries into later dry-run steps, guide the next governed action, and project guidance into
+dashboard selection shortcuts, but cannot yet run
 general live data-dependent plans, live fetch URLs, use BOH as a tool, mutate files, call Atlas, run shell commands,
-or act autonomously. Phase 0AP improves usability by making LLM answers describe those tool lanes
+use real mic/STT/wake-word input, or act autonomously. Phase 0AP and later chat/voice-command
+phases improve usability by making LLM and deterministic route answers describe those tool lanes
 accurately instead of denying their existence.
 
 Previous Phase 0N status: Metis has deterministic replay and receipt-detail coverage for the newest tool lanes:

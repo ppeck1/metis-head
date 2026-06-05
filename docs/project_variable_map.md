@@ -523,6 +523,7 @@ Supported artifact types: `export` (`metis_export.v0.1`) and `manifest`
 | Name | Current Phase | Purpose |
 |---|---|---|
 | `docs/READ_ONLY_EXECUTION_POLICY_v0_1.md` | 0Q/0AQ | Human-readable contract for scoped approved read-only receipt lanes and future read-only execution. |
+| `docs/HANDOFF_REPORT_2026-06-05.md` | 0AV handoff | Current handoff report covering launch, verification, voice/tool readiness, boundaries, and recommended next phases. |
 | `metis_head.execution_policy` | 0Q/0AQ | Structured policy export for API/tests. |
 | `READ_ONLY_EXECUTION_POLICY_VERSION` | 0Q | `metis_read_only_execution_policy.v0.1`. |
 | `read_only_execution_policy()` | 0Q | Returns the policy contract as JSON-safe data. |
