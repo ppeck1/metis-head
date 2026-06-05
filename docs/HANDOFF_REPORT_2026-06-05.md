@@ -4,9 +4,9 @@
 
 - Repo: `B:\dev\metis_head\metis_head`
 - Branch: `main`
-- Latest feature commit before this handoff: `7ae8be3 Add deterministic voice-first tool awareness`
-- Current phase documented: `0AX` - simulated voice confirmation protocol
-- Verification: `267 passed` under Python 3.11 after Phase 0AX
+- Latest feature commit before this handoff: `ca15188 Add simulated voice confirmation protocol`
+- Current phase documented: `0AY` - voice trace dashboard visibility
+- Verification: `269 passed` under Python 3.11 after Phase 0AY
 - Clean-export target: tracked source/docs/tests only; no caches, local voice models, temp WAVs, or virtual environments
 - Opus review follow-up: clean-export test reproducibility was hardened after review; see the notes below.
 
@@ -22,6 +22,7 @@ Metis is a simulation-first mock Brain for the radio form factor. The current bu
 - Deterministic task planner, persistent plan queue, plan review, step proposal queueing, execution-request receipts, result binding, guided advance, and next-action guidance.
 - Chat-visible and voice-visible tool awareness so direct capability questions return deterministic registry-derived answers instead of depending on LLM provider behavior.
 - Simulated voice confirmation for pending proposals with explicit proposal-specific approve/deny phrases, safe readback, cancellation, and no execution request.
+- Passive dashboard Voice Trace panel showing redacted simulated command/confirmation status from the event log.
 - Dashboard guided-action shortcuts that select the relevant proposal or plan without clicking governed action buttons.
 - Simulated voice-command ingress at `POST /metis/voice/command`, which routes recognized text through canonical chat/tool governance and requests spoken replies by default.
 
@@ -38,6 +39,7 @@ Working now:
 - Voice replies default on for voice commands, using the existing governed TTS path.
 - Tool/capability questions asked by voice route to the deterministic `tool_capability` response and can be spoken back.
 - Pending proposal confirmations can be simulated through `/metis/voice/confirm`; ambiguous speech is read back, cancellation leaves proposals pending, and explicit approval/denial reuses the single-proposal review path.
+- The dashboard Voice Trace shows command/confirmation lifecycle, proposal IDs, text length/hash, and safe reasons without raw transcript text or audio.
 
 Still future:
 
@@ -103,13 +105,10 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/voice/command `
 
 ## Recommended Next Phases
 
-1. `0AY` - Voice command dashboard/operator trace.
-   Show simulated voice-command and voice-confirmation events, transcript redaction, readback status, and speech reply status in the dashboard.
-
-2. `0AZ` - Real STT adapter contract.
+1. `0AZ` - Real STT adapter contract.
    Add adapter interface and health/readiness checks for future local STT, without enabling real mic capture yet.
 
-3. `1A candidate` - Physical radio panel contract.
+2. `1A candidate` - Physical radio panel contract.
    Define the small-panel display/LED contract for tool/approval/voice states before hardware binding.
 
 ## Handoff Notes
@@ -150,3 +149,13 @@ ambiguous phrases such as `yes` return `readback_required` and leave the proposa
 The endpoint emits redacted `metis_voice_confirmation.v0.1` STT-style events, returns safe
 `metis_voice_confirmation_readback.v0.1` metadata, supports `cancel proposal_...` without changing
 review state, blocks on mic cutoff, and never requests execution or grants standing approval.
+
+## Phase 0AY Follow-Up
+
+Phase 0AY added a passive `Voice Trace` dashboard panel. It renders redacted simulated
+voice-command and voice-confirmation events from canonical `state.event_log`, including command vs
+confirmation type, event status, proposal ID, text length/hash, redaction status, and safe reason
+labels.
+
+The panel is visibility only. It does not show raw transcript text, does not store audio, and does
+not add approval, denial, confirmation, or execution controls.

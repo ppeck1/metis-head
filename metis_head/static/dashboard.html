@@ -384,6 +384,56 @@
       font-size: 12px;
       margin-bottom: 4px;
     }
+    .voice-trace {
+      display: grid;
+      gap: 8px;
+      max-height: 260px;
+      overflow: auto;
+      background: #f1f3f6;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .voice-trace-card {
+      display: grid;
+      gap: 6px;
+      border: 1px solid #d8dde5;
+      border-left: 4px solid #3AA3A7;
+      border-radius: 6px;
+      background: #ffffff;
+      padding: 10px;
+      overflow-wrap: anywhere;
+    }
+    .voice-trace-card.confirmation {
+      border-left-color: #d89a22;
+    }
+    .voice-trace-card.blocked,
+    .voice-trace-card.readback_required {
+      border-left-color: #d63b3b;
+    }
+    .voice-trace-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .voice-chip {
+      border-radius: 999px;
+      border: 1px solid #b7c0cc;
+      background: #f6f7f9;
+      color: #384456;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .voice-trace-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: #536173;
+      font-size: 11px;
+    }
     .chat-composer {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -533,6 +583,11 @@
         <button onclick="clearChatInput()">Clear Input</button>
       </div>
       <div id="guidedActionPanel" class="status-line"></div>
+    </section>
+    <section class="span-12">
+      <h2>Voice Trace</h2>
+      <div class="status-line">Displays redacted simulated command and confirmation events only; raw transcript text and audio are not stored here.</div>
+      <div id="voiceTrace" class="voice-trace"></div>
     </section>
     <section class="span-12">
       <h2>Tools</h2>
@@ -779,6 +834,62 @@
         log.appendChild(item);
       }
       log.scrollTop = log.scrollHeight;
+    }
+    function safeVoiceTraceEvents(events) {
+      return (events || []).filter(event => {
+        if (event.provider !== 'stt') return false;
+        return event.input_mode === 'simulated_voice_command' || event.voice_confirmation_schema === 'metis_voice_confirmation.v0.1';
+      }).slice(-10);
+    }
+    function renderVoiceTrace(events) {
+      const panel = document.getElementById('voiceTrace');
+      panel.innerHTML = '';
+      const trace = safeVoiceTraceEvents(events);
+      if (!trace.length) {
+        const empty = document.createElement('div');
+        empty.className = 'status-line';
+        empty.textContent = 'No simulated voice events yet.';
+        panel.appendChild(empty);
+        return;
+      }
+      for (const event of trace) {
+        const isConfirmation = event.voice_confirmation_schema === 'metis_voice_confirmation.v0.1';
+        const card = document.createElement('div');
+        const status = String(event.status || 'unknown');
+        card.className = `voice-trace-card ${isConfirmation ? 'confirmation' : 'command'} ${status}`;
+        const title = document.createElement('div');
+        title.className = 'voice-trace-title';
+        const kind = document.createElement('span');
+        kind.textContent = isConfirmation ? 'confirmation' : 'command';
+        const statusChip = document.createElement('span');
+        statusChip.className = 'voice-chip';
+        statusChip.textContent = status;
+        title.appendChild(kind);
+        title.appendChild(statusChip);
+        if (event.proposal_id) {
+          const proposal = document.createElement('span');
+          proposal.className = 'voice-chip';
+          proposal.textContent = event.proposal_id;
+          title.appendChild(proposal);
+        }
+        const meta = document.createElement('div');
+        meta.className = 'voice-trace-meta';
+        const parts = [
+          `text_redacted=${event.text_redacted === true}`,
+          `text_len=${event.text_len ?? 0}`,
+          `hash=${event.text_hash || '--'}`
+        ];
+        if (event.reason) parts.push(`reason=${event.reason}`);
+        for (const part of parts) {
+          const item = document.createElement('span');
+          item.textContent = part;
+          meta.appendChild(item);
+        }
+        card.appendChild(title);
+        card.appendChild(meta);
+        panel.appendChild(card);
+      }
+      panel.scrollTop = panel.scrollHeight;
     }
     async function downloadExport() {
       const data = await fetch('/metis/export').then(r => r.json());
@@ -1599,6 +1710,7 @@
       document.getElementById('eventLog').textContent = JSON.stringify(data.state.event_log, null, 2);
       document.getElementById('adapters').textContent = JSON.stringify(data.state.input_adapters, null, 2);
       renderChat(data.state.chat_history);
+      renderVoiceTrace(data.state.event_log);
       document.getElementById('activityDot').style.background = colorFor(data.leds.activity_led.color);
       document.getElementById('authorityDot').style.background = colorFor(data.leds.authority_led.color);
       document.getElementById('activityText').textContent = data.leds.activity_led.state;
