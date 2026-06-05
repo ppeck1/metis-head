@@ -4,9 +4,9 @@
 
 - Repo: `B:\dev\metis_head\metis_head`
 - Branch: `main`
-- Latest feature commit before this handoff: `7c82cab Harden clean export test reproducibility`
-- Current phase documented: `0AW` - voice-first deterministic tool awareness
-- Verification: `261 passed` under Python 3.11 after Phase 0AW
+- Latest feature commit before this handoff: `7ae8be3 Add deterministic voice-first tool awareness`
+- Current phase documented: `0AX` - simulated voice confirmation protocol
+- Verification: `267 passed` under Python 3.11 after Phase 0AX
 - Clean-export target: tracked source/docs/tests only; no caches, local voice models, temp WAVs, or virtual environments
 - Opus review follow-up: clean-export test reproducibility was hardened after review; see the notes below.
 
@@ -21,6 +21,7 @@ Metis is a simulation-first mock Brain for the radio form factor. The current bu
 - Approved read-only receipt lanes for `time.now`, `git.status`, and `filesystem.read`.
 - Deterministic task planner, persistent plan queue, plan review, step proposal queueing, execution-request receipts, result binding, guided advance, and next-action guidance.
 - Chat-visible and voice-visible tool awareness so direct capability questions return deterministic registry-derived answers instead of depending on LLM provider behavior.
+- Simulated voice confirmation for pending proposals with explicit proposal-specific approve/deny phrases, safe readback, cancellation, and no execution request.
 - Dashboard guided-action shortcuts that select the relevant proposal or plan without clicking governed action buttons.
 - Simulated voice-command ingress at `POST /metis/voice/command`, which routes recognized text through canonical chat/tool governance and requests spoken replies by default.
 
@@ -36,6 +37,7 @@ Working now:
 - Mic cutoff blocks the simulated command before chat/tool routing.
 - Voice replies default on for voice commands, using the existing governed TTS path.
 - Tool/capability questions asked by voice route to the deterministic `tool_capability` response and can be spoken back.
+- Pending proposal confirmations can be simulated through `/metis/voice/confirm`; ambiguous speech is read back, cancellation leaves proposals pending, and explicit approval/denial reuses the single-proposal review path.
 
 Still future:
 
@@ -101,16 +103,13 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/voice/command `
 
 ## Recommended Next Phases
 
-1. `0AX` - Voice confirmation protocol simulator.
-   Add a simulated spoken approval loop with readback, explicit confirmation phrases, cancellation, and tests proving no silent approval.
+1. `0AY` - Voice command dashboard/operator trace.
+   Show simulated voice-command and voice-confirmation events, transcript redaction, readback status, and speech reply status in the dashboard.
 
-2. `0AY` - Voice command dashboard/operator trace.
-   Show simulated voice-command events, transcript redaction, and speech reply status in the dashboard.
-
-3. `0AZ` - Real STT adapter contract.
+2. `0AZ` - Real STT adapter contract.
    Add adapter interface and health/readiness checks for future local STT, without enabling real mic capture yet.
 
-4. `1A candidate` - Physical radio panel contract.
+3. `1A candidate` - Physical radio panel contract.
    Define the small-panel display/LED contract for tool/approval/voice states before hardware binding.
 
 ## Handoff Notes
@@ -141,3 +140,13 @@ lanes, proposal-only lanes, voice-instruction support, and explicit no-autonomou
 This route is used by both `/metis/chat` and `/metis/voice/command`, so spoken questions such as
 "what tools are available" no longer depend on Ollama/OpenAI/mock completion behavior and should not
 regress into "I have no tools."
+
+## Phase 0AX Follow-Up
+
+Phase 0AX added `/metis/voice/confirm` for simulated proposal review by recognized speech. It requires
+explicit proposal-specific phrases such as `confirm approve proposal_...` or `deny proposal_...`;
+ambiguous phrases such as `yes` return `readback_required` and leave the proposal pending.
+
+The endpoint emits redacted `metis_voice_confirmation.v0.1` STT-style events, returns safe
+`metis_voice_confirmation_readback.v0.1` metadata, supports `cancel proposal_...` without changing
+review state, blocks on mic cutoff, and never requests execution or grants standing approval.

@@ -1671,6 +1671,204 @@ def _voice_command_event(text: str, status: str, reason: str | None = None) -> d
     return event
 
 
+def _pending_proposals() -> list[dict[str, Any]]:
+    return [
+        proposal
+        for proposal in STATE.get("approval_queue", [])
+        if proposal.get("status") == "pending_review" and proposal.get("review_status", "pending") == "pending"
+    ]
+
+
+def _proposal_readback(proposal: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": "metis_voice_confirmation_readback.v0.1",
+        "proposal_id": proposal.get("proposal_id"),
+        "tool_id": proposal.get("tool_id"),
+        "proposal_type": proposal.get("proposal_type"),
+        "risk_class": proposal.get("risk_class"),
+        "side_effect_class": proposal.get("side_effect_class"),
+        "dry_run_available": bool(proposal.get("dry_run_available")),
+        "execution_allowed": False,
+        "readback": (
+            f"Proposal {proposal.get('proposal_id')} for {proposal.get('tool_id') or proposal.get('action_class')} "
+            f"is pending review. Say 'confirm approve {proposal.get('proposal_id')}', "
+            f"'deny {proposal.get('proposal_id')}', or 'cancel {proposal.get('proposal_id')}'."
+        ),
+    }
+
+
+def _voice_confirmation_event(text: str, status: str, proposal_id: str | None = None, reason: str | None = None) -> dict[str, Any]:
+    event = _voice_command_event(text, status, reason)
+    event["voice_confirmation_schema"] = "metis_voice_confirmation.v0.1"
+    if proposal_id:
+        event["proposal_id"] = proposal_id
+    return event
+
+
+def _parse_voice_confirmation(text: str) -> dict[str, str | None]:
+    normalized = re.sub(r"[^a-z0-9_\-\s]+", " ", text.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    proposal_match = re.search(r"\bproposal_[0-9]{4}_[a-f0-9]{10}\b", normalized)
+    proposal_id = proposal_match.group(0) if proposal_match else None
+    if any(phrase in normalized for phrase in ("confirm approve", "approve proposal", "approve this proposal")):
+        decision = "approved"
+    elif any(phrase in normalized for phrase in ("confirm deny", "deny proposal", "reject proposal", "deny this proposal", "reject this proposal")):
+        decision = "denied"
+    elif any(phrase in normalized for phrase in ("cancel", "stop", "never mind", "nevermind")):
+        decision = "cancelled"
+    else:
+        decision = None
+    return {"decision": decision, "proposal_id": proposal_id}
+
+
+@app.post("/metis/voice/confirm")
+def voice_confirm(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    payload = payload or {}
+    text = _voice_command_text(payload)
+    if not STATE.get("mic_hardware_enabled"):
+        event = _voice_confirmation_event(text, "blocked", reason="mic cutoff blocks voice confirmation")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "input_mode": "simulated_voice_confirmation",
+            "reason": "mic cutoff blocks voice confirmation",
+            "voice_confirmation": {"recognized": False, "text_redacted": True, "text_len": len(text)},
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+    parsed = _parse_voice_confirmation(text)
+    proposal_id = parsed["proposal_id"]
+    explicit_proposal_id = proposal_id is not None
+    proposal = _proposal_by_id(proposal_id) if proposal_id else None
+    pending = _pending_proposals()
+    if proposal is None and proposal_id is None and len(pending) == 1:
+        proposal = pending[0]
+        proposal_id = proposal.get("proposal_id")
+    transcript_event = _voice_confirmation_event(text, "confirmation_transcript", proposal_id)
+    STATE = reduce_metis_event(STATE, transcript_event)
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    voice_options_payload = options.get("voice") if isinstance(options.get("voice"), dict) else {}
+    speak_options = {
+        **options,
+        "voice": {
+            **voice_options_payload,
+            "speak_response": voice_options_payload.get("speak_response", True),
+            "enabled": voice_options_payload.get("enabled", True),
+        },
+    }
+    if proposal is None:
+        message = "I could not identify a pending proposal to confirm. Say the full proposal ID."
+        complete_event = _voice_confirmation_event(text, "readback_required", reason="proposal not found")
+        STATE = reduce_metis_event(STATE, complete_event)
+        voice = _speak_chat_response(message, speak_options)
+        return {
+            "status": "readback_required",
+            "input_mode": "simulated_voice_confirmation",
+            "message": message,
+            "voice_confirmation": {
+                "recognized": True,
+                "decision": None,
+                "proposal_id": proposal_id,
+                "confirmation_accepted": False,
+                "requires_explicit_phrase": True,
+            },
+            "pending_proposals": [_proposal_readback(item) for item in pending[:5]],
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "voice": voice,
+        }
+    readback = _proposal_readback(proposal)
+    if proposal.get("review_status", "pending") != "pending":
+        message = f"Proposal {proposal_id} has already been reviewed. No voice confirmation was applied."
+        complete_event = _voice_confirmation_event(text, "readback_required", proposal_id, "proposal already reviewed")
+        STATE = reduce_metis_event(STATE, complete_event)
+        voice = _speak_chat_response(message, speak_options)
+        return {
+            "status": "readback_required",
+            "input_mode": "simulated_voice_confirmation",
+            "message": message,
+            "voice_confirmation": {
+                "recognized": True,
+                "decision": None,
+                "proposal_id": proposal_id,
+                "confirmation_accepted": False,
+                "requires_explicit_phrase": True,
+            },
+            "readback": readback,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "voice": voice,
+        }
+    decision = parsed["decision"]
+    if decision is None or (decision in {"approved", "denied", "cancelled"} and not explicit_proposal_id):
+        message = readback["readback"]
+        reason = "explicit proposal id required" if decision else "explicit confirmation phrase required"
+        complete_event = _voice_confirmation_event(text, "readback_required", proposal_id, reason)
+        STATE = reduce_metis_event(STATE, complete_event)
+        voice = _speak_chat_response(message, speak_options)
+        return {
+            "status": "readback_required",
+            "input_mode": "simulated_voice_confirmation",
+            "message": message,
+            "voice_confirmation": {
+                "recognized": True,
+                "decision": None,
+                "proposal_id": proposal_id,
+                "confirmation_accepted": False,
+                "requires_explicit_phrase": True,
+                "requires_explicit_proposal_id": True,
+            },
+            "readback": readback,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "voice": voice,
+        }
+    if decision == "cancelled":
+        message = f"Voice confirmation cancelled for proposal {proposal_id}. The proposal remains pending."
+        complete_event = _voice_confirmation_event(text, "cancelled", proposal_id)
+        STATE = reduce_metis_event(STATE, complete_event)
+        voice = _speak_chat_response(message, speak_options)
+        return {
+            "status": "cancelled",
+            "input_mode": "simulated_voice_confirmation",
+            "message": message,
+            "voice_confirmation": {
+                "recognized": True,
+                "decision": "cancelled",
+                "proposal_id": proposal_id,
+                "confirmation_accepted": False,
+                "execution_allowed": False,
+            },
+            "readback": readback,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "voice": voice,
+        }
+    reviewed = _review_proposal(proposal_id, decision, {"reason": f"simulated voice confirmation: {decision}"})
+    complete_event = _voice_confirmation_event(text, "confirmed", proposal_id)
+    STATE = reduce_metis_event(STATE, complete_event)
+    reviewed["state"] = STATE
+    reviewed["leds"] = resolve_leds(STATE)
+    message = f"Voice confirmation recorded: proposal {proposal_id} {decision}. Execution allowed: false."
+    voice = _speak_chat_response(message, speak_options)
+    return {
+        **reviewed,
+        "input_mode": "simulated_voice_confirmation",
+        "message": message,
+        "voice_confirmation": {
+            "recognized": True,
+            "decision": decision,
+            "proposal_id": proposal_id,
+            "confirmation_accepted": True,
+            "execution_allowed": False,
+            "standing_approval": False,
+        },
+        "readback": readback,
+        "voice": voice,
+    }
+
+
 @app.post("/metis/voice/command")
 def voice_command(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     global STATE
