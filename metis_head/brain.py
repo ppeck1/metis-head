@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from hashlib import sha1
 from pathlib import Path
 import re
 from typing import Any
@@ -1546,6 +1547,73 @@ def voice_preview(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     response = {**_voice_response_payload(result), "state": STATE, "leds": resolve_leds(STATE)}
     if not result.ok:
         raise HTTPException(status_code=502, detail=response)
+    return response
+
+
+def _voice_command_text(payload: dict[str, Any]) -> str:
+    for key in ("text", "transcript", "recognized_text", "command"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    raise HTTPException(status_code=400, detail="text is required")
+
+
+def _voice_command_event(text: str, status: str, reason: str | None = None) -> dict[str, Any]:
+    event = {
+        "type": "provider_event",
+        "provider": "stt",
+        "status": status,
+        "input_mode": "simulated_voice_command",
+        "text_len": len(text),
+        "text_hash": sha1(text.encode("utf-8")).hexdigest()[:16],
+        "text_redacted": True,
+    }
+    if reason:
+        event["reason"] = reason
+    return event
+
+
+@app.post("/metis/voice/command")
+def voice_command(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    payload = payload or {}
+    text = _voice_command_text(payload)
+    if not STATE.get("mic_hardware_enabled"):
+        event = _voice_command_event(text, "blocked", "mic cutoff blocks voice command")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "input_mode": "simulated_voice_command",
+            "reason": "mic cutoff blocks voice command",
+            "voice_command": {"recognized": False, "text_redacted": True, "text_len": len(text)},
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+    transcript_event = _voice_command_event(text, "transcript")
+    STATE = reduce_metis_event(STATE, transcript_event)
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    voice_options_payload = options.get("voice") if isinstance(options.get("voice"), dict) else {}
+    options = {
+        **options,
+        "voice": {
+            **voice_options_payload,
+            "speak_response": voice_options_payload.get("speak_response", True),
+            "enabled": voice_options_payload.get("enabled", True),
+        },
+    }
+    response = chat({"message": text, "options": options})
+    complete_event = _voice_command_event(text, "complete")
+    STATE = reduce_metis_event(STATE, complete_event)
+    response["state"] = STATE
+    response["leds"] = resolve_leds(STATE)
+    response["input_mode"] = "simulated_voice_command"
+    response["voice_command"] = {
+        "recognized": True,
+        "text_redacted": True,
+        "text_len": len(text),
+        "route": "metis_chat",
+        "speech_reply_requested": bool(options["voice"].get("speak_response")),
+    }
     return response
 
 

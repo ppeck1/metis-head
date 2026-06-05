@@ -216,3 +216,7 @@ Phase 0AU projects those next-action instructions into dashboard selection short
 may display the instruction and select the referenced proposal or tool plan, including clearing
 proposal filters to reveal the target, but it must not click approval, denial, execution-request,
 binding, or advance controls automatically.
+Phase 0AV adds simulated voice-command ingress for the radio form factor. Recognized text is supplied
+by the caller, not captured from a real microphone. The route emits redacted STT-style events, reuses
+the canonical chat/tool governance path, defaults to spoken replies, respects mic cutoff, and adds no
+new execution authority.

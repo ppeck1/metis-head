@@ -147,6 +147,13 @@ def _reduce_provider(state: dict[str, Any], event: dict[str, Any]) -> None:
     elif provider == "stt" and status == "transcript":
         if state.get("mic_hardware_enabled"):
             state["audio_state"] = "listening"
+    elif provider == "stt" and status == "complete":
+        if state.get("audio_state") == "listening":
+            state["audio_state"] = "idle"
+    elif provider == "stt" and status == "blocked":
+        state["audio_state"] = "capture_blocked"
+        state["blocked_capture_count"] = state.get("blocked_capture_count", 0) + 1
+        state["last_block_reason"] = event.get("reason") or "voice command blocked"
     elif provider == "tts" and status in {"queued", "synthesizing"}:
         state["voice_output_state"] = status
         _remember_tts_event(state, event)
