@@ -532,6 +532,7 @@
         <div id="chatStatus" class="status-line"></div>
         <button onclick="clearChatInput()">Clear Input</button>
       </div>
+      <div id="guidedActionPanel" class="status-line"></div>
     </section>
     <section class="span-12">
       <h2>Tools</h2>
@@ -992,6 +993,11 @@
           pulseRadioFromVoice(result.voice);
         }
         await refresh();
+        if (result.next_action) {
+          await applyGuidedAction(result.next_action);
+        } else {
+          renderGuidedAction(null);
+        }
       } catch (error) {
         document.getElementById('chatStatus').textContent = String(error);
         await refresh();
@@ -1008,6 +1014,53 @@
     function clearChatInput() {
       document.getElementById('chatInput').value = '';
       document.getElementById('chatStatus').textContent = '';
+    }
+    function renderGuidedAction(instruction) {
+      const panel = document.getElementById('guidedActionPanel');
+      if (!panel) return;
+      if (!instruction || !instruction.recommended_action) {
+        panel.textContent = '';
+        return;
+      }
+      const target = instruction.target || {};
+      const api = instruction.api_instruction || {};
+      const apiText = Object.entries(api).map(([label, route]) => `${label}: ${route}`).join(' | ');
+      panel.textContent = `${instruction.recommended_action} / ${target.type || 'target'} ${target.id || 'workspace'} / ${instruction.ui_instruction || ''}${apiText ? ` / ${apiText}` : ''}`;
+    }
+    async function selectGuidedProposal(proposalId) {
+      if (!proposalId) return;
+      const current = proposalsCatalog || [];
+      if (!current.some(proposal => proposal.proposal_id === proposalId)) {
+        document.getElementById('proposalStatusFilter').value = '';
+        document.getElementById('proposalTypeFilter').value = '';
+        document.getElementById('proposalToolFilter').value = '';
+        await refreshProposals();
+      }
+      const select = document.getElementById('proposalSelect');
+      if ([...select.options].some(option => option.value === proposalId)) {
+        select.value = proposalId;
+        document.getElementById('toolStatus').textContent = `Guided action selected proposal ${proposalId}; choose the explicit operator action.`;
+      }
+    }
+    async function selectGuidedPlan(planId) {
+      if (!planId) return;
+      const select = document.getElementById('toolPlanSelect');
+      if (![...select.options].some(option => option.value === planId)) {
+        await refreshToolPlans();
+      }
+      if ([...select.options].some(option => option.value === planId)) {
+        select.value = planId;
+        document.getElementById('toolStatus').textContent = `Guided action selected plan ${planId}; choose the explicit operator action.`;
+      }
+    }
+    async function applyGuidedAction(instruction) {
+      renderGuidedAction(instruction);
+      const target = instruction?.target || {};
+      if (target.type === 'proposal') {
+        await selectGuidedProposal(target.id);
+      } else if (target.type === 'tool_plan') {
+        await selectGuidedPlan(target.id);
+      }
     }
     function parseToolArguments() {
       const raw = document.getElementById('toolArguments').value.trim();

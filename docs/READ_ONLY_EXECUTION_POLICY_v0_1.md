@@ -212,3 +212,7 @@ Phase 0AT adds chat-guided approval instructions. Next-step prompts may name the
 and API route for reviewing a plan, reviewing a proposal, requesting an execution receipt, binding
 safe summaries, or inspecting a clear workspace. The chat route must not perform any of those actions
 itself.
+Phase 0AU projects those next-action instructions into dashboard selection shortcuts. The dashboard
+may display the instruction and select the referenced proposal or tool plan, including clearing
+proposal filters to reveal the target, but it must not click approval, denial, execution-request,
+binding, or advance controls automatically.
