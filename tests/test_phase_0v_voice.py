@@ -248,6 +248,35 @@ def test_wav_level_envelope_reflects_actual_audio(tmp_path) -> None:
     assert levels[-1] == 1.0
 
 
+def test_wav_duration_ms_reflects_actual_audio_length(tmp_path) -> None:
+    wav_path = tmp_path / "duration.wav"
+    sample_rate = 16000
+    samples = [0] * (sample_rate * 2)
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    assert voice_module._wav_duration_ms(wav_path) == 2000
+
+
+def test_default_wav_spectrum_row_count_matches_hardware_preview(tmp_path) -> None:
+    wav_path = tmp_path / "default_spectrum_rows.wav"
+    sample_rate = 16000
+    samples = [int(math.sin(2 * math.pi * 440 * (index / sample_rate)) * 9000) for index in range(sample_rate // 2)]
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(b"".join(struct.pack("<h", sample) for sample in samples))
+
+    levels = voice_module._wav_spectrum_envelope(wav_path)
+
+    assert len(levels) == voice_module.AUDIO_SPECTRUM_ROWS == 32
+    assert voice_module.AUDIO_SPECTRUM_SEGMENTS_PER_SIDE == 8
+
+
 def test_wav_spectrum_envelope_reflects_actual_audio(tmp_path) -> None:
     wav_path = tmp_path / "spectrum.wav"
     sample_rate = 22050

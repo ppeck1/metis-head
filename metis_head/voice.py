@@ -22,6 +22,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PIPER_VOICE_DIR = REPO_ROOT / "models" / "piper" / "en_US" / "hfc_female" / "medium"
 DEFAULT_PIPER_MODEL = DEFAULT_PIPER_VOICE_DIR / "en_US-hfc_female-medium.onnx"
 DEFAULT_PIPER_CONFIG = DEFAULT_PIPER_VOICE_DIR / "en_US-hfc_female-medium.onnx.json"
+AUDIO_SPECTRUM_ROWS = 32
+AUDIO_SPECTRUM_SEGMENTS_PER_SIDE = 8
 
 VOICE_OPTION_CATALOG: list[dict[str, Any]] = [
     {
@@ -271,12 +273,17 @@ class PiperVoiceProvider(BaseVoiceProvider):
             audio_levels = _wav_level_envelope(wav_path)
             audio_spectrum = _wav_spectrum_envelope(wav_path)
             audio_spectrum_frames = _wav_spectrum_frames(wav_path)
+            audio_duration_ms = _wav_duration_ms(wav_path)
             base["audio_levels"] = audio_levels
             base["audio_level_count"] = len(audio_levels)
             base["audio_spectrum_levels"] = audio_spectrum
             base["audio_spectrum_count"] = len(audio_spectrum)
             base["audio_spectrum_frames"] = audio_spectrum_frames
             base["audio_spectrum_frame_count"] = len(audio_spectrum_frames)
+            base["audio_spectrum_rows"] = AUDIO_SPECTRUM_ROWS
+            base["audio_spectrum_segments_per_side"] = AUDIO_SPECTRUM_SEGMENTS_PER_SIDE
+            if audio_duration_ms is not None:
+                base["audio_duration_ms"] = audio_duration_ms
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
                 if config.piper_playback_mode == "async":
@@ -647,7 +654,19 @@ def _wav_level_envelope(wav_path: Path, bins: int = 18) -> list[float]:
     return [round(min(1.0, level / peak), 3) for level in levels]
 
 
-def _wav_spectrum_envelope(wav_path: Path, bands: int = 20) -> list[float]:
+def _wav_duration_ms(wav_path: Path) -> int | None:
+    try:
+        with wave.open(str(wav_path), "rb") as wav_file:
+            sample_rate = wav_file.getframerate()
+            frame_count = wav_file.getnframes()
+    except (EOFError, wave.Error, OSError):
+        return None
+    if sample_rate <= 0 or frame_count <= 0:
+        return None
+    return max(1, round((frame_count / sample_rate) * 1000))
+
+
+def _wav_spectrum_envelope(wav_path: Path, bands: int = AUDIO_SPECTRUM_ROWS) -> list[float]:
     sample_data = _read_wav_samples(wav_path)
     if sample_data is None:
         return []
@@ -655,7 +674,7 @@ def _wav_spectrum_envelope(wav_path: Path, bands: int = 20) -> list[float]:
     return _spectrum_for_samples(samples, sample_rate, bands)
 
 
-def _wav_spectrum_frames(wav_path: Path, frame_count: int | None = None, bands: int = 20) -> list[list[float]]:
+def _wav_spectrum_frames(wav_path: Path, frame_count: int | None = None, bands: int = AUDIO_SPECTRUM_ROWS) -> list[list[float]]:
     sample_data = _read_wav_samples(wav_path)
     if sample_data is None:
         return []
@@ -698,7 +717,7 @@ def _rms_level(samples: list[float]) -> float:
     return (sum(sample * sample for sample in samples) / len(samples)) ** 0.5
 
 
-def _spectrum_for_samples(samples: list[float], sample_rate: int, bands: int = 20) -> list[float]:
+def _spectrum_for_samples(samples: list[float], sample_rate: int, bands: int = AUDIO_SPECTRUM_ROWS) -> list[float]:
     if not samples or sample_rate <= 0:
         return []
     max_samples = 4096

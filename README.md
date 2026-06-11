@@ -8,14 +8,47 @@ deterministic mock providers. As of Phase 0B the one live external integration i
 read-only BOH retrieval bridge (opt-in, never mutates BOH, never holds BOH's operator
 token).
 
+Public repository target: `https://github.com/ppeck1/metis-head`
+
+## Project Media
+
+Reference and dashboard media are tracked for public review:
+
+- Physical radio reference: `docs/assets/metis-radio-reference.jpg`
+- Planned visual representation: `docs/assets/metis-head-visual-representation.png`
+- Current mock Brain dashboard screenshot: `docs/screenshots/metis-dashboard-public.png`
+
+![Metis radio reference](docs/assets/metis-radio-reference.jpg)
+
+![Metis Head visual representation](docs/assets/metis-head-visual-representation.png)
+
+![Metis mock Brain dashboard](docs/screenshots/metis-dashboard-public.png)
+
 ## Current Phase
 
-Phase scope: `0AY` - voice trace dashboard visibility (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning + 0AP truthful tool context + 0V/AUDIO10 spectrum fidelity + 0AQ launch-root hardening + 0AR chat plan control + 0AS proposal/receipt awareness + 0AT next-action guidance + 0AU dashboard guided shortcuts + 0AV simulated voice-command routing + 0AW deterministic tool awareness + 0AX simulated voice confirmation`).
+Phase scope: `0AY` - voice trace dashboard visibility (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning + 0AP truthful tool context + 0V/AUDIO10 spectrum fidelity + 0V/AUDIO11 hardware-parity analyzer + 0V/AUDIO12 analyzer presentation tuning + 0AQ launch-root hardening + 0AR chat plan control + 0AS proposal/receipt awareness + 0AT next-action guidance + 0AU dashboard guided shortcuts + 0AV simulated voice-command routing + 0AW deterministic tool awareness + 0AX simulated voice confirmation`).
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
 including status, proposal ID, text length/hash, and safe reasons. It does not display raw transcript
 text, does not store audio, and does not add any approval/execution controls.
+
+Bounded Phase 0V/AUDIO11 hardware-parity analyzer patch:
+
+- Replaced continuous CSS analyzer arms with a fixed `32`-row by `8`-segments-per-side mirrored LED-cell preview.
+- Preserved the two existing tuning-window status LEDs and removed the redundant `AM FM` text below the meter.
+- Added green -> yellow -> orange outward LED tiers and restrained mirrored peak hold suitable for a later physical LED array.
+- Piper events now expose exact `audio_duration_ms` from the generated WAV plus the fixed preview geometry metadata.
+- Dashboard playback uses exact WAV duration when available and advances spectrum frames once without looping.
+- Added tests for WAV duration extraction, the fixed hardware-preview row contract, LED renderer hooks, and one-pass frame playback.
+
+Bounded Phase 0V/AUDIO12 analyzer presentation tuning patch:
+
+- Reworked the analyzer styling toward a late-analog LED instrument: dark inactive cells, a subdued center seam, separated LED blocks, reduced bloom, and fixed green -> yellow -> orange outward tiers.
+- Added dashboard-only frequency-row conditioning and controlled compression so ordinary speech occupies more of the available width without changing Piper analysis metadata or the fixed physical geometry contract.
+- Clamped peak markers directly beside the illuminated bar and limited red peak hold to near-saturation rows, avoiding detached floating markers and a red outline around ordinary activity.
+- Preserved the existing two status LED placeholders, `32 x (8 + 8)` matrix target, exact WAV timing, one-pass playback, backend event schema, and hardware boundaries.
+- Added static acceptance coverage for the conditioning helper, adjacent peak clamp, peak threshold, and outward LED palette.
 
 Phase 0AY implemented:
 
@@ -25,7 +58,7 @@ Phase 0AY implemented:
   text length/hash, and safe reason labels.
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
-- Verification after Phase 0AY: `269 passed` under Python 3.11.
+- Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
 
 Previous Phase 0AX status: Metis has a simulated voice confirmation protocol for pending governed proposals.
 `POST /metis/voice/confirm` accepts caller-supplied recognized text, emits redacted voice-confirmation
@@ -1205,7 +1238,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-269 passed under Python 3.11 (includes voice trace dashboard visibility, simulated voice confirmation, deterministic voice-first tool awareness, simulated voice-command tool awareness, dashboard guided-action shortcuts, chat-guided approval instructions, chat-facing proposal/receipt awareness, chat-facing governed plan status/advance, launch-root hardening, clarified read-only execution policy wording, duration-scaled loudness-preserving Piper spectrum frames, truthful LLM tool capability context, chat-facing governed task planning, guided governed plan advance, governed plan result binding, approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+271 passed under Python 3.11 (includes voice trace dashboard visibility, hardware-parity analyzer presentation tuning, simulated voice confirmation, deterministic voice-first tool awareness, simulated voice-command tool awareness, dashboard guided-action shortcuts, chat-guided approval instructions, chat-facing proposal/receipt awareness, chat-facing governed plan status/advance, launch-root hardening, clarified read-only execution policy wording, duration-scaled loudness-preserving Piper spectrum frames, truthful LLM tool capability context, chat-facing governed task planning, guided governed plan advance, governed plan result binding, approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
 ```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and

@@ -374,8 +374,22 @@ def test_dashboard_contains_virtual_radio_controls() -> None:
     assert "audio_spectrum_frames" in dashboard
     assert "audio_levels" in dashboard
     assert "spectrum-row" in dashboard
-    assert "spectrum-arm" in dashboard
-    assert "#3AA3A7" in dashboard
+    assert "spectrum-bank" in dashboard
+    assert "spectrum-cell" in dashboard
+    assert "RADIO_ANALYZER_ROWS = 32" in dashboard
+    assert "RADIO_ANALYZER_SEGMENTS_PER_SIDE = 8" in dashboard
+    assert "RADIO_ANALYZER_PEAK_MIN_SEGMENTS = 7" in dashboard
+    assert "conditionRadioLevels" in dashboard
+    assert "peakSegment = Math.min(peakSegment, adjacentLimit)" in dashboard
+    assert "Math.ceil(shown * RADIO_ANALYZER_SEGMENTS_PER_SIDE)" in dashboard
+    assert "#40d52a" in dashboard
+    assert "#c8d62d" in dashboard
+    assert "#efad27" in dashboard
+    assert "#e96b24" in dashboard
+    assert "speaking.audio_duration_ms" in dashboard
+    assert "frameIndex += 1" in dashboard
+    assert "frameIndex = (frameIndex + 1) % frames.length" not in dashboard
+    assert '<div class="strip-mark">' not in dashboard
     assert "voice-decay" in dashboard
     assert "radioResetTimer" in dashboard
     assert "column-reverse" in dashboard

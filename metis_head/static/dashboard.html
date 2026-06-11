@@ -101,13 +101,13 @@
     /* Thin vertical strip: the only "alive" instrument feedback. */
     .radio-strip {
       display: grid;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto minmax(0, 1fr);
       gap: 8px;
       justify-items: center;
       align-content: stretch;
       background:
-        radial-gradient(circle at 50% 42%, rgba(58, 163, 167, 0.17), transparent 58%),
-        linear-gradient(180deg, #050d0e, #0d1617 48%, #030708);
+        radial-gradient(circle at 50% 42%, rgba(92, 118, 72, 0.12), transparent 58%),
+        linear-gradient(180deg, #050b08, #0b130e 48%, #020604);
       border: 1px solid rgba(255,255,255,0.28);
       border-radius: 8px;
       padding: 9px 8px 8px;
@@ -124,11 +124,6 @@
       border-radius: 50%;
       border: 1px solid rgba(255,255,255,0.35);
     }
-    .strip-mark {
-      font-size: 9px;
-      letter-spacing: 1px;
-      color: rgba(248,245,239,0.5);
-    }
     .radio-meter {
       display: flex;
       flex-direction: column-reverse;
@@ -140,29 +135,29 @@
       min-height: 218px;
       border-radius: 6px;
       background:
-        linear-gradient(90deg, rgba(4,12,10,0), rgba(58,163,167,0.14) 50%, rgba(4,12,10,0)),
-        repeating-linear-gradient(0deg, rgba(58,163,167,0.14) 0 1px, transparent 1px 8px),
-        repeating-linear-gradient(90deg, rgba(58,163,167,0.055) 0 1px, transparent 1px 12px),
-        radial-gradient(circle at 50% 54%, rgba(58,163,167,0.22), transparent 66%),
-        #020604;
+        repeating-linear-gradient(0deg, rgba(102, 132, 81, 0.075) 0 1px, transparent 1px 8px),
+        linear-gradient(90deg, rgba(2,6,4,0.92), rgba(31,48,29,0.34) 50%, rgba(2,6,4,0.92)),
+        radial-gradient(circle at 50% 54%, rgba(87, 117, 68, 0.13), transparent 68%),
+        #010302;
       box-shadow:
-        inset 0 0 18px rgba(0,0,0,0.8),
-        inset 0 0 44px rgba(20, 92, 96, 0.42),
-        0 0 0 1px rgba(58, 163, 167, 0.1);
+        inset 0 0 20px rgba(0,0,0,0.88),
+        inset 0 0 38px rgba(37, 59, 35, 0.26),
+        0 0 0 1px rgba(98, 130, 79, 0.1);
       overflow: hidden;
       position: relative;
-      padding: 9px 8px;
+      padding: 9px 6px;
       isolation: isolate;
     }
     .radio-meter::before {
       content: "";
       position: absolute;
-      left: calc(50% - 0.5px);
+      left: calc(50% - 1px);
       top: 7px;
       bottom: 7px;
-      width: 1px;
-      background: rgba(123, 234, 238, 0.28);
-      box-shadow: 0 0 8px rgba(58, 163, 167, 0.46);
+      width: 2px;
+      background: rgba(112, 143, 91, 0.20);
+      box-shadow: 0 0 4px rgba(104, 139, 83, 0.18);
+      pointer-events: none;
       z-index: 0;
     }
     .radio-meter::after {
@@ -170,89 +165,80 @@
       position: absolute;
       inset: 0;
       background:
-        linear-gradient(180deg, rgba(255,255,255,0.07), transparent 18%, transparent 78%, rgba(0,0,0,0.36)),
-        radial-gradient(ellipse at center, transparent 42%, rgba(0,0,0,0.38) 100%);
+        linear-gradient(180deg, rgba(255,255,255,0.045), transparent 17%, transparent 80%, rgba(0,0,0,0.42)),
+        radial-gradient(ellipse at center, transparent 48%, rgba(0,0,0,0.34) 100%);
       pointer-events: none;
       z-index: 3;
     }
     .spectrum-row {
-      --arm-width: 2%;
-      --peak-offset: 4%;
-      --spectrum-color: #3AA3A7;
-      --peak-opacity: 0;
       position: relative;
       display: grid;
-      grid-template-columns: 1fr 2px 1fr;
+      grid-template-columns: minmax(0, 1fr) 3px minmax(0, 1fr);
+      gap: 3px;
       align-items: center;
       flex: 1 1 0;
       min-height: 4px;
-      opacity: 0.3;
-      transition: opacity 620ms ease-out, filter 620ms ease-out;
+      opacity: 0.72;
       z-index: 1;
     }
-    .spectrum-core {
-      width: 2px;
-      height: 60%;
+    .spectrum-bank {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 2px;
+      align-items: stretch;
+      height: 66%;
       min-height: 3px;
-      border-radius: 999px;
-      background: rgba(99,221,225,0.46);
-      box-shadow: 0 0 4px rgba(58,163,167,0.38);
     }
-    .spectrum-arm {
-      width: var(--arm-width);
-      height: 58%;
-      min-width: 2px;
-      min-height: 3px;
-      border-radius: 999px;
-      background:
-        linear-gradient(180deg, rgba(255,255,255,0.34), rgba(255,255,255,0) 44%),
-        repeating-linear-gradient(90deg, var(--spectrum-color) 0 3px, rgba(0,0,0,0) 3px 5px);
-      box-shadow:
-        0 0 4px color-mix(in srgb, var(--spectrum-color) 68%, transparent),
-        0 0 16px color-mix(in srgb, var(--spectrum-color) 32%, transparent),
-        0 0 28px rgba(58, 163, 167, 0.18);
-      opacity: 0.5;
+    .spectrum-cell {
+      min-width: 1px;
+      border-radius: 1px;
+      border: 1px solid rgba(145, 170, 105, 0.06);
+      background: rgba(55, 82, 43, 0.20);
+      box-shadow: inset 0 0 0 1px rgba(8, 15, 8, 0.30);
+      opacity: 0.58;
     }
-    .spectrum-arm.left { justify-self: end; }
-    .spectrum-arm.right { justify-self: start; }
-    .spectrum-row.active {
-      opacity: 0.98;
-      filter: saturate(1.24) brightness(1.12);
+    .spectrum-cell.tier-low { background: rgba(47, 103, 35, 0.28); }
+    .spectrum-cell.tier-mid { background: rgba(111, 117, 32, 0.25); }
+    .spectrum-cell.tier-high { background: rgba(130, 84, 27, 0.24); }
+    .spectrum-cell.tier-limit { background: rgba(132, 48, 25, 0.24); }
+    .spectrum-cell.active { opacity: 1; }
+    .spectrum-cell.tier-low.active {
+      background: #40d52a;
+      box-shadow: 0 0 2px rgba(64,213,42,0.72), 0 0 5px rgba(64,213,42,0.20);
     }
-    .spectrum-row.active .spectrum-arm,
-    .spectrum-row.active .spectrum-core {
+    .spectrum-cell.tier-mid.active {
+      background: #c8d62d;
+      box-shadow: 0 0 2px rgba(200,214,45,0.72), 0 0 5px rgba(200,214,45,0.18);
+    }
+    .spectrum-cell.tier-high.active {
+      background: #efad27;
+      box-shadow: 0 0 2px rgba(239,173,39,0.76), 0 0 5px rgba(239,173,39,0.18);
+    }
+    .spectrum-cell.tier-limit.active {
+      background: #e96b24;
+      box-shadow: 0 0 2px rgba(233,107,36,0.78), 0 0 5px rgba(233,107,36,0.20);
+    }
+    .spectrum-cell.peak {
+      background: #df3e28;
+      box-shadow: 0 0 3px rgba(223,62,40,0.78), 0 0 6px rgba(223,62,40,0.22);
       opacity: 1;
     }
-    .spectrum-peak {
-      position: absolute;
-      top: 0;
-      width: 5px;
-      height: 1px;
-      background: #ff3a42;
-      box-shadow: 0 0 6px rgba(255,58,66,0.8);
-      opacity: var(--peak-opacity);
-      z-index: 2;
+    .spectrum-core {
+      width: 3px;
+      height: 74%;
+      min-height: 3px;
+      border-radius: 1px;
+      background: rgba(97, 126, 78, 0.24);
+      box-shadow: inset 0 0 0 1px rgba(145, 170, 105, 0.05);
     }
-    .spectrum-peak.left { left: calc(50% - var(--peak-offset)); }
-    .spectrum-peak.right { right: calc(50% - var(--peak-offset)); }
-    .radio-meter.voice-active .spectrum-row.active {
-      animation: spectrumTrace 1.1s ease-in-out infinite;
-      animation-delay: var(--wave-delay, 0ms);
-    }
-    .radio-meter.voice-decay .spectrum-row {
-      opacity: 0.22;
-      box-shadow:
-        0 0 5px rgba(75,232,105,0.22),
-        0 0 12px rgba(75,232,105,0.12);
-      transition-duration: 900ms;
+    .spectrum-row.active { opacity: 1; }
+    .radio-meter.voice-decay .spectrum-cell.active,
+    .radio-meter.voice-decay .spectrum-cell.peak {
+      opacity: 0.56;
+      transition: opacity 720ms ease-out;
     }
     .radio-strip.voice-active {
-      box-shadow: 0 0 0 1px rgba(58,163,167,0.42), 0 0 24px rgba(58,163,167,0.42);
-    }
-    @keyframes spectrumTrace {
-      0% { opacity: 0.58; filter: brightness(0.82); }
-      42% { opacity: 1; filter: brightness(1.35); }
-      100% { opacity: 0.7; filter: brightness(0.96); }
+      box-shadow: 0 0 0 1px rgba(102, 132, 81, 0.32), 0 0 14px rgba(73, 102, 58, 0.28);
     }
     .radio-controls {
       display: grid;
@@ -521,7 +507,6 @@
             <div id="radioAuthorityLed" class="strip-led" title="Authority"></div>
           </div>
           <div id="radioMeter" class="radio-meter"></div>
-          <div class="strip-mark">AM&nbsp;FM</div>
         </div>
         <div class="radio-controls">
           <div class="knob-control">
@@ -734,6 +719,11 @@
     let lastVoiceLevels = [];
     let lastVoiceFrames = [];
     let lastVoiceVisualGain = null;
+    const RADIO_ANALYZER_ROWS = 32;
+    const RADIO_ANALYZER_SEGMENTS_PER_SIDE = 8;
+    const RADIO_ANALYZER_PEAK_MIN_SEGMENTS = 7;
+    let radioPeakSegments = Array.from({length: RADIO_ANALYZER_ROWS}, () => -1);
+    let radioPeakHoldFrames = Array.from({length: RADIO_ANALYZER_ROWS}, () => 0);
 
     const BOH_TRANSITION_MESSAGES = {
       connected: 'BOH library connected. Read-only retrieval available.',
@@ -1582,44 +1572,99 @@
         pulseRadioAudio(voiceActive ? 1200 : 2200);
       }
     }
+    function resetRadioPeaks() {
+      radioPeakSegments = Array.from({length: RADIO_ANALYZER_ROWS}, () => -1);
+      radioPeakHoldFrames = Array.from({length: RADIO_ANALYZER_ROWS}, () => 0);
+    }
+    function spectrumTier(segmentIndex) {
+      if (segmentIndex >= RADIO_ANALYZER_SEGMENTS_PER_SIDE - 1) return 'tier-limit';
+      if (segmentIndex >= 5) return 'tier-high';
+      if (segmentIndex >= 3) return 'tier-mid';
+      return 'tier-low';
+    }
+    function createSpectrumCell(segmentIndex, activeSegments, peakSegment) {
+      const cell = document.createElement('span');
+      cell.className = `spectrum-cell ${spectrumTier(segmentIndex)}`;
+      if (segmentIndex < activeSegments) cell.classList.add('active');
+      if (segmentIndex === peakSegment) cell.classList.add('peak');
+      cell.setAttribute('aria-hidden', 'true');
+      return cell;
+    }
+    function updateRadioPeak(rowIndex, activeSegments, active, decay) {
+      if ((!active && !decay) || activeSegments < RADIO_ANALYZER_PEAK_MIN_SEGMENTS) {
+        radioPeakSegments[rowIndex] = -1;
+        radioPeakHoldFrames[rowIndex] = 0;
+        return -1;
+      }
+      const lastSegment = RADIO_ANALYZER_SEGMENTS_PER_SIDE - 1;
+      const adjacentLimit = Math.min(lastSegment, activeSegments);
+      const currentPeak = adjacentLimit;
+      const previousPeak = radioPeakSegments[rowIndex] ?? -1;
+      let holdFrames = radioPeakHoldFrames[rowIndex] ?? 0;
+      let peakSegment = previousPeak;
+      if (currentPeak >= previousPeak) {
+        peakSegment = currentPeak;
+        holdFrames = 3;
+      } else if (holdFrames > 0 && !decay) {
+        holdFrames -= 1;
+      } else {
+        peakSegment = Math.max(currentPeak, previousPeak - 1);
+      }
+      peakSegment = Math.min(peakSegment, adjacentLimit);
+      radioPeakSegments[rowIndex] = peakSegment;
+      radioPeakHoldFrames[rowIndex] = holdFrames;
+      return peakSegment;
+    }
     function renderRadioWave(levels, active, volume, decay = false, visualGain = null) {
       const meter = document.getElementById('radioMeter');
       const sourceLevels = Array.isArray(levels) && levels.length ? levels : [];
-      const safeLevels = sourceLevels.length ? resampleLevels(sourceLevels, 36) : Array.from({length: 36}, () => 0.015);
+      const safeLevels = sourceLevels.length
+        ? conditionRadioLevels(resampleLevels(sourceLevels, RADIO_ANALYZER_ROWS))
+        : Array.from({length: RADIO_ANALYZER_ROWS}, () => 0);
       const strongest = Math.max(...safeLevels.map(level => Math.max(0, Number(level) || 0)), 0.015);
       const providedGain = Number(visualGain);
-      const gain = active || decay ? (Number.isFinite(providedGain) && providedGain > 0 ? providedGain : Math.min(3.2, 0.96 / strongest)) : 1;
+      const gain = active || decay ? (Number.isFinite(providedGain) && providedGain > 0 ? providedGain : Math.min(4.0, 1.14 / strongest)) : 1;
       meter.innerHTML = '';
       meter.classList.toggle('voice-decay', decay);
-      safeLevels.forEach((level, index) => {
+      safeLevels.forEach((level, rowIndex) => {
         const row = document.createElement('div');
-        const amplitude = Math.max(0.015, Math.min(1, Number(level) || 0));
-        const volumeLift = 0.72 + (Math.max(0, Math.min(1, volume || 0.6)) * 0.28);
-        const shown = active || decay ? Math.min(1, Math.pow(amplitude * gain, 0.72) * volumeLift) : 0.015;
-        const armWidth = Math.max(3, Math.min(48, Math.round(5 + shown * 43)));
-        const color = shown > 0.86 ? '#d7fbff' : shown > 0.68 ? '#7cd2d5' : '#3AA3A7';
-        row.className = (active || decay) && amplitude > 0.04 ? 'spectrum-row active' : 'spectrum-row';
-        row.style.setProperty('--arm-width', `${armWidth}%`);
-        row.style.setProperty('--peak-offset', `${Math.max(6, armWidth + 2)}%`);
-        row.style.setProperty('--spectrum-color', color);
-        row.style.setProperty('--peak-opacity', shown > 0.78 ? '0.95' : '0');
-        row.style.setProperty('--wave-delay', `${index * 18}ms`);
-        const left = document.createElement('span');
-        left.className = 'spectrum-arm left';
+        const amplitude = Math.max(0, Math.min(1, Number(level) || 0));
+        const volumeLift = 0.86 + (Math.max(0, Math.min(1, volume || 0.6)) * 0.20);
+        const driven = amplitude * gain;
+        const shaped = driven > 0.022 ? Math.pow((driven - 0.022) / 0.978, 0.58) : 0;
+        const shown = active || decay ? Math.min(1, shaped * volumeLift * 1.08) : 0;
+        const activeSegments = shown > 0.012
+          ? Math.max(1, Math.min(RADIO_ANALYZER_SEGMENTS_PER_SIDE, Math.ceil(shown * RADIO_ANALYZER_SEGMENTS_PER_SIDE)))
+          : 0;
+        const peakSegment = updateRadioPeak(rowIndex, activeSegments, active, decay);
+        row.className = activeSegments > 0 ? 'spectrum-row active' : 'spectrum-row';
+        const leftBank = document.createElement('span');
+        leftBank.className = 'spectrum-bank left';
+        for (let segmentIndex = RADIO_ANALYZER_SEGMENTS_PER_SIDE - 1; segmentIndex >= 0; segmentIndex -= 1) {
+          leftBank.appendChild(createSpectrumCell(segmentIndex, activeSegments, peakSegment));
+        }
         const core = document.createElement('span');
         core.className = 'spectrum-core';
-        const right = document.createElement('span');
-        right.className = 'spectrum-arm right';
-        const leftPeak = document.createElement('span');
-        leftPeak.className = 'spectrum-peak left';
-        const rightPeak = document.createElement('span');
-        rightPeak.className = 'spectrum-peak right';
-        row.appendChild(left);
+        const rightBank = document.createElement('span');
+        rightBank.className = 'spectrum-bank right';
+        for (let segmentIndex = 0; segmentIndex < RADIO_ANALYZER_SEGMENTS_PER_SIDE; segmentIndex += 1) {
+          rightBank.appendChild(createSpectrumCell(segmentIndex, activeSegments, peakSegment));
+        }
+        row.appendChild(leftBank);
         row.appendChild(core);
-        row.appendChild(right);
-        row.appendChild(leftPeak);
-        row.appendChild(rightPeak);
+        row.appendChild(rightBank);
         meter.appendChild(row);
+      });
+    }
+    function conditionRadioLevels(levels) {
+      if (!Array.isArray(levels) || !levels.length) return [];
+      const clean = levels.map(level => Math.max(0, Math.min(1, Number(level) || 0)));
+      return clean.map((level, index) => {
+        const previous = clean[Math.max(0, index - 1)];
+        const next = clean[Math.min(clean.length - 1, index + 1)];
+        const neighborSpread = Math.max(previous, next) * 0.26;
+        const localAverage = (previous + (level * 2) + next) / 4;
+        return Math.min(1, Math.max(level, neighborSpread, localAverage));
       });
     }
     function resampleLevels(levels, targetCount) {
@@ -1642,18 +1687,24 @@
     function pulseRadioAudio(durationMs, frames = []) {
       const meter = document.getElementById('radioMeter');
       const strip = document.querySelector('.radio-strip');
+      const duration = Math.max(250, Number(durationMs) || 2200);
       meter.classList.remove('voice-decay');
       meter.classList.add('voice-active');
       strip.classList.add('voice-active');
       clearTimeout(radioPulseTimer);
       clearTimeout(radioResetTimer);
       clearInterval(radioFrameTimer);
+      resetRadioPeaks();
       if (Array.isArray(frames) && frames.length > 1) {
         let frameIndex = 0;
-        const frameDelay = Math.max(36, Math.floor(durationMs / frames.length));
+        const frameDelay = Math.max(36, Math.floor(duration / frames.length));
         renderRadioWave(frames[0], true, currentState?.volume_level || 0.6, false, lastVoiceVisualGain);
         radioFrameTimer = setInterval(() => {
-          frameIndex = (frameIndex + 1) % frames.length;
+          if (frameIndex >= frames.length - 1) {
+            clearInterval(radioFrameTimer);
+            return;
+          }
+          frameIndex += 1;
           renderRadioWave(frames[frameIndex], true, currentState?.volume_level || 0.6, false, lastVoiceVisualGain);
         }, frameDelay);
       }
@@ -1661,15 +1712,17 @@
         clearInterval(radioFrameTimer);
         meter.classList.remove('voice-active');
         strip.classList.remove('voice-active');
-        renderRadioWave(lastVoiceLevels, false, currentState?.volume_level || 0.6, true, lastVoiceVisualGain);
+        const decayLevels = lastVoiceFrames[lastVoiceFrames.length - 1] || lastVoiceLevels;
+        renderRadioWave(decayLevels, false, currentState?.volume_level || 0.6, true, lastVoiceVisualGain);
         radioResetTimer = setTimeout(() => {
           lastVoiceLevels = [];
           lastVoiceFrames = [];
           lastVoiceVisualGain = null;
+          resetRadioPeaks();
           meter.classList.remove('voice-decay');
           renderRadioWave([], false, currentState?.volume_level || 0.6);
         }, 850);
-      }, durationMs);
+      }, duration);
     }
     function pulseRadioFromVoice(voice) {
       if (!voice || !voice.spoken) return;
@@ -1681,9 +1734,10 @@
         : (Array.isArray(speaking.audio_levels) ? speaking.audio_levels : []);
       lastVoiceVisualGain = visualGainForVoice(lastVoiceFrames, lastVoiceLevels);
       renderRadioWave(lastVoiceFrames[0] || lastVoiceLevels, true, currentState?.volume_level || 0.6, false, lastVoiceVisualGain);
+      const exactDuration = Number(speaking.audio_duration_ms || 0);
       const hinted = Number(speaking.audio_visualization_hint_ms || 0);
       const textLen = Number(speaking.text_len || 0);
-      const duration = hinted || Math.max(2200, Math.min(30000, 900 + (textLen * 70)));
+      const duration = exactDuration || hinted || Math.max(2200, Math.min(30000, 900 + (textLen * 70)));
       pulseRadioAudio(duration, lastVoiceFrames);
     }
     function visualGainForVoice(frames, levels) {
@@ -1696,7 +1750,7 @@
         values.push(...levels);
       }
       const strongest = Math.max(...values.map(level => Math.max(0, Number(level) || 0)), 0.015);
-      return Math.min(3.2, 0.96 / strongest);
+      return Math.min(4.0, 1.14 / strongest);
     }
     async function refresh() {
       const data = await fetch('/metis/state').then(r => r.json());
