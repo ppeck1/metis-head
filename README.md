@@ -26,7 +26,21 @@ Reference and dashboard media are tracked for public review:
 
 ## Current Phase
 
-Phase scope: `0AY` - voice trace dashboard visibility (builds on `0A + 0S + 0R virtual chat + 0B retrieval bridge + 0C BOH link + 0S/S4 bridge emulator + 0S/S3 provider harness + 0P personality + 0V voice + 0M manifest + 0X artifacts + 0Y parity + 0V/AUDIO9 animated analyzer + 0T/CHAT governed tools + 0U proposal review + 0W execution audit + 0Q read-only policy + 0L time lane + 0G git status lane + 0F filesystem read lane + 0J active read-only chat routing + 0K fetch/planning seeds + 0N audit replay hardening + 0D lifecycle visibility + 0E BOH proposal lane + 0I proposal filters + 0H permission metadata + 0AA contract manifest + 0AB policy snapshot + 0AC argument validation + 0AD gate evaluation + 0AE review scope + 0AF tool readiness + 0AG completion report + 0AH task planner + 0AI plan queue + 0AJ plan review + 0AK step proposals + 0AL execution requests + 0AM result binding + 0AN guided advance + 0AO chat planning + 0AP truthful tool context + 0V/AUDIO10 spectrum fidelity + 0V/AUDIO11 hardware-parity analyzer + 0V/AUDIO12 analyzer presentation tuning + 0AQ launch-root hardening + 0AR chat plan control + 0AS proposal/receipt awareness + 0AT next-action guidance + 0AU dashboard guided shortcuts + 0AV simulated voice-command routing + 0AW deterministic tool awareness + 0AX simulated voice confirmation`).
+| Field | Value |
+|---|---|
+| Current phase | `0AY` |
+| Focus | Voice trace dashboard visibility, public media, and hardware-parity analyzer presentation tuning. |
+| Verification | `271 passed` under Python 3.11. |
+
+Implemented phase groups:
+
+- Foundation: `0A`, `0S`, `0S/S3`, `0S/S4`, `0M`, `0X`, `0Y`.
+- Chat, personality, and voice: `0R`, `0P`, `0V`, `0V/AUDIO9`, `0V/AUDIO10`, `0V/AUDIO11`, `0V/AUDIO12`.
+- BOH/read-only bridge: `0B`, `0C`, `0E`.
+- Governed tools: `0T`, `0U`, `0W`, `0Q`, `0L`, `0G`, `0F`, `0J`, `0K`, `0N`, `0D`, `0I`, `0H`.
+- Tool governance metadata: `0AA`, `0AB`, `0AC`, `0AD`, `0AE`, `0AF`, `0AG`.
+- Tool planning and review flow: `0AH`, `0AI`, `0AJ`, `0AK`, `0AL`, `0AM`, `0AN`, `0AO`.
+- Tool-aware chat and voice controls: `0AP`, `0AQ`, `0AR`, `0AS`, `0AT`, `0AU`, `0AV`, `0AW`, `0AX`, `0AY`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -965,9 +979,18 @@ Phase 0B implemented:
 - Boundary: Metis only reads from BOH (`/api/retrieve`), never mutates it, and never holds or
   sends BOH's operator token. With BOH disabled, chat behavior is unchanged.
 
-Latest patch: the UI test harness is satisfactory for now, so focus has shifted back to backend readiness. Agent Mode and memory review now create structured proposal records in canonical state instead of only incrementing counters.
+Latest patch: the UI test harness is satisfactory for now, so focus has shifted
+back to backend readiness. Agent Mode and memory review now create structured
+proposal records in canonical state instead of only incrementing counters.
 
-Functioning UI estimate: about `86%` for the Phase 0S/0R simulator UI. The dashboard can view state, LEDs, adapters, readiness, scenario output, event logs, a virtual radio control surface, export/replay current events, governed virtual chat, and Ollama model selection. Remaining UI work is mostly richer scenario summaries, bridge replay presets, provider health controls, and chat transcript export polish.
+Functioning UI estimate: about `86%` for the Phase 0S/0R simulator UI.
+
+The dashboard can view state, LEDs, adapters, readiness, scenario output,
+event logs, a virtual radio control surface, export/replay current events,
+governed virtual chat, and Ollama model selection.
+
+Remaining UI work is mostly richer scenario summaries, bridge replay presets,
+provider health controls, and chat transcript export polish.
 
 Implemented:
 
@@ -983,7 +1006,11 @@ Implemented:
 - Static dashboard for canonical state, LEDs, adapter health, readiness, scenario results, and event log.
 - Provider harness for deterministic mock STT/TTS/vision/memory/tool/Atlas/LLM/safety operations.
 - Governed tool registry and dry-run/proposal lane for safe tool review without execution.
-- Virtual radio view rebuilt as a 3-zone instrument: an inert speaker grille, a thin vertical LED/visualizer status strip, and a right control stack (Volume + Depth dials, PWR/LOUD/AFC/AM-FM buttons, large Tuning/Initiative dial). Radio status readouts (power/audio/mode/authority) and mic/camera cutoff controls live in a separate Radio Status panel below.
+- Virtual radio view rebuilt as a 3-zone instrument:
+  speaker grille, vertical LED/visualizer status strip, and right-side controls
+  for Volume, Depth, PWR, LOUD, AFC, AM/FM, and Tuning/Initiative.
+- Radio status readouts and mic/camera cutoff controls live in the separate
+  Radio Status panel below the radio.
 - Export/replay controls for state snapshots and JSON/JSONL event logs.
 - Governed LLM router with `MockLLMProvider`, `OllamaLLMProvider`, and `OpenAILLMProvider`.
 - Metis personality constitution injected into governed chat prompts.
@@ -1053,7 +1080,9 @@ $env:METIS_OLLAMA_BASE_URL="http://127.0.0.1:11434"
 $env:METIS_OLLAMA_MODEL="llama3.1"
 ```
 
-The dashboard can also select `Ollama` in the Virtual Chat panel, refresh models from the configured base URL, and send the selected model in the chat request. This is a UI override; it does not change your shell environment.
+The dashboard can also select `Ollama` in the Virtual Chat panel, refresh models
+from the configured base URL, and send the selected model in the chat request.
+This is a UI override; it does not change your shell environment.
 
 OpenAI:
 
@@ -1238,8 +1267,19 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-271 passed under Python 3.11 (includes voice trace dashboard visibility, hardware-parity analyzer presentation tuning, simulated voice confirmation, deterministic voice-first tool awareness, simulated voice-command tool awareness, dashboard guided-action shortcuts, chat-guided approval instructions, chat-facing proposal/receipt awareness, chat-facing governed plan status/advance, launch-root hardening, clarified read-only execution policy wording, duration-scaled loudness-preserving Piper spectrum frames, truthful LLM tool capability context, chat-facing governed task planning, guided governed plan advance, governed plan result binding, approved plan execution requests, approved plan step proposal queueing, governed tool plan review, persistent governed tool plan queue, governed tool task planner, governed tool completion report, governed tool readiness checklist, single-proposal review scope, governed tool gate evaluation, governed tool argument validation, governed tool policy snapshot, tool contract manifest visibility, tool permission requirement visibility, proposal inspector filters, BOH retrieval proposal tool shape, tool lifecycle visibility, tool audit replay hardening, fetch proposal and visible planning tool seeds, active read-only chat routing, approved `filesystem.read`, `git.status`, and `time.now` read-only execution, read-only execution policy contract, execution receipt/audit contract, governed proposal review, governed tool registry/dry-run lane, explicit chat-to-tool routing, animated Piper spectrum frames, virtual chat, BOH link, voice, artifacts, and hardware parity coverage)
+271 passed under Python 3.11
 ```
+
+Coverage includes:
+
+- Voice trace dashboard visibility and simulated voice confirmation.
+- Deterministic voice-first tool awareness and simulated voice-command routing.
+- Dashboard guided-action shortcuts and chat-facing approval/receipt awareness.
+- Governed plan status, advancement, result binding, and task planning.
+- Tool readiness, completion, contracts, policy snapshots, gate evaluation, and argument validation.
+- Proposal review scope, proposal filters, execution audit receipts, and replay hardening.
+- Approved read-only lanes for `filesystem.read`, `git.status`, and `time.now`.
+- Piper spectrum frames, hardware-parity analyzer presentation, voice, artifacts, BOH link, and hardware parity coverage.
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
 `metis_head.boh_link._request`), so no running BOH instance is required to verify the suite.
@@ -1248,4 +1288,32 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 ## Boundaries
 
-Phase 0A/0S/0R/0T/0U/0W/0Q/0L/0G/0F/0J/0K/0N/0D/0E/0I/0H/0AA/0AB/0AC/0AD/0AE/0AF/0AG/0AH/0AI/0AJ/0AK/0AL/0AM/0AN/0AO/0AP/0AQ/0AR/0AS/0AT/0AU/0AV/0AW/0AX/0AY does not implement real hardware, microphone, camera, Project Atlas integration, side-effectful external tools, or autonomous execution. As of Phase 0B/0C the only live external integration is the read-only BOH link: the retrieval bridge (`/api/retrieve`, opt-in via `METIS_BOH_ENABLED`) and the background link manager (`/api/health` + `/api/retrieve/status` + a `limit=1` `/api/retrieve` probe, opt-in via `METIS_BOH_BACKGROUND_ENABLED`). Neither mutates BOH, holds BOH's operator token, nor copies the BOH corpus into Metis; BOH remains the source of truth. Phase 0L allows approved internal `time.now` read-only execution. Phase 0G allows approved current-repo `git.status` only. Phase 0F allows approved current-repo text-file previews only. Phase 0AQ anchors those current-repo lanes to `METIS_REPO_ROOT` when configured. Phase 0J routes chat requests into those active read-only proposal lanes but still requires separate review/request execution. Phase 0K adds blocked fetch proposals and visible planning dry-runs only. Phase 0N hardens deterministic replay and receipt inspection for those tool lanes. Phase 0D adds lifecycle visibility only. Phase 0E adds BOH retrieval proposals only; it does not call BOH through the tool registry. Phase 0I adds proposal filtering only. Phase 0H adds permission requirement visibility only. Phase 0AA adds tool contract manifest visibility only. Phase 0AB adds a composed policy snapshot only. Phase 0AC adds schema validation for tool arguments only. Phase 0AD adds advisory gate evaluation only. Phase 0AE makes review scope explicit and single-proposal only. Phase 0AF adds computed governed-tool readiness only. Phase 0AG adds computed completion reporting for the current governed simulation substrate only. Phase 0AH adds reviewable task planning only. Phase 0AI adds persistent plan storage only. Phase 0AJ adds plan review only. Phase 0AK queues proposal records for approved plan steps only. Phase 0AL requests execution only for already-approved step proposals through existing receipt gates. Phase 0AM binds bounded receipt summaries into pending dependent proposals only. Phase 0AN guides the next available governed transition but stops at every human review gate; it does not approve or execute unreviewed work. Phase 0AO lets chat create persisted governed plans from explicit planning requests only; it does not approve, materialize step proposals, request execution, bind results, or execute tools. Phase 0AP updates LLM context only so providers describe governed tools accurately; it adds no execution authority. Phase 0AQ adds launch/root configuration and policy clarity only; it does not add new tool lanes. Phase 0AR lets chat report and explicitly advance governed plans through existing gates only; it cannot approve plans, approve proposals, or grant standing execution. Phase 0AS lets chat summarize proposal queues and execution receipts only; it cannot approve, deny, request execution, create receipts, or expose unsafe receipt bodies. Phase 0AT lets chat identify the next required operator action only; it cannot perform that action. Phase 0AU lets the dashboard display guidance and select target records only; it cannot click governed action buttons automatically. Phase 0AV accepts caller-supplied recognized text as simulated voice input only; it does not implement real mic capture, wake word, or STT. Phase 0AW answers tool-awareness prompts deterministically only; it adds no execution authority. Phase 0AX accepts caller-supplied recognized text for simulated proposal confirmation only; it cannot request execution, grant standing approval, or bypass mic cutoff. Phase 0AY displays redacted simulated voice traces only; it adds no approval, confirmation, or execution controls. Arbitrary filesystem reads, arbitrary git commands, live URL fetch, BOH-as-tool execution, BOH/Atlas mutation, hardware, shell, memory promotion, and external actions remain blocked. Other reference repositories remain pattern donors only.
+Current phases do not implement:
+
+- Real hardware, microphone capture, wake word, real STT, or camera capture.
+- Project Atlas integration.
+- Side-effectful external tools, arbitrary shell commands, or autonomous execution.
+- Arbitrary filesystem reads or arbitrary git commands.
+- BOH-as-tool execution, BOH mutation, Atlas mutation, hardware mutation, or memory promotion.
+
+Live external integration is limited to the opt-in read-only BOH link:
+
+- Retrieval bridge: `/api/retrieve`, gated by `METIS_BOH_ENABLED`.
+- Background link manager: `/api/health`, `/api/retrieve/status`, and a `limit=1` retrieval probe, gated by `METIS_BOH_BACKGROUND_ENABLED`.
+- Metis never mutates BOH, never holds BOH's operator token, and never copies the BOH corpus. BOH remains the source of truth.
+
+Approved read-only tool lanes are intentionally narrow:
+
+- `time.now`: approved internal read-only execution.
+- `git.status`: approved current-repo status only.
+- `filesystem.read`: approved current-repo text-file previews only.
+- `METIS_REPO_ROOT`: optional root anchor for the current-repo read-only lanes.
+
+Everything else remains governed:
+
+- Chat can route explicit requests into proposal lanes, but review and execution request gates remain separate.
+- Planning, proposal review, result binding, and next-action guidance are visible and replayable, but they do not grant standing approval.
+- Dashboard guidance can select records for review, but it cannot click approval or execution buttons automatically.
+- Simulated voice commands and confirmations use caller-supplied recognized text only and cannot bypass mic cutoff or request execution.
+- Tool-awareness responses describe governed tools accurately without giving the LLM provider direct tool-calling authority.
+- Reference repositories remain read-only pattern donors only.
