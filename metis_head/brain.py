@@ -21,6 +21,7 @@ from .bridge import HARDWARE_PARITY_MANIFEST
 from .execution_policy import read_only_execution_policy
 from .governance import POLICY_VERSION, classify_intent, should_queue_proposal
 from .leds import resolve_leds
+from .panel import resolve_panel
 from .llm_providers import LLMProviderError, governed_messages, list_ollama_models, probe_llm_provider, provider_from_config
 from .personality import personality_profile
 from .provider_harness import ProviderHarnessError, invoke_provider, provider_catalog
@@ -38,6 +39,8 @@ from .tool_plan_runner import next_plan_action
 from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .tool_task_planner import plan_tool_task
+from .audio_input import CaptureContext, audio_input_provider_from_config
+from .stt import get_recognized_text, stt_provider_from_config
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
 
@@ -80,6 +83,11 @@ def boh_status() -> dict[str, Any]:
 @app.get("/metis/state")
 def get_state() -> dict[str, Any]:
     return {"state": STATE, "leds": resolve_leds(STATE), "readiness": calculate_readiness()}
+
+
+@app.get("/metis/panel")
+def get_panel() -> dict[str, Any]:
+    return {"panel": resolve_panel(STATE), "state": STATE, "leds": resolve_leds(STATE)}
 
 
 @app.get("/metis/export")
@@ -1918,6 +1926,272 @@ def _voice_response_payload(result: VoiceResult) -> dict[str, Any]:
     payload["speech_blocked"] = bool(result.blocked_reason)
     payload["block_reason"] = result.blocked_reason.replace(" ", "_") if result.blocked_reason else None
     return payload
+
+
+def _audio_input_event(
+    status: str,
+    *,
+    block_reason: str | None = None,
+    capture=None,
+    stt_result=None,
+) -> dict[str, Any]:
+    event: dict[str, Any] = {
+        "type": "provider_event",
+        "provider": "audio_input",
+        "status": status,
+        "input_mode": "simulated_audio_input",
+        "audio_input_schema": "audio_input_adapter.v0.1",
+    }
+    if block_reason:
+        event["block_reason"] = block_reason
+    if capture is not None:
+        event["audio_duration_ms"] = capture.audio_duration_ms
+        event["frame_count"] = capture.frame_count
+        event["sample_rate"] = capture.sample_rate
+        event["captured"] = capture.captured
+        event["audio_provider_id"] = capture.provider_id
+    if stt_result is not None:
+        event["text_len"] = stt_result.text_len
+        event["text_hash"] = stt_result.text_hash
+        event["text_redacted"] = True
+        event["stt_provider_id"] = stt_result.provider_id
+    return event
+
+
+def _audio_capture_governance() -> tuple[bool, str | None]:
+    """Return (allowed, block_reason). Checks mic cutoff and software enable."""
+    if not STATE.get("mic_hardware_enabled"):
+        return False, "mic_hardware_cutoff"
+    if not STATE.get("audio_input_enabled"):
+        return False, "audio_input_disabled"
+    if STATE.get("power_state") != "awake":
+        return False, "standby_blocks_capture"
+    return True, None
+
+
+@app.get("/metis/audio/input")
+def audio_input_status() -> dict[str, Any]:
+    audio_provider = audio_input_provider_from_config("simulated")
+    stt_provider = stt_provider_from_config("simulated")
+    return {
+        "audio_input_adapter_version": "audio_input_adapter.v0.1",
+        "stt_engine_version": "stt_engine.v0.1",
+        "audio_input_state": STATE.get("audio_input_state"),
+        "audio_input_enabled": STATE.get("audio_input_enabled"),
+        "listen_mode": STATE.get("listen_mode"),
+        "mic_hardware_enabled": STATE.get("mic_hardware_enabled"),
+        "last_audio_capture": STATE.get("last_audio_capture"),
+        "selected_audio_provider": "simulated",
+        "selected_stt_provider": "simulated",
+        "audio_provider_health": audio_provider.health(),
+        "stt_provider_health": stt_provider.health(),
+        "providers": {
+            "audio_input": ["none", "simulated", "local_mic"],
+            "stt": ["none", "simulated", "local_whisper"],
+        },
+        "boundary": "Capture fail-closed behind mic_hardware_enabled; no real mic, no new execution authority.",
+    }
+
+
+@app.post("/metis/audio/input/capture")
+def audio_input_capture(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    payload = payload or {}
+
+    allowed, block_reason = _audio_capture_governance()
+    if not allowed:
+        event = _audio_input_event("blocked", block_reason=block_reason)
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": block_reason,
+            "captured": False,
+            "capture": None,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    provider_name = str(payload.get("provider") or "simulated")
+    hint = str(payload.get("hint") or "default")
+    duration_ms = int(payload.get("duration_ms") or 1000)
+    context = CaptureContext(hint=hint, fixture_id=hint, duration_ms=duration_ms)
+
+    audio_provider = audio_input_provider_from_config(provider_name)
+    capture_result = audio_provider.capture(context)
+
+    if not capture_result.captured:
+        event = _audio_input_event("blocked", block_reason=capture_result.block_reason or "capture_failed", capture=capture_result)
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": capture_result.block_reason,
+            "captured": False,
+            "capture": capture_result.to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    event = _audio_input_event("complete", capture=capture_result)
+    STATE = reduce_metis_event(STATE, event)
+    return {
+        "status": "captured",
+        "capture": capture_result.to_dict(),
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
+@app.post("/metis/audio/transcribe")
+def audio_transcribe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    global STATE
+    payload = payload or {}
+
+    if not STATE.get("mic_hardware_enabled"):
+        event = _audio_input_event("blocked", block_reason="mic_hardware_cutoff")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": "mic_hardware_cutoff",
+            "stt": None,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    provider_name = str(payload.get("stt_provider") or "simulated")
+    hint = str(payload.get("hint") or "default")
+    stt = stt_provider_from_config(provider_name)
+    stt_context = {"hint": hint}
+    stt_result = stt.transcribe(None, stt_context)
+
+    event = _audio_input_event("transcribing", stt_result=stt_result)
+    STATE = reduce_metis_event(STATE, event)
+    complete_event = _audio_input_event("complete", stt_result=stt_result)
+    STATE = reduce_metis_event(STATE, complete_event)
+
+    return {
+        "status": "transcribed",
+        "stt": stt_result.to_dict(),
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
+@app.post("/metis/audio/listen")
+def audio_listen(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Orchestrated simulated path: capture → transcribe → forward to voice_command.
+
+    Respects the full capture-governance chain (mic cutoff, audio_input_enabled,
+    listen_mode, power_state). Adds no new execution authority: recognized text
+    enters the already-governed POST /metis/voice/command route.
+    """
+    global STATE
+    payload = payload or {}
+
+    if not STATE.get("mic_hardware_enabled"):
+        event = _audio_input_event("blocked", block_reason="mic_hardware_cutoff")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": "mic_hardware_cutoff",
+            "captured": False,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    if not STATE.get("audio_input_enabled"):
+        event = _audio_input_event("blocked", block_reason="audio_input_disabled")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": "audio_input_disabled",
+            "captured": False,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    listen_mode = STATE.get("listen_mode", "no_listen")
+    if listen_mode == "no_listen":
+        event = _audio_input_event("blocked", block_reason="listen_mode_no_listen")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": "listen_mode_no_listen",
+            "captured": False,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    if STATE.get("power_state") != "awake":
+        event = _audio_input_event("blocked", block_reason="standby_blocks_capture")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": "standby_blocks_capture",
+            "captured": False,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    provider_name = str(payload.get("provider") or "simulated")
+    hint = str(payload.get("hint") or "default")
+    duration_ms = int(payload.get("duration_ms") or 1000)
+    context = CaptureContext(hint=hint, fixture_id=hint, duration_ms=duration_ms)
+
+    audio_provider = audio_input_provider_from_config(provider_name)
+    capturing_event = _audio_input_event("capturing")
+    STATE = reduce_metis_event(STATE, capturing_event)
+    capture_result = audio_provider.capture(context)
+
+    if not capture_result.captured:
+        fail_event = _audio_input_event("blocked", block_reason=capture_result.block_reason or "capture_failed", capture=capture_result)
+        STATE = reduce_metis_event(STATE, fail_event)
+        return {
+            "status": "blocked",
+            "block_reason": capture_result.block_reason,
+            "captured": False,
+            "capture": capture_result.to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    stt_name = str(payload.get("stt_provider") or "simulated")
+    stt = stt_provider_from_config(stt_name)
+    stt_context = {"hint": hint}
+
+    transcribing_event = _audio_input_event("transcribing", capture=capture_result)
+    STATE = reduce_metis_event(STATE, transcribing_event)
+    stt_result = stt.transcribe(capture_result, stt_context)
+
+    recognized_text = get_recognized_text(stt_result)
+
+    if not recognized_text.strip():
+        complete_event = _audio_input_event("complete", capture=capture_result, stt_result=stt_result)
+        STATE = reduce_metis_event(STATE, complete_event)
+        return {
+            "status": "no_text_recognized",
+            "capture": capture_result.to_dict(),
+            "stt": stt_result.to_dict(),
+            "voice_command": None,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    vc_response = voice_command({"text": recognized_text, "options": options})
+
+    complete_event = _audio_input_event("complete", capture=capture_result, stt_result=stt_result)
+    STATE = reduce_metis_event(STATE, complete_event)
+    vc_response["state"] = STATE
+    vc_response["leds"] = resolve_leds(STATE)
+
+    return {
+        "status": "listen_complete",
+        "capture": capture_result.to_dict(),
+        "stt": stt_result.to_dict(),
+        "voice_command": vc_response,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
 
 
 @app.post("/metis/replay")

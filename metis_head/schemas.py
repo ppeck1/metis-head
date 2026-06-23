@@ -18,6 +18,7 @@ SUPPORTED_ADAPTER_SCHEMAS = {
     "atlas_adapter.v0.1",
     "boh_adapter.v0.1",
     "robot_safety_adapter.v0.1",
+    "audio_input_adapter.v0.1",
 }
 
 EVENT_TYPES = {
@@ -104,6 +105,7 @@ BASE_ADAPTERS: dict[str, dict[str, Any]] = {
     "project_atlas": adapter("project_atlas", "task_lifecycle_provider", "atlas_adapter.v0.1", capabilities=["propose_task"]),
     "boh_memory": adapter("boh_memory", "memory_vault_provider", "boh_adapter.v0.1", capabilities=["retrieve_cited_candidates"]),
     "robot_safety": adapter("robot_safety", "safety_pattern_provider", "robot_safety_adapter.v0.1", capabilities=["safety_patterns"]),
+    "audio_input": adapter("audio_input", "audio_input_provider", "audio_input_adapter.v0.1", capabilities=["capture"]),
 }
 
 
@@ -172,6 +174,10 @@ def baseline_state(*, adapters_enabled: bool = False, timestamp: str = "2026-05-
         "last_tts_voice": None,
         "last_tts_error": None,
         "last_block_reason": None,
+        "audio_input_state": "disabled",
+        "audio_input_enabled": False,
+        "listen_mode": "no_listen",
+        "last_audio_capture": None,
         "spec_traceability": {
             "canonical_state": "buildspec section 5",
             "led_precedence": "buildspec section 6",

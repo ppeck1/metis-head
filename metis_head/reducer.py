@@ -112,6 +112,16 @@ def _reduce_button(state: dict[str, Any], event: dict[str, Any]) -> None:
         state["authority_state"] = "source_grounded" if value else "local_governed"
     elif button == "am_fm":
         state["interaction_mode"] = "agent" if value in {"fm", "agent"} else "human"
+    elif button == "audio_input":
+        enabled = value in {"on", "enabled", "true", "1", True, 1}
+        state["audio_input_enabled"] = bool(enabled)
+        if enabled and state.get("mic_hardware_enabled"):
+            state["audio_input_state"] = "idle"
+        elif not enabled:
+            state["audio_input_state"] = "disabled"
+    elif button == "listen_mode":
+        if value in {"no_listen", "wake_word", "push_to_talk"}:
+            state["listen_mode"] = value
 
 
 def _reduce_privacy(state: dict[str, Any], event: dict[str, Any]) -> None:
@@ -190,6 +200,28 @@ def _reduce_provider(state: dict[str, Any], event: dict[str, Any]) -> None:
     elif provider in {"vault", "memory", "boh_memory"} and status == "unavailable":
         _set_failure(state, "vault_unavailable", event.get("reason"))
         state["source_state"] = "unsourced"
+    elif provider == "audio_input" and status in {"capturing", "transcribing"}:
+        state["audio_input_state"] = status
+    elif provider == "audio_input" and status == "complete":
+        state["audio_input_state"] = "idle"
+        state["capture_count"] = state.get("capture_count", 0) + 1
+        if event.get("captured") and event.get("audio_duration_ms") is not None:
+            state["last_audio_capture"] = {
+                "audio_duration_ms": event.get("audio_duration_ms"),
+                "frame_count": event.get("frame_count"),
+                "sample_rate": event.get("sample_rate"),
+                "audio_provider_id": event.get("audio_provider_id"),
+                "stt_provider_id": event.get("stt_provider_id"),
+                "text_len": event.get("text_len"),
+                "text_hash": event.get("text_hash"),
+                "text_redacted": True,
+            }
+    elif provider == "audio_input" and status == "blocked":
+        state["audio_input_state"] = "blocked"
+        state["blocked_capture_count"] = state.get("blocked_capture_count", 0) + 1
+        state["last_block_reason"] = event.get("block_reason") or "audio capture blocked"
+    elif provider == "audio_input" and status in {"failed", "failure"}:
+        state["audio_input_state"] = "failed"
 
 
 def _reduce_chat(state: dict[str, Any], event: dict[str, Any]) -> None:

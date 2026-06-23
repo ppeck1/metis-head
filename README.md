@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0AY` |
-| Focus | Voice trace dashboard visibility, public media, and hardware-parity analyzer presentation tuning. |
-| Verification | `271 passed` under Python 3.11. |
+| Current phase | `0BA` |
+| Focus | Modular simulation-first audio-input + STT layer (`audio_input_adapter.v0.1`, `stt_engine.v0.1`). |
+| Verification | `319 passed` under Python 3.11. |
 
 Implemented phase groups:
 
@@ -41,6 +41,8 @@ Implemented phase groups:
 - Tool governance metadata: `0AA`, `0AB`, `0AC`, `0AD`, `0AE`, `0AF`, `0AG`.
 - Tool planning and review flow: `0AH`, `0AI`, `0AJ`, `0AK`, `0AL`, `0AM`, `0AN`, `0AO`.
 - Tool-aware chat and voice controls: `0AP`, `0AQ`, `0AR`, `0AS`, `0AT`, `0AU`, `0AV`, `0AW`, `0AX`, `0AY`.
+- Physical radio panel: `0AZ`.
+- Audio input + STT: `0BA`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -73,6 +75,18 @@ Phase 0AY implemented:
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
+
+Phase 0BA implemented:
+
+- Added `metis_head/audio_input.py` — `audio_input_adapter.v0.1` with `NoneAudioInput`, `SimulatedAudioInput` (synthetic WAV + Piper helpers), and disabled `LocalMicAudioInput` scaffold.
+- Added `metis_head/stt.py` — `stt_engine.v0.1` with `NoneSTT`, `SimulatedSTT` (deterministic hint→text map), and disabled `LocalWhisperSTT` scaffold.
+- Canonical state additions: `audio_input_state`, `audio_input_enabled`, `listen_mode`, `last_audio_capture`, `input_adapters.audio_input`.
+- New endpoints: `GET /metis/audio/input`, `POST /metis/audio/input/capture`, `POST /metis/audio/transcribe`, `POST /metis/audio/listen`.
+- Capture fail-closed behind `mic_hardware_enabled` (highest precedence) then `audio_input_enabled` then `listen_mode` then `power_state`.
+- `POST /metis/audio/listen` feeds recognized text into the existing `POST /metis/voice/command` governed route — no new execution authority.
+- STT output redacted (`text_len`/`text_hash` only); recognized text never written to state, event log, or responses.
+- `audio_input` and `listen_mode` toggleable via `button_event` for tests; no new dep imports.
+- 35 new tests covering all §7 assertions; full suite: `319 passed` under Python 3.11.
 
 Previous Phase 0AX status: Metis has a simulated voice confirmation protocol for pending governed proposals.
 `POST /metis/voice/confirm` accepts caller-supplied recognized text, emits redacted voice-confirmation
