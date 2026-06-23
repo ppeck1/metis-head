@@ -12,6 +12,7 @@ Hard boundaries verified here:
 from __future__ import annotations
 
 import io
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -61,6 +62,20 @@ def _upload(client: TestClient, hint: str = "git status", audio: bytes = _WAV_HE
         files={"audio": ("ptt.wav", io.BytesIO(audio), "audio/wav")},
         data={"stt_provider": "simulated", "stt_hint": hint, "options_json": "{}"},
     ).json()
+
+
+def _upload_response(
+    client: TestClient,
+    *,
+    hint: str = "git status",
+    audio: bytes = _WAV_HEADER,
+    content_type: str = "audio/wav",
+):
+    return client.post(
+        "/metis/audio/browser_ptt",
+        files={"audio": ("ptt.wav", io.BytesIO(audio), content_type)},
+        data={"stt_provider": "simulated", "stt_hint": hint, "options_json": "{}"},
+    )
 
 
 def _queue_proposal(client: TestClient) -> str:
@@ -143,11 +158,57 @@ def test_raw_transcript_not_in_event_log(client):
     _enable_ptt(client)
     d = _upload(client, hint="git status")
     event_log = d.get("state", {}).get("event_log", [])
-    audio_events = [e for e in event_log if e.get("type") == "audio_input"]
+    audio_events = [
+        e for e in event_log if e.get("type") == "provider_event" and e.get("provider") == "audio_input"
+    ]
+    assert audio_events
     for ev in audio_events:
         stt = ev.get("stt_result") or {}
         assert "text" not in stt, f"raw text found in event: {ev}"
         assert "text_redacted" in stt or not stt, "expected text_redacted key"
+
+
+def test_voice_origin_sentinel_does_not_persist_in_state_or_logs(client):
+    """Voice-origin recognized text is transient and must not persist raw in canonical state."""
+    _enable_ptt(client)
+    sentinel = "VOICE_SENTINEL_SHOULD_NOT_PERSIST_0BG"
+    d = _upload(client, hint=f"please repeat {sentinel}")
+    assert d["status"] == "listen_complete"
+
+    persisted_state = json.dumps(d["state"], sort_keys=True)
+    assert sentinel not in persisted_state
+
+    event_log = d["state"]["event_log"]
+    provider_events = [e for e in event_log if e.get("type") == "provider_event"]
+    assert provider_events
+    for ev in provider_events:
+        assert sentinel not in json.dumps(ev, sort_keys=True)
+    assert any(
+        entry.get("role") == "user" and "voice transcript redacted" in entry.get("content", "")
+        for entry in d["state"]["chat_history"]
+    )
+
+
+def test_browser_ptt_rejects_oversized_upload(client):
+    _enable_ptt(client)
+    oversized = _WAV_HEADER + (b"\x00" * (_brain.BROWSER_PTT_MAX_UPLOAD_BYTES + 1))
+    response = _upload_response(client, audio=oversized)
+    assert response.status_code == 413
+    assert "exceeds" in response.json()["detail"]
+
+
+def test_browser_ptt_rejects_invalid_content_type(client):
+    _enable_ptt(client)
+    response = _upload_response(client, content_type="text/plain")
+    assert response.status_code == 415
+    assert "unsupported audio content type" in response.json()["detail"]
+
+
+def test_browser_ptt_rejects_invalid_wav_payload(client):
+    _enable_ptt(client)
+    response = _upload_response(client, audio=b"not a wav payload", content_type="audio/wav")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid WAV upload"
 
 
 # ── governance invariant ──────────────────────────────────────────────────────

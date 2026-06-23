@@ -56,6 +56,15 @@ async def _lifespan(_: FastAPI):
 app = FastAPI(title="Metis Head Mock Brain", version="0.0.1", lifespan=_lifespan)
 STATE = baseline_state()
 SCENARIO_RESULTS: list[dict[str, Any]] = []
+BROWSER_PTT_MAX_UPLOAD_BYTES = 1_000_000
+BROWSER_PTT_ALLOWED_CONTENT_TYPES = {
+    "audio/wav",
+    "audio/wave",
+    "audio/x-wav",
+    "audio/webm",
+    "application/octet-stream",
+}
+BROWSER_PTT_WAV_TYPES = {"audio/wav", "audio/wave", "audio/x-wav", "application/octet-stream"}
 
 
 @app.get("/")
@@ -1290,6 +1299,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(user_message, str) or not user_message.strip():
         raise HTTPException(status_code=400, detail="message is required")
     options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    persisted_user_message = _persisted_chat_user_message(user_message, options)
     plan_task = _route_chat_plan_request(user_message)
     if plan_task is not None:
         try:
@@ -1303,6 +1313,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             f"Governed tool plan {plan_status}: {plan['plan_id']} with {plan['step_count']} step(s). "
             f"Next action: {next_action['action']}. Execution allowed: false."
         )
+        persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
         STATE = reduce_metis_event(
             STATE,
             {
@@ -1310,14 +1321,14 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "status": "complete",
                 "provider": "tool_planner",
                 "model": "metis_tool_task_plan.v0.1",
-                "user_message": user_message,
-                "assistant_message": assistant_message,
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
                 "source_state": STATE.get("source_state", "unsourced"),
             },
         )
-        voice = _speak_chat_response(assistant_message, options)
+        voice = _speak_chat_response(persisted_assistant_message, options)
         return {
-            "message": assistant_message,
+            "message": persisted_assistant_message,
             "provider": "tool_planner",
             "model": "metis_tool_task_plan.v0.1",
             "proposal_queued": False,
@@ -1345,6 +1356,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             plan = controlled["plan"]
             next_action = controlled["next_action"]
             assistant_message = _plan_control_message(plan, next_action, "status")
+        persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
         STATE = reduce_metis_event(
             STATE,
             {
@@ -1352,14 +1364,14 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "status": "complete",
                 "provider": "tool_planner",
                 "model": model,
-                "user_message": user_message,
-                "assistant_message": assistant_message,
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
                 "source_state": STATE.get("source_state", "unsourced"),
             },
         )
-        voice = _speak_chat_response(assistant_message, options)
+        voice = _speak_chat_response(persisted_assistant_message, options)
         return {
-            "message": assistant_message,
+            "message": persisted_assistant_message,
             "provider": "tool_planner",
             "model": model,
             "proposal_queued": False,
@@ -1377,6 +1389,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if next_action_request is not None:
         instruction = _next_action_instruction(next_action_request["plan_id"], next_action_request["proposal_id"])
         assistant_message = _next_action_message(instruction)
+        persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
         STATE = reduce_metis_event(
             STATE,
             {
@@ -1384,14 +1397,14 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "status": "complete",
                 "provider": "tool_planner",
                 "model": "metis_tool_next_action.v0.1",
-                "user_message": user_message,
-                "assistant_message": assistant_message,
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
                 "source_state": STATE.get("source_state", "unsourced"),
             },
         )
-        voice = _speak_chat_response(assistant_message, options)
+        voice = _speak_chat_response(persisted_assistant_message, options)
         return {
-            "message": assistant_message,
+            "message": persisted_assistant_message,
             "provider": "tool_planner",
             "model": "metis_tool_next_action.v0.1",
             "proposal_queued": False,
@@ -1415,6 +1428,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             queue_summary = _proposal_status_summary()
             model = "metis_tool_approval_status.v0.1"
             assistant_message = _proposal_status_message(queue_summary)
+        persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
         STATE = reduce_metis_event(
             STATE,
             {
@@ -1422,14 +1436,14 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "status": "complete",
                 "provider": "tool_planner",
                 "model": model,
-                "user_message": user_message,
-                "assistant_message": assistant_message,
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
                 "source_state": STATE.get("source_state", "unsourced"),
             },
         )
-        voice = _speak_chat_response(assistant_message, options)
+        voice = _speak_chat_response(persisted_assistant_message, options)
         return {
-            "message": assistant_message,
+            "message": persisted_assistant_message,
             "provider": "tool_planner",
             "model": model,
             "proposal_queued": False,
@@ -1449,6 +1463,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if capability_request:
         capability_summary = _tool_capability_summary()
         assistant_message = _tool_capability_message(capability_summary)
+        persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
         STATE = reduce_metis_event(
             STATE,
             {
@@ -1456,14 +1471,14 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "status": "complete",
                 "provider": "tool_capability",
                 "model": capability_summary["schema_version"],
-                "user_message": user_message,
-                "assistant_message": assistant_message,
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
                 "source_state": STATE.get("source_state", "unsourced"),
             },
         )
-        voice = _speak_chat_response(assistant_message, options)
+        voice = _speak_chat_response(persisted_assistant_message, options)
         return {
-            "message": assistant_message,
+            "message": persisted_assistant_message,
             "provider": "tool_capability",
             "model": capability_summary["schema_version"],
             "proposal_queued": False,
@@ -1485,11 +1500,12 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if tool_result is None and should_queue_proposal(policy, STATE):
         STATE = reduce_metis_event(
             STATE,
-            {"type": "user_intent", "intent": user_message, "action_class": policy.action_class, "policy": policy.to_dict()},
+            {"type": "user_intent", "intent": persisted_user_message, "action_class": policy.action_class, "policy": policy.to_dict()},
         )
         proposal_queued = True
     if tool_result is not None:
         assistant_message = _tool_chat_message(tool_result)
+        persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
         STATE = reduce_metis_event(
             STATE,
             {
@@ -1497,14 +1513,14 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
                 "status": "complete",
                 "provider": "tool_router",
                 "model": tool_result["tool_id"],
-                "user_message": user_message,
-                "assistant_message": assistant_message,
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
                 "source_state": STATE.get("source_state", "unsourced"),
             },
         )
-        voice = _speak_chat_response(assistant_message, options)
+        voice = _speak_chat_response(persisted_assistant_message, options)
         return {
-            "message": assistant_message,
+            "message": persisted_assistant_message,
             "provider": "tool_router",
             "model": tool_result["tool_id"],
             "proposal_queued": proposal_queued or tool_result["status"] == "proposal_queued",
@@ -1571,6 +1587,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             )
         elif source_state == "unsourced" and "unsourced" not in assistant_message.lower():
             assistant_message = f"{assistant_message}\n\nSource label: unsourced; no adequate retrieved source was available."
+    persisted_assistant_message = _persisted_chat_assistant_message(assistant_message, user_message, options)
     STATE = reduce_metis_event(
         STATE,
         {
@@ -1578,17 +1595,17 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
             "status": "complete",
             "provider": result.provider,
             "model": result.model,
-            "user_message": user_message,
-            "assistant_message": assistant_message,
+            "user_message": persisted_user_message,
+            "assistant_message": persisted_assistant_message,
             "source_state": source_state,
         },
     )
-    voice = _speak_chat_response(assistant_message, options)
+    voice = _speak_chat_response(persisted_assistant_message, options)
     metadata = dict(result.metadata)
     if retrieval is not None:
         metadata["boh"] = retrieval.to_metadata()
     return {
-        "message": assistant_message,
+        "message": persisted_assistant_message,
         "provider": result.provider,
         "model": result.model,
         "proposal_queued": proposal_queued,
@@ -1654,6 +1671,28 @@ def voice_preview(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     if not result.ok:
         raise HTTPException(status_code=502, detail=response)
     return response
+
+
+def _voice_origin_privacy_enabled(options: dict[str, Any]) -> bool:
+    return bool(options.get("_metis_voice_origin") and options.get("_redact_voice_transcript_persistence", True))
+
+
+def _redacted_voice_turn_text(text: str) -> str:
+    digest = sha1(text.encode("utf-8")).hexdigest()[:16]
+    return f"[voice transcript redacted; text_len={len(text)}; text_hash={digest}]"
+
+
+def _persisted_chat_user_message(user_message: str, options: dict[str, Any]) -> str:
+    if _voice_origin_privacy_enabled(options):
+        return _redacted_voice_turn_text(user_message)
+    return user_message
+
+
+def _persisted_chat_assistant_message(assistant_message: str, user_message: str, options: dict[str, Any]) -> str:
+    if not _voice_origin_privacy_enabled(options):
+        return assistant_message
+    redacted = _redacted_voice_turn_text(user_message)
+    return assistant_message.replace(user_message, redacted)
 
 
 def _voice_command_text(payload: dict[str, Any]) -> str:
@@ -1899,6 +1938,8 @@ def voice_command(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     voice_options_payload = options.get("voice") if isinstance(options.get("voice"), dict) else {}
     options = {
         **options,
+        "_metis_voice_origin": True,
+        "_redact_voice_transcript_persistence": True,
         "voice": {
             **voice_options_payload,
             "speak_response": voice_options_payload.get("speak_response", True),
@@ -2420,6 +2461,26 @@ def audio_wake(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     return result
 
 
+def _normalized_upload_content_type(audio: UploadFile) -> str:
+    return (audio.content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+
+
+def _validate_browser_ptt_upload(content_type: str, wav_bytes: bytes) -> None:
+    if not wav_bytes:
+        raise HTTPException(status_code=400, detail="audio upload is empty")
+    if len(wav_bytes) > BROWSER_PTT_MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"audio upload exceeds {BROWSER_PTT_MAX_UPLOAD_BYTES} byte local prototype limit",
+        )
+    if content_type not in BROWSER_PTT_ALLOWED_CONTENT_TYPES:
+        raise HTTPException(status_code=415, detail=f"unsupported audio content type: {content_type}")
+    if content_type in BROWSER_PTT_WAV_TYPES and not (
+        len(wav_bytes) >= 44 and wav_bytes[:4] == b"RIFF" and wav_bytes[8:12] == b"WAVE"
+    ):
+        raise HTTPException(status_code=400, detail="invalid WAV upload")
+
+
 @app.post("/metis/audio/browser_ptt")
 async def audio_browser_ptt(
     audio: UploadFile = File(...),
@@ -2461,7 +2522,9 @@ async def audio_browser_ptt(
             "leds": resolve_leds(STATE),
         }
 
-    wav_bytes = await audio.read()
+    content_type = _normalized_upload_content_type(audio)
+    wav_bytes = await audio.read(BROWSER_PTT_MAX_UPLOAD_BYTES + 1)
+    _validate_browser_ptt_upload(content_type, wav_bytes)
 
     capture_result = CaptureResult(
         provider_id="browser_ptt",

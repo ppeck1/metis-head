@@ -178,12 +178,17 @@ To hear the readback:
 
 ---
 
-## Path 4 — Browser held-to-talk (Phase 0BF)
+## Path 4 — Browser held-to-talk (Phase 0BF/0BG)
 
-> Requires a browser with `MediaRecorder` / `getUserMedia` support and a working microphone.
-> The backend accepts any audio format that `MediaRecorder` produces (typically `audio/webm`).
-> The server passes the raw bytes to the configured STT provider; the `simulated` provider
-> uses the `stt_hint` field instead and ignores audio content.
+There are two distinct browser-related paths:
+
+- Dashboard Hold to Talk uses browser `SpeechRecognition` when available, then sends
+  recognized text as a simulated STT hint through `POST /metis/audio/ptt`.
+- `POST /metis/audio/browser_ptt` is a backend multipart upload route for local
+  prototype clients/tests. As of Phase 0BG it enforces upload size, content-type,
+  empty-payload, and WAV-header guardrails.
+
+The dashboard does not upload raw browser-recorded audio to faster-whisper.
 
 ### 4a. Browser dashboard — Hold to Talk button
 
@@ -192,12 +197,13 @@ To hear the readback:
 3. In the **Voice Conversation Test** panel:
    - Tick **Audio Input** and confirm **Mic Hardware** is ticked.
    - Set **Listen Mode** to `push_to_talk`.
-4. Click and hold **Hold to Talk** — the button turns red and "Recording…" appears.
-5. Speak your command, then release the button — the result appears below.
+4. Click and hold **Hold to Talk** — browser speech recognition starts when available.
+5. Speak your command, then release the button — recognized text is sent as a
+   simulated STT hint through `/metis/audio/ptt` and the result appears below.
 
 Expected: `status: listen_complete`, `route_used: voice_command` for a plain command.
 
-### 4b. Browser PTT — simulated path (no microphone required)
+### 4b. Backend browser_ptt — simulated path (no microphone required)
 
 Use the `stt_hint` field to inject text without a real mic:
 
@@ -210,8 +216,8 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
   -ContentType "application/json" `
   -Body '{"type":"button_event","button":"listen_mode","state":"push_to_talk"}'
 
-# Upload a dummy audio file; stt_hint drives SimulatedSTT
-$bytes = [System.Text.Encoding]::UTF8.GetBytes("dummy")
+# Upload a minimal WAV-shaped payload; stt_hint drives SimulatedSTT
+$bytes = [byte[]](82,73,70,70,36,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,128,62,0,0,0,125,0,0,2,0,16,0,100,97,116,97,0,0,0,0)
 $boundary = "----BoundaryXYZ"
 $body = "--$boundary`r`nContent-Disposition: form-data; name=`"audio`"; filename=`"ptt.wav`"`r`nContent-Type: audio/wav`r`n`r`n" + [System.Text.Encoding]::UTF8.GetString($bytes) + "`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_provider`"`r`n`r`nsimulated`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_hint`"`r`n`r`ngit status`r`n--$boundary--"
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/browser_ptt `
@@ -221,7 +227,7 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/browser_pt
 
 Expected: `status: listen_complete`, `route_used: voice_command`.
 
-### 4c. Browser PTT — confirmation phrase via simulated path
+### 4c. Backend browser_ptt — confirmation phrase via simulated path
 
 ```powershell
 # Queue a proposal first
@@ -234,7 +240,7 @@ Write-Host "Queued: $proposalId"
 
 # Upload browser PTT with confirmation phrase as stt_hint
 $hint = "confirm approve $proposalId"
-$bytes = [System.Text.Encoding]::UTF8.GetBytes("dummy")
+$bytes = [byte[]](82,73,70,70,36,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,128,62,0,0,0,125,0,0,2,0,16,0,100,97,116,97,0,0,0,0)
 $boundary = "----BoundaryXYZ"
 $body = "--$boundary`r`nContent-Disposition: form-data; name=`"audio`"; filename=`"ptt.wav`"`r`nContent-Type: audio/wav`r`n`r`n" + [System.Text.Encoding]::UTF8.GetString($bytes) + "`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_provider`"`r`n`r`nsimulated`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_hint`"`r`n`r`n$hint`r`n--$boundary--"
 $c = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/browser_ptt `

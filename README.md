@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BF` |
-| Focus | Browser held-to-talk verbal conversation — a "Hold to Talk" button in the dashboard uses the browser's Web Speech API for transcription, routes through the existing PTT press/release + 0BE fork, and requires no local Whisper engine. Dashboard radio panel gains **AUDIO IN** and **PTT MODE** buttons so the full voice path is operable from the radio controls without the debug test panel. |
-| Verification | `410 passed` under Python 3.11 (no real mic, no model required). |
+| Current phase | `0BG` |
+| Focus | Repair pass for documentation/state alignment, voice-origin privacy, browser verbal-path clarity, and local browser upload guardrails. |
+| Verification | `414 passed` under Python 3.11; `compileall` passed. Coverage command attempted but `pytest-cov`/`coverage` is not installed in this environment. |
 
 Implemented phase groups:
 
@@ -46,11 +46,28 @@ Implemented phase groups:
 - Wake-word / push-to-talk loop: `0BD`.
 - Spoken confirmation routing: `0BE`.
 - Browser held-to-talk + radio panel controls: `0BF`.
+- Repair pass: `0BG`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
 including status, proposal ID, text length/hash, and safe reasons. It does not display raw transcript
 text, does not store audio, and does not add any approval/execution controls.
+
+Phase 0BG repair implemented:
+
+- Voice-origin raw transcript text is transient. It may be used for routing and provider generation
+  during the request, but canonical state, `chat_history`, `chat_event.user_message`, and
+  voice/audio provider events persist a redacted transcript marker instead of the raw text.
+- Voice/audio provider events remain redacted (`text_len`, `text_hash`, `text_redacted`) and tests
+  assert a sentinel phrase does not appear in persisted state or event logs.
+- Dashboard Hold to Talk uses browser `SpeechRecognition` when available, then sends recognized text
+  as a simulated STT hint through `/metis/audio/ptt`. It does not upload browser-recorded audio to
+  faster-whisper.
+- `POST /metis/audio/browser_ptt` remains a backend multipart audio route for local prototype clients
+  and tests. It now has explicit upload-size, content-type, empty-payload, and WAV-header guardrails.
+- Optional local faster-whisper STT remains available only through the env-gated STT provider path
+  (`METIS_STT_ALLOW_LOCAL=true`, `METIS_STT_ENGINE=faster_whisper`) and is not required by the
+  dashboard Web Speech path.
 
 Bounded Phase 0V/AUDIO11 hardware-parity analyzer patch:
 
@@ -102,9 +119,10 @@ Phase 0BF implemented:
 - **`block_reason` in status line** — `vcShowResult` and `vcPttPress` now surface the block reason
   directly in the status text (e.g., `blocked — audio_input_disabled`) so the cause is immediately
   visible.
-- **8 new tests** in `tests/test_phase_0bf_browser_ptt.py` covering governance blocks (audio disabled,
+- **12 tests** in `tests/test_phase_0bf_browser_ptt.py` covering governance blocks (audio disabled,
   mic off, wrong listen mode), routing (voice_command and voice_confirm paths), transcript redaction,
-  and `execution_allowed=false`. Full suite: **410 passed**.
+  voice-origin sentinel non-persistence, upload guardrails, and `execution_allowed=false`.
+  Phase 0BG full suite: **414 passed**.
 
 Phase 0BE implemented:
 
@@ -1400,7 +1418,7 @@ Metis — BOH remains the source of truth.
 - `POST /metis/audio/listen` (response includes `route_used`)
 - `POST /metis/audio/ptt` (response includes `route_used` on release)
 - `POST /metis/audio/wake` (response includes `route_used`)
-- `POST /metis/audio/browser_ptt` (multipart upload; governance → `_run_stt_route_cycle`; response includes `route_used`)
+- `POST /metis/audio/browser_ptt` (guarded multipart upload; governance → `_run_stt_route_cycle`; response includes `route_used`)
 - `GET /metis/personality`
 - `GET /metis/personality/console`
 - `POST /metis/llm/health`
@@ -1423,7 +1441,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-410 passed under Python 3.11
+414 passed under Python 3.11
 ```
 
 Coverage includes:
@@ -1439,6 +1457,17 @@ Coverage includes:
 - Proposal review scope, proposal filters, execution audit receipts, and replay hardening.
 - Approved read-only lanes for `filesystem.read`, `git.status`, and `time.now`.
 - Piper spectrum frames, hardware-parity analyzer presentation, voice, artifacts, BOH link, and hardware parity coverage.
+- Phase 0BG voice-origin sentinel non-persistence and browser PTT upload guardrails.
+
+Additional verification:
+
+```text
+python -m compileall -q metis_head tests
+passed
+
+python -m pytest --cov=metis_head --cov-report=term -q
+not run: pytest-cov/coverage is not installed in this Python 3.11 environment
+```
 
 Phase 0B/0C tests monkeypatch the HTTP layer (`metis_head.boh_retrieval._post_json` and
 `metis_head.boh_link._request`), so no running BOH instance is required to verify the suite.

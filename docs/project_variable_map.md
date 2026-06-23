@@ -1,10 +1,10 @@
 # Metis Head Project Variable Map
 
-Version: `metis_variable_map.v0.4`
+Version: `metis_variable_map.v0.5`
 
-Last phase updated: `0BF` (browser held-to-talk verbal conversation + radio panel audio controls)
+Last phase updated: `0BG` (documentation/state alignment repair, voice-origin privacy, browser verbal-path clarity, browser upload guardrails)
 
-Full phase chain: `0A 0S 0S/S3 0S/S4 0M 0X 0Y 0R 0P 0V 0V/AUDIO9–12 0B 0C 0E 0T 0U 0W 0Q 0L 0G 0F 0J 0K 0N 0D 0I 0H 0AA–0AG 0AH–0AO 0AP–0AY 0AZ 0BA 0BB 0BC 0BD 0BE 0BF`
+Full phase chain: `0A 0S 0S/S3 0S/S4 0M 0X 0Y 0R 0P 0V 0V/AUDIO9–12 0B 0C 0E 0T 0U 0W 0Q 0L 0G 0F 0J 0K 0N 0D 0I 0H 0AA–0AG 0AH–0AO 0AP–0AY 0AZ 0BA 0BB 0BC 0BD 0BE 0BF 0BG`
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -25,6 +25,9 @@ Before committing any phase:
 
 | Phase | Decision / Constraint | Rationale |
 |---|---|---|
+| `0BG` | Voice-origin raw text is transient only. `/metis/voice/command` tags its internal chat call with `_metis_voice_origin` and `_redact_voice_transcript_persistence`; `chat_event.user_message`, `chat_history`, and exact assistant echoes persist a redacted marker rather than raw transcript text. | Aligns implementation with the stronger voice privacy contract and prevents spoken text from persisting in canonical state/log structures. |
+| `0BG` | Dashboard Hold to Talk uses browser `SpeechRecognition` and sends recognized text as a simulated STT hint through `/metis/audio/ptt`; it does not upload browser-recorded audio to `/metis/audio/browser_ptt` or faster-whisper. | Keeps the current dashboard path honest and dependency-light while preserving the governed PTT routing cycle. |
+| `0BG` | `POST /metis/audio/browser_ptt` is a guarded backend multipart lane for local prototype clients/tests. It enforces `BROWSER_PTT_MAX_UPLOAD_BYTES`, content-type allowlist, empty-payload rejection, and simple WAV header validation. | Prevents unbounded local uploads while avoiding production overbuild. |
 | `0BF` | `POST /metis/audio/browser_ptt` accepts a `multipart/form-data` upload (`audio` file + `stt_provider` + `stt_hint` + `options_json`). Audio bytes held in `CaptureResult._wav_bytes` (in-memory only, never serialized). `stt_provider=simulated` + `stt_hint=<transcribed text>` is the primary path; SimulatedSTT returns the hint verbatim. Response routed through `_run_stt_route_cycle` identically to PTT/wake paths. Route requires `listen_mode==push_to_talk`. | Enables browser-side Web Speech API (or typed hint) to reach the same governed audio pipeline as PTT/wake without adding a separate execution path. |
 | `0BF` | Browser dashboard "Hold to Talk" button uses `SpeechRecognition` (Web Speech API). Text sent as `hint` to `POST /metis/audio/ptt` with `stt_provider=simulated`. Chrome sends audio to Google cloud STT; requires internet. Hint-field fallback works when recognition unavailable. `_vcBrPttReleasing` + `_vcBrPttSent` guard prevent double-send across `onresult`/`onend` race. | Web Speech API does not require a local microphone capture pipeline; SimulatedSTT passthrough avoids dependency on faster-whisper being enabled. |
 | `0BF` | Radio panel AUDIO IN button calls `toggleAudioInput()` → `button_event audio_input on/off`. PTT MODE button calls `cyclePttMode()` → cycles `listen_mode` through `no_listen → push_to_talk → wake_word`. Both reflected in Radio Status readouts and button background colors via `updateRadio()`. | Fulfils radio-first UX requirement: audio input and listen mode must be settable from the dashboard radio panel without using debug test-panel checkboxes. |
@@ -36,7 +39,7 @@ Before committing any phase:
 | `0BD` | `POST /metis/audio/wake` requires caller-supplied text (no embedded audio stream). `LocalWakeWordDetector` is a disabled scaffold with no external imports. | Real wake-word engine (openWakeWord/Porcupine) is future-phase; simulated path exercises full governed cycle now. |
 | `0BD` | `wake_phrase` defaults to `"hey metis"`, case-insensitive prefix match. Configurable via `button_event`. | Allows integration test flexibility without code changes; casing normalised in reducer and wake route. |
 | `0BD` | `last_listen_trigger` is set by the reducer from `ptt_released` / `wake_triggered` events; `/metis/audio/listen` does not set it (keeps legacy route neutral). | Keeps the three routes distinct in audit trail without breaking existing tests. |
-| `0BD` | Recognized text flows into `user_intent` events by design (the governed output channel). STT-level events never carry raw text. | `user_intent.intent` is the correct redacted summary field; blocking it from `user_intent` would break tool routing. |
+| `0BD`/`0BG` | STT-level events never carry raw text. As of 0BG, voice-origin chat/tool routing may use recognized text transiently, but persisted `chat_event`, `chat_history`, and `user_intent.intent` use the redacted voice transcript marker. | Preserves tool routing during the request while aligning persisted state with the voice privacy contract. |
 | `0BC` | `CaptureResult._wav_bytes` is a private in-memory field only; `to_dict()` excludes it. | Prevents WAV bytes from ever entering state, event log, or API responses. |
 | `0BB` | Triple gate for real mic: `METIS_AUDIO_ALLOW_LOCAL_MIC` env + `mic_hardware_enabled` state + `audio_input_enabled` state. All three must hold before any device access. | Defense-in-depth; env gate as CI/test barrier, state gates as runtime governance. |
 | `0AX` | `/metis/voice/confirm` never requests execution or grants standing approval. Explicit proposal-specific phrase required. | Simulated voice confirmation must not weaken the approval gate. |
@@ -104,7 +107,7 @@ Before committing any phase:
 | `metis_tool_capability_awareness.v0.1` | `metis_tool_capability_awareness.v0.1` | `metis_head.brain` | Deterministic chat/voice response metadata for registry-derived tool awareness. |
 | `metis_voice_confirmation.v0.1` | `metis_voice_confirmation.v0.1` | `metis_head.brain` | Redacted simulated voice-confirmation event metadata for proposal review phrases. |
 | `metis_voice_confirmation_readback.v0.1` | `metis_voice_confirmation_readback.v0.1` | `metis_head.brain` | Safe spoken/readable summary for one pending proposal before voice confirmation. |
-| `metis_variable_map.v0.4` | `metis_variable_map.v0.4` | `docs/project_variable_map.md` | Documentation map version. v0.2 added Notes matrix. v0.3 adds 0BE spoken confirmation routing. v0.4 adds 0BF browser held-to-talk and radio panel audio controls. |
+| `metis_variable_map.v0.5` | `metis_variable_map.v0.5` | `docs/project_variable_map.md` | Documentation map version. v0.2 added Notes matrix. v0.3 adds 0BE spoken confirmation routing. v0.4 adds 0BF browser held-to-talk and radio panel audio controls. v0.5 adds 0BG repair contract alignment. |
 
 ---
 
@@ -232,6 +235,16 @@ Before committing any phase:
 
 ---
 
+## Browser PTT Guardrail Constants
+
+| Constant | Value | Owner | Phase | Notes |
+|---|---|---|---|---|
+| `BROWSER_PTT_MAX_UPLOAD_BYTES` | `1_000_000` | `metis_head.brain` | 0BG | Local-prototype upload cap for `POST /metis/audio/browser_ptt`; oversized uploads return `413`. |
+| `BROWSER_PTT_ALLOWED_CONTENT_TYPES` | `audio/wav`, `audio/wave`, `audio/x-wav`, `audio/webm`, `application/octet-stream` | `metis_head.brain` | 0BG | Content-type allowlist for backend multipart browser PTT uploads. |
+| `BROWSER_PTT_WAV_TYPES` | `audio/wav`, `audio/wave`, `audio/x-wav`, `application/octet-stream` | `metis_head.brain` | 0BG | Payloads with these content types must pass the simple `RIFF`/`WAVE` header check. |
+
+---
+
 ## Audio Input Provider Classes
 
 | Class | Phase | Provider ID | Status | Notes |
@@ -275,7 +288,7 @@ Before committing any phase:
 | `audio_listen` | 0BA/0BD | `POST /metis/audio/listen`. Governance → `_run_listen_cycle(payload, "listen")`. |
 | `audio_ptt` | 0BD | `POST /metis/audio/ptt`. Press: sets `listen_session_active`. Release: governance → `_run_listen_cycle` → clears session. Wrong mode or pressless release → safe no-op. |
 | `audio_wake` | 0BD | `POST /metis/audio/wake`. Mode check → governance → wake_phrase prefix match → strip phrase → `_run_listen_cycle(payload, "wake")`. No match or wrong mode → `wake_not_detected`. |
-| `audio_browser_ptt` | 0BF | `POST /metis/audio/browser_ptt`. Async multipart route. Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. Reads upload bytes into `CaptureResult._wav_bytes` (in-memory). Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
+| `audio_browser_ptt` | 0BF/0BG | `POST /metis/audio/browser_ptt`. Async multipart route. Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. 0BG validates max upload size, content type, empty payloads, and WAV headers before storing bytes in `CaptureResult._wav_bytes` (in-memory). Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
 
 ---
 
@@ -611,7 +624,7 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | `POST` | `/metis/audio/listen` | 0BA/0BD/0BE | Governance → `_run_listen_cycle(payload, "listen")`. One bounded cycle. Response includes `route_used` (`voice_command` or `voice_confirm`). |
 | `POST` | `/metis/audio/ptt` | 0BD/0BE | `action=press`: sets `listen_session_active`; `action=release`: one `_run_listen_cycle` then clears session. Response includes `route_used`. Wrong mode or pressless release → safe no-op. |
 | `POST` | `/metis/audio/wake` | 0BD/0BE | Wake-phrase match → one `_run_listen_cycle`. Response includes `route_used`. No match or wrong mode → `wake_not_detected`, no capture. |
-| `POST` | `/metis/audio/browser_ptt` | 0BF | `multipart/form-data`: `audio` (UploadFile) + `stt_provider` (Form) + `stt_hint` (Form) + `options_json` (Form). Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
+| `POST` | `/metis/audio/browser_ptt` | 0BF/0BG | `multipart/form-data`: `audio` (UploadFile) + `stt_provider` (Form) + `stt_hint` (Form) + `options_json` (Form). Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. 0BG guardrails reject oversized uploads, unsupported content types, empty payloads, and invalid WAV payloads. Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
 | `GET` | `/metis/personality` | 0P | Return active Metis personality constitution profile and trait matrix. |
 | `GET` | `/metis/personality/console` | 0P | Serve the supplied personality console HTML. |
 | `GET` | `/metis/boh/status` | 0C | Safe BOH background link state. Never exposes any token. |
@@ -719,7 +732,7 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | Real mic PTT integration | `bridge_ptt_button`, `ptt_bridge_event` | `POST /metis/audio/ptt` accepts press/release; the physical PTT button → bridge → ptt route is future. |
 | Real STT integration | `stt_live_engine`, `faster_whisper_live`, `vosk_live` | `LocalFasterWhisperSTT` scaffold exists; scaffolds for Vosk, OpenAI Whisper, WhisperCpp also present. |
 | Real wake-word PTT confirmation | `voice_confirm_ptt_physical`, `voice_confirm_wake_physical` | Phase 0BE complete: `_run_listen_cycle` now routes to `voice_confirm` for spoken approval phrases. Remaining future work: physical PTT button wiring and real wake-word engine. |
-| Browser STT offline path | `browser_ptt_faster_whisper`, `local_stt_browser_upload` | Phase 0BF browser_ptt endpoint already accepts raw audio bytes; when `METIS_STT_ALLOW_LOCAL=true` and `METIS_STT_ENGINE=faster_whisper`, upload bytes can be routed to `LocalFasterWhisperSTT` for offline browser-held-to-talk. Currently simulated path only. |
+| Browser STT offline path | `browser_ptt_faster_whisper`, `local_stt_browser_upload` | Future phase only. Phase 0BG documents that the dashboard Hold to Talk path uses browser `SpeechRecognition` plus simulated STT hint routing through `/metis/audio/ptt`; it does not upload browser-recorded audio to faster-whisper. The backend `/metis/audio/browser_ptt` route can accept guarded multipart audio for local clients/tests, but dashboard MediaRecorder-to-faster-whisper wiring is not implemented. |
 | Phase 0R provider research | `stt_provider_candidate`, `tts_provider_candidate`, `vision_provider_candidate`, `llm_runtime_candidate` | Record evidence-backed recommendations only after bakeoff. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |

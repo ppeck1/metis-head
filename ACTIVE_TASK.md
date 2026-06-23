@@ -1,6 +1,39 @@
 # Active Task
 
-**Current active task:** Phase `0BG` — (TBD; see handoff report for recommendations).
+**Current active task:** Phase `0BG` — repair pass in progress/completing.
+
+---
+
+## Phase 0BG — REPAIR PASS
+
+Phase 0BG repairs documentation/state alignment, voice-origin privacy, browser
+verbal-path clarity, and local-prototype upload safety. It does not add physical
+radio-panel work.
+
+### Delivered
+
+- **Documentation alignment**: current phase is `0BG`; Phase `0BF` is complete at
+  commit `56602df` with audit baseline `410 passed`.
+- **Voice-origin privacy contract**: recognized voice text may be used transiently
+  for routing and response generation, but raw voice text is not persisted in
+  canonical state, `chat_history`, `chat_event.user_message`, or provider events.
+- **Browser path clarity**: dashboard Hold to Talk uses browser `SpeechRecognition`
+  and sends recognized text as a simulated STT hint through `/metis/audio/ptt`.
+  It does not upload raw browser audio to faster-whisper.
+- **Multipart backend guardrails**: `POST /metis/audio/browser_ptt` remains a
+  backend multipart lane and now rejects oversized uploads, unsupported content
+  types, empty payloads, and invalid WAV payloads.
+- **Tests repaired/added** in `tests/test_phase_0bf_browser_ptt.py`: actual
+  provider event shape, sentinel non-persistence, oversized upload, unsupported
+  content type, and invalid WAV payload.
+- **Verification**: `414 passed` under Python 3.11; `compileall` passed.
+  Coverage command was attempted but `pytest-cov`/`coverage` is not installed in
+  this Python 3.11 environment.
+
+### Boundary (preserved)
+
+No background listener, no autonomous execution, no physical panel wiring, no
+new tool authority, and no dashboard MediaRecorder-to-faster-whisper wiring.
 
 ---
 
@@ -20,8 +53,9 @@ upload route that feeds into the existing STT + 0BE confirmation routing cycle.
   route. `_run_listen_cycle` unchanged in external contract; all 402 existing tests pass.
 - **`CaptureResult` added to module-level import** in `brain.py`.
 - **Dashboard "Hold to Talk" button** in the Voice Conversation Test panel:
-  `pointerdown` starts `getUserMedia` + `MediaRecorder`; `pointerup` stops and uploads to
-  `browser_ptt`; `pointercancel` cleans up. Result flows through `vcShowResult`.
+  `pointerdown` starts browser `SpeechRecognition` when available; release sends the
+  recognized text as a simulated STT hint through `/metis/audio/ptt`. It does not
+  upload raw browser audio to `browser_ptt` or faster-whisper.
 - **8 new tests** in `tests/test_phase_0bf_browser_ptt.py`. Full suite: **410 passed**.
 
 ### Boundary (preserved)
@@ -167,14 +201,8 @@ tempfile path, and recognized text never stored. Recognized text still enters on
 
 ---
 
-## Next phase (`0BE`)
+## Next phase
 
-Wire the existing `POST /metis/voice/confirm` flow into the audio listen pipeline so a
-recognized approval phrase (spoken via PTT or wake) can confirm a pending proposal without
-a separate HTTP call:
-
-- When `_run_listen_cycle` routes to `/metis/voice/command` and no matching tool route is
-  found, if there is a pending proposal, try `/metis/voice/confirm` with the recognized text.
-- Readback + explicit-phrase gating from `0AX` remains; still `execution_allowed=false`.
-- Gate everything behind the existing `mic_hardware_enabled` + `listen_mode` governance.
-- No new execution authority.
+After Phase 0BG, choose the next phase from the current repo state. Do not treat
+physical radio-panel wiring as the automatic next step until this repair is
+reviewed and the next scope is explicitly selected.

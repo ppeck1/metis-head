@@ -6,59 +6,92 @@
 |---|---|
 | Repo | `B:\dev\metis_head\metis_head` |
 | Branch | `main` |
-| Latest commit | `4b0a58f` — Phase 0BE: spoken confirmation routing in audio listen path |
-| Current phase | `0BE` |
-| Verification | `402 passed` under Python 3.11 |
+| Phase entering repair | `0BF` complete |
+| Phase completed by this handoff | `0BG` repair |
+| Audit baseline commit | `56602df` — Phase 0BF: browser held-to-talk verbal conversation |
+| Audit baseline verification | `410 passed` under Python 3.11; coverage audit `84%`; `compileall` passed |
 | Public repo target | `https://github.com/ppeck1/metis-head` |
-| Variable map version | `metis_variable_map.v0.3` |
+| Variable map version | `metis_variable_map.v0.5` |
+
+Final Phase 0BG verification:
+
+- `python -m pytest -q` → `414 passed`.
+- `python -m compileall -q metis_head tests` → passed.
+- `python -m pytest --cov=metis_head --cov-report=term -q` was attempted but could not run because
+  `pytest-cov`/`coverage` is not installed in this Python 3.11 environment.
 
 ---
 
-## What Phases 0BA–0BE Added
+## Phase 0BG Repair Results
 
-### 0BA — Simulated audio input + STT substrate
+Phase 0BG was a repair pass only. It did not add physical radio-panel work, new tool authority,
+autonomous execution, or always-listening behavior.
 
-- `metis_head/audio_input.py`: `audio_input_adapter.v0.1` with `NoneAudioInput`, `SimulatedAudioInput` (synthetic WAV + Piper helpers), and `LocalMicAudioInput` scaffold.
-- `metis_head/stt.py`: `stt_engine.v0.1` with `NoneSTT`, `SimulatedSTT` (deterministic hint→text map), and `LocalWhisperSTT` scaffold.
-- State: `audio_input_state`, `audio_input_enabled`, `listen_mode`, `last_audio_capture`.
-- Routes: `GET /metis/audio/input`, `POST /metis/audio/input/capture`, `POST /metis/audio/transcribe`, `POST /metis/audio/listen`.
-- STT redaction: `STTResult.to_dict()` exposes only `text_len`/`text_hash`/`text_redacted`; raw text enters only `POST /metis/voice/command`.
+### Documentation/state alignment
 
-### 0BB — Real local microphone capture (triple-gated)
+- `ACTIVE_TASK.md`, `README.md`, this handoff report, and `docs/project_variable_map.md` now identify
+  Phase `0BG` as the current repair pass.
+- Stale handoff references to Phase `0BE`, commit `4b0a58f`, `402 passed`, and "next 0BF physical
+  radio panel wiring" were removed.
+- Phase `0BF` remains documented as complete at commit `56602df` with audit baseline `410 passed`.
+- The next phase is intentionally left for operator selection after reviewing the 0BG repair; physical
+  radio-panel wiring is not claimed as the automatic next step.
 
-- `LocalMicAudioInput`: real `sounddevice` capture, lazy-imported, triple-gated: `METIS_AUDIO_ALLOW_LOCAL_MIC` env + `mic_hardware_enabled` state + `audio_input_enabled` state.
-- Capture pipeline: `sounddevice.rec()` → tempfile WAV → Piper WAV-analysis helpers → compact redacted `CaptureResult`. Tempfile deleted; raw PCM never stored.
-- `CaptureResult._wav_bytes`: private in-memory field; excluded from `to_dict()`, state, event log, and all responses.
-- `_audio_capture_governance(require_listen_mode=False)` extended.
+### Browser verbal-input architecture
 
-### 0BC — Real local STT via faster-whisper
+There are three distinct verbal-input paths:
 
-- `LocalFasterWhisperSTT`: real CTranslate2/faster-whisper; fail-closed dual gate (`METIS_STT_ALLOW_LOCAL` env + lazy `faster_whisper` import inside `transcribe()` only).
-- Disabled scaffolds: `VoskSTT`, `OpenAIWhisperSTT`, `WhisperCppSTT` (no imports, return `not_enabled`).
-- `METIS_STT_ENGINE` env var (default `simulated`) selects the active STT engine.
-- `stt-whisper = ["faster-whisper>=1.0"]` optional extra in `pyproject.toml`. No PyTorch or openai-whisper dependency.
+1. Dashboard Hold to Talk:
+   - Uses browser `SpeechRecognition` when available.
+   - Sends recognized text as a simulated STT hint through `POST /metis/audio/ptt`.
+   - Does not upload raw browser-recorded audio.
+   - Does not require local faster-whisper.
 
-### 0BE — Spoken confirmation routing in the audio listen path
+2. Backend multipart browser PTT:
+   - `POST /metis/audio/browser_ptt` accepts `multipart/form-data` with `audio`, `stt_provider`,
+     `stt_hint`, and `options_json`.
+   - This is a backend/local-prototype upload lane for clients and tests.
+   - It routes through `_run_stt_route_cycle` after governance and upload validation.
 
-- **`_run_listen_cycle` routing fork**: after STT, calls `_parse_voice_confirmation` + `_pending_proposals`. If pending proposals exist AND recognized text contains a decision phrase or explicit proposal_id → routes to `voice_confirm`; otherwise `voice_command`. Response includes `route_used` (`"voice_confirm"` or `"voice_command"`).
-- **`SimulatedSTT` passthrough**: `SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default` — unknown hints return the hint text verbatim. Enables test injection of arbitrary confirmation phrases (including dynamic proposal IDs) without changing the static map.
-- **Governance preserved**: `voice_confirm` still requires explicit decision phrase AND explicit proposal_id. Ambiguous phrases (e.g., "yes", "confirm approve" without ID) return `readback_required`. Mic cutoff blocks PTT release before `_run_listen_cycle` is entered. `execution_allowed` remains `false`; no standing approval.
-- **Dashboard Voice Conversation Test panel**: audio/listen, PTT press/release, and wake-phrase controls with audio provider, STT provider, duration, and hint fields. Syncs with server state on every `refresh()`. Reuses `voiceChatOptions()`, `pulseRadioFromVoice()`, `renderVoiceTrace()`, `updateRadio()`.
-- **13 new tests** in `tests/test_phase_0be_voice_confirm_listen.py`; full suite: **402 passed**.
-- **`docs/VOICE_CONVERSATION_TEST.md`**: PowerShell smoke-test instructions for simulated, local mic + faster-whisper, and Piper voice output paths.
+3. Optional local faster-whisper STT:
+   - Env-gated by `METIS_STT_ALLOW_LOCAL=true` and selected with `METIS_STT_ENGINE=faster_whisper`.
+   - Requires the optional `stt-whisper` dependency.
+   - Not used by the dashboard Web Speech path unless a future phase explicitly wires that behavior.
 
-### 0BD — Event-driven push-to-talk and wake-word listen loop
+### Voice privacy contract
 
-- **`_run_listen_cycle(payload, trigger)`**: shared capture → STT → `voice_command` cycle. One utterance per call; no background threads. Called by all three audio routes.
-- **`POST /metis/audio/ptt {"action":"press"|"release"}`**: models the radio PTT button.
-  - `press`: validates `listen_mode==push_to_talk` + governance; sets `listen_session_active=true`. No capture yet.
-  - `release`: if session active + correct mode + governance → one `_run_listen_cycle("ptt")` → clears session. Pressless release or wrong mode → safe no-op (no capture, no routing).
-- **`POST /metis/audio/wake {"text":"..."}`**: caller supplies recognized text.
-  - Case-insensitive prefix match against `wake_phrase` (default `"hey metis"`) + `listen_mode==wake_word` + governance → strips phrase → one `_run_listen_cycle("wake")`.
-  - No match or wrong mode → `wake_not_detected`; no capture, no routing, no proposal.
-- **`LocalWakeWordDetector`** scaffold in `audio_input.py`: disabled, no external imports, always returns `not_enabled`. Stub for openWakeWord / Porcupine.
-- **State additions**: `listen_session_active` (default `false`), `wake_phrase` (default `"hey metis"`), `last_listen_trigger` (`"ptt"` | `"wake"` | `null`).
-- **28 new tests** in `tests/test_phase_0bd_ptt_wake.py`. Full suite: **389 passed**.
+The stronger contract is now the repo contract:
+
+- Voice-origin raw text is transient.
+- It may be used during a request for routing, provider generation, proposal detection, or voice confirmation.
+- It must not persist raw in canonical state, `chat_history`, `chat_event.user_message`, or provider/audio
+  event payloads.
+- Voice/audio provider events continue to store only redacted metadata such as `text_len`, `text_hash`,
+  and `text_redacted`.
+- If an assistant response repeats the raw voice transcript exactly, that repeated phrase is redacted
+  before persistence and voice playback.
+
+### Browser upload safety
+
+`POST /metis/audio/browser_ptt` now has local-prototype guardrails:
+
+- Maximum upload size: `BROWSER_PTT_MAX_UPLOAD_BYTES`.
+- Supported content types: WAV variants, WebM audio, and `application/octet-stream`.
+- Empty payloads return `400`.
+- Unsupported content types return `415`.
+- WAV-like uploads require a simple `RIFF`/`WAVE` header check and invalid WAV payloads return `400`.
+- Oversized uploads return `413`.
+
+### Tests added/repaired
+
+`tests/test_phase_0bf_browser_ptt.py` now covers:
+
+- Actual event shape: `type == "provider_event"` and `provider == "audio_input"`.
+- Sentinel non-persistence for voice-origin text:
+  `VOICE_SENTINEL_SHOULD_NOT_PERSIST_0BG`.
+- Oversized upload rejection.
+- Unsupported content-type rejection.
+- Invalid WAV payload rejection.
 
 ---
 
@@ -74,171 +107,49 @@
 | Approved read-only receipt lanes (`time.now`, `git.status`, `filesystem.read`) | Active |
 | Deterministic task planner, plan queue, plan review, guided advance | Active |
 | Deterministic tool/capability awareness (chat + voice) | Active |
-| Simulated voice-command ingress (`POST /metis/voice/command`) | Active |
+| Simulated voice-command ingress (`POST /metis/voice/command`) | Active; raw voice text redacted before persistence |
 | Simulated voice confirmation (`POST /metis/voice/confirm`) | Active |
 | Passive dashboard Voice Trace panel | Active |
 | Simulated audio capture + STT substrate | Active |
-| Real local mic capture (triple-gated, opt-in) | Active (env-gated) |
-| Real local STT via faster-whisper (env-gated) | Active (env-gated) |
+| Real local mic capture | Active only when env/state gates allow |
+| Real local STT via faster-whisper | Active only when optional dependency and env gates allow |
 | Push-to-talk listen loop (`POST /metis/audio/ptt`) | Active |
-| Wake-word listen loop (`POST /metis/audio/wake`) | Active (simulated detector) |
-| Spoken confirmation routing (PTT/wake/listen → confirm) | Active (Phase 0BE) |
-| Real wake-word engine (openWakeWord / Porcupine) | Scaffold only |
+| Wake-word listen loop (`POST /metis/audio/wake`) | Active simulated path |
+| Browser Hold to Talk dashboard path | Active through Web Speech + `/metis/audio/ptt` hint routing |
+| Backend multipart browser PTT (`POST /metis/audio/browser_ptt`) | Active with 0BG upload guardrails |
+| Real wake-word engine (openWakeWord / Porcupine) | Scaffold/future only |
 | Physical radio panel | Contract defined; hardware wiring future |
 
 ---
 
-## Audio/Voice Path — What Works Now
+## Governance Boundaries
 
-1. Caller presses PTT → `POST /metis/audio/ptt {"action":"press"}` → `listen_session_active=true`.
-2. Caller releases PTT → `POST /metis/audio/ptt {"action":"release", "hint":"<fixture>"}` → one capture→STT→route cycle. `route_used` is `"voice_command"` or `"voice_confirm"` depending on pending proposals and phrase content.
-3. Caller speaks wake phrase → `POST /metis/audio/wake {"text":"hey metis <command>"}` → phrase stripped → one cycle on remainder.
-4. If pending proposals exist and recognized text contains a decision phrase + proposal ID → routes to `POST /metis/voice/confirm` → confirms/denies/cancels with `execution_allowed=false`, no standing approval.
-5. Ambiguous phrases (no proposal ID or unrecognized decision) → `readback_required`; proposal stays pending.
-6. Recognized text never stored; `STTResult.to_dict()` exposes only `text_len`/`text_hash`/`text_redacted`.
-7. Mic cutoff (`hardware_privacy device=mic state=off`) blocks press, release, and wake before any capture.
-8. All governance blocks return a structured `status: blocked` response; no partial state.
-
-Real mic path (opt-in):
-
-```powershell
-$env:METIS_AUDIO_ALLOW_LOCAL_MIC = "true"
-# mic_hardware_enabled and audio_input_enabled must also be set via button events
-```
-
-Real STT path (opt-in):
-
-```powershell
-$env:METIS_STT_ALLOW_LOCAL = "true"
-$env:METIS_STT_ENGINE = "faster_whisper"
-$env:METIS_STT_MODEL = "small"
-```
+- Mic cutoff (`mic_hardware_enabled=false`) remains the highest-precedence capture gate.
+- Listen loops remain event-driven and bounded: one utterance per explicit PTT, wake, listen, or browser
+  PTT trigger.
+- No background listener or always-listening standby is introduced.
+- No new execution authority is introduced.
+- `execution_allowed` remains `false` after PTT, wake, browser PTT, and spoken confirmation cycles.
+- Reference repos remain pattern donors only; do not vendor/import/spawn them.
 
 ---
 
-## Key Runtime Commands
-
-Launch:
-
-```powershell
-cd B:\dev\metis_head\metis_head
-.\scripts\launch_metis.ps1 -PythonExe "C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe" -Port 8787
-```
-
-Full tests:
-
-```powershell
-cd B:\dev\metis_head\metis_head
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m pytest
-```
-
-PTT example (simulated):
-
-```powershell
-# Enable audio
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
-  -ContentType "application/json" `
-  -Body '{"type":"button_event","button":"audio_input","state":"on"}'
-
-# Set push-to-talk mode
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
-  -ContentType "application/json" `
-  -Body '{"type":"button_event","button":"listen_mode","state":"push_to_talk"}'
-
-# Press PTT
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
-  -ContentType "application/json" -Body '{"action":"press"}'
-
-# Release PTT (triggers one listen cycle)
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
-  -ContentType "application/json" -Body '{"action":"release","hint":"git status"}'
-```
-
-Wake-word example (simulated):
-
-```powershell
-# Set wake-word mode
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
-  -ContentType "application/json" `
-  -Body '{"type":"button_event","button":"listen_mode","state":"wake_word"}'
-
-# Simulated wake phrase
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/wake `
-  -ContentType "application/json" -Body '{"text":"hey metis git status"}'
-```
-
-Spoken confirmation example (simulated, Phase 0BE):
-
-```powershell
-# Queue a proposal then confirm it by spoken phrase via PTT
-$r = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
-  -ContentType "application/json" -Body '{"action":"release","hint":"git status"}'
-$proposalId = $r.state.approval_queue[0].proposal_id
-
-Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
-  -ContentType "application/json" -Body '{"action":"press"}'
-$c = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
-  -ContentType "application/json" `
-  -Body (ConvertTo-Json @{action="release"; hint="confirm approve $proposalId"})
-
-# Expected: route_used=voice_confirm, confirmation_accepted=True, execution_allowed=False
-$c.route_used
-$c.voice_command.voice_confirmation
-```
-
----
-
-## Important Files
+## Key Files
 
 | File | Notes |
 |---|---|
-| `README.md` | Current phase, launch, boundaries, verification. |
-| `ACTIVE_TASK.md` | Phase history and next phase description. |
-| `docs/project_variable_map.md` | Full canonical variable/route/event/state map (v0.2). |
-| `docs/READ_ONLY_EXECUTION_POLICY_v0_1.md` | Current governed execution boundary. |
-| `metis_head/brain.py` | FastAPI mock Brain; all route orchestration including PTT/wake. |
-| `metis_head/audio_input.py` | Audio capture providers + `LocalWakeWordDetector` scaffold. |
-| `metis_head/stt.py` | STT providers including `LocalFasterWhisperSTT`. |
-| `metis_head/reducer.py` | Event reducer; handles all PTT/wake state transitions. |
-| `metis_head/schemas.py` | `baseline_state()` including new 0BD fields. |
-| `tests/test_phase_0bd_ptt_wake.py` | 28 tests for PTT/wake routing, no-op paths, redaction, no execution. |
-| `tests/test_phase_0be_voice_confirm_listen.py` | 13 tests for spoken confirmation routing, readback, mic cutoff, redaction, no execution. |
-| `docs/VOICE_CONVERSATION_TEST.md` | Smoke-test instructions for simulated, local mic, and Piper paths. |
+| `metis_head/brain.py` | Chat, voice, PTT/wake/browser PTT orchestration; 0BG privacy and upload guards. |
+| `tests/test_phase_0bf_browser_ptt.py` | Repaired/expanded 0BG coverage. |
+| `README.md` | Current phase, architecture clarification, verification, boundaries. |
+| `ACTIVE_TASK.md` | Phase history and current repair status. |
+| `docs/project_variable_map.md` | Canonical variable/route/event/state map. |
+| `docs/VOICE_CONVERSATION_TEST.md` | Manual smoke-test instructions for voice conversation routes. |
 | `scripts/launch_metis.ps1` | Repo-root-aware launch script. |
 
 ---
 
-## Governance Boundaries (Unchanged)
+## Recommended Next Step
 
-- Mic cutoff (`mic_hardware_enabled=false`) blocks all capture. Highest precedence.
-- `listen_session_active=true` is informational; governance still fires on release.
-- Recognized text is redacted: `STTResult.to_dict()` exposes only `text_len`/`text_hash`/`text_redacted`. Raw text enters `voice_command` or `voice_confirm` only; never stored in state or event log.
-- No background threads. No always-listening standby. One utterance per explicit trigger.
-- No new execution authority. All routing goes through the existing governed proposal/review/receipt chain.
-- `execution_allowed` remains `false` after any PTT, wake, or spoken confirmation cycle.
-- `standing_approval` is never granted by spoken confirmation.
-- `external_action_executed` remains `false` after any PTT or wake cycle.
-
----
-
-## Recommended Next Phase
-
-### 0BF — Physical radio panel wiring
-
-Wire the panel contract (`docs/PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md` and `metis_head/panel.py`) to the bridge emulator so the physical Magnavox radio's buttons, knobs, and PTT report as governed events. The software path is complete through 0BE; 0BF is the hardware integration step.
-
-### Future
-
-- **Real mic PTT** — Wire the physical PTT button through the bridge emulator to `POST /metis/audio/ptt`.
-- **Real wake-word engine** — Implement `LocalWakeWordDetector.detect()` using openWakeWord or Porcupine; no streaming thread; keep event-driven contract.
-
----
-
-## Handoff Notes
-
-- Keep mic cutoff as the absolute highest-precedence gate; no future refactor should bypass it.
-- Keep the listen loop event-driven and bounded; never add a background listener thread.
-- The `wake_phrase` default is `"hey metis"`; tests use `"state"` key in `button_event` (not `"value"`).
-- `tests/conftest.py` sets `METIS_REPO_ROOT` and initializes `.git` only when missing — clean-export test reproducibility is preserved.
-- Reference repos (openWakeWord, Porcupine, MCP, etc.) are pattern donors only; never import.
-- Dashboard controls are development scaffolding; the radio form factor is the target operator UX.
+Review Phase 0BG results and choose the next phase explicitly. Physical radio-panel wiring remains a
+future candidate, but it is not part of this repair pass and should not be assumed as the next step
+until selected.
