@@ -40,7 +40,7 @@ from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .tool_task_planner import plan_tool_task
 from .audio_input import CaptureContext, audio_input_provider_from_config
-from .stt import get_recognized_text, stt_provider_from_config
+from .stt import _local_stt_allowed, get_recognized_text, stt_provider_from_config
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
 
@@ -1986,11 +1986,23 @@ def audio_input_status() -> dict[str, Any]:
     }
     selected_provider = "local_mic" if allow_local_mic else "simulated"
     audio_provider = audio_input_provider_from_config(selected_provider)
-    stt_provider = stt_provider_from_config("simulated")
+
+    stt_engine = _os.environ.get("METIS_STT_ENGINE", "simulated")
+    stt_allow_local = _local_stt_allowed()
+    stt_provider = stt_provider_from_config(stt_engine)
+    stt_model = _os.environ.get("METIS_STT_MODEL", "small")
+
+    faster_whisper_available = False
+    if stt_allow_local:
+        try:
+            import faster_whisper  # noqa: PLC0415
+            faster_whisper_available = True
+        except ImportError:
+            pass
 
     input_devices: list[dict[str, Any]] = []
     sounddevice_available = False
-    if allow_local_mic:
+    if allow_local_mic and STATE.get("mic_hardware_enabled"):
         try:
             import sounddevice as sd  # noqa: PLC0415
 
@@ -2013,16 +2025,21 @@ def audio_input_status() -> dict[str, Any]:
         "sounddevice_available": sounddevice_available,
         "input_devices": input_devices,
         "selected_audio_provider": selected_provider,
-        "selected_stt_provider": "simulated",
+        "stt_engine": stt_engine,
+        "stt_allow_local": stt_allow_local,
+        "faster_whisper_available": faster_whisper_available,
+        "stt_model": stt_model,
+        "selected_stt_provider": stt_engine,
         "audio_provider_health": audio_provider.health(),
         "stt_provider_health": stt_provider.health(),
         "providers": {
             "audio_input": ["none", "simulated", "local_mic"],
-            "stt": ["none", "simulated", "local_whisper"],
+            "stt": ["none", "simulated", "faster_whisper", "local_whisper", "vosk", "openai_whisper", "whispercpp"],
         },
         "boundary": (
             "Capture fail-closed behind mic_hardware_enabled; "
             "real mic requires METIS_AUDIO_ALLOW_LOCAL_MIC=true AND mic_hardware_enabled AND audio_input_enabled; "
+            "real STT requires METIS_STT_ALLOW_LOCAL=true AND faster-whisper installed; "
             "mic_hardware_enabled should ultimately be driven by the physical cutoff switch over the bridge "
             "(software flag is an interim proxy)."
         ),
@@ -2158,7 +2175,8 @@ def audio_listen(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             "leds": resolve_leds(STATE),
         }
 
-    stt_name = str(payload.get("stt_provider") or "simulated")
+    import os as _os
+    stt_name = str(payload.get("stt_provider") or _os.environ.get("METIS_STT_ENGINE", "simulated"))
     stt = stt_provider_from_config(stt_name)
     stt_context = {"hint": hint}
 

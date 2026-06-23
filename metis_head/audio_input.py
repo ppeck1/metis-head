@@ -115,18 +115,23 @@ class SimulatedAudioInput(AudioInputProvider):
 
     def capture(self, context: CaptureContext) -> CaptureResult:
         wav_path = _generate_synthetic_wav(context.fixture_id, context.sample_rate, context.duration_ms)
+        wav_bytes: bytes | None = None
         try:
             from .voice import _wav_duration_ms, _wav_level_envelope, _wav_spectrum_frames
 
             audio_levels = _wav_level_envelope(wav_path)
             spectrum_frames = _wav_spectrum_frames(wav_path)
             audio_duration = _wav_duration_ms(wav_path) or context.duration_ms
+            try:
+                wav_bytes = wav_path.read_bytes()
+            except OSError:
+                pass
         finally:
             try:
                 wav_path.unlink(missing_ok=True)
             except OSError:
                 pass
-        return CaptureResult(
+        result = CaptureResult(
             provider_id=self.provider_id,
             status="ok",
             captured=True,
@@ -136,6 +141,8 @@ class SimulatedAudioInput(AudioInputProvider):
             frame_count=len(spectrum_frames),
             sample_rate=context.sample_rate,
         )
+        result._wav_bytes = wav_bytes  # in-memory only; never serialised
+        return result
 
 
 class LocalMicAudioInput(AudioInputProvider):
@@ -238,8 +245,12 @@ class LocalMicAudioInput(AudioInputProvider):
             audio_levels = _wav_level_envelope(wav_path)
             spectrum_frames = _wav_spectrum_frames(wav_path)
             audio_duration = _wav_duration_ms(wav_path) or context.duration_ms
+            try:
+                wav_bytes: bytes | None = wav_path.read_bytes()
+            except OSError:
+                wav_bytes = None
 
-            return CaptureResult(
+            capture_result = CaptureResult(
                 provider_id=self.provider_id,
                 status="ok",
                 captured=True,
@@ -249,6 +260,8 @@ class LocalMicAudioInput(AudioInputProvider):
                 frame_count=len(spectrum_frames),
                 sample_rate=context.sample_rate,
             )
+            capture_result._wav_bytes = wav_bytes  # in-memory only; never serialised
+            return capture_result
         except Exception as exc:
             return CaptureResult(
                 provider_id=self.provider_id,

@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BB` |
-| Focus | Real local microphone capture via `LocalMicAudioInput`, triple-gated and opt-in. |
-| Verification | `336 passed` under Python 3.11 (no real mic required). |
+| Current phase | `0BC` |
+| Focus | Real local STT via `LocalFasterWhisperSTT` (faster-whisper / CTranslate2), lazy-gated and opt-in. |
+| Verification | `361 passed` under Python 3.11 (no real mic, no model required). |
 
 Implemented phase groups:
 
@@ -42,7 +42,7 @@ Implemented phase groups:
 - Tool planning and review flow: `0AH`, `0AI`, `0AJ`, `0AK`, `0AL`, `0AM`, `0AN`, `0AO`.
 - Tool-aware chat and voice controls: `0AP`, `0AQ`, `0AR`, `0AS`, `0AT`, `0AU`, `0AV`, `0AW`, `0AX`, `0AY`.
 - Physical radio panel: `0AZ`.
-- Audio input + STT: `0BA`, `0BB`.
+- Audio input + STT: `0BA`, `0BB`, `0BC`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -75,6 +75,23 @@ Phase 0AY implemented:
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
+
+Phase 0BC implemented:
+
+- **In-memory audio handoff**: `CaptureResult._wav_bytes` (private, non-serialised) carries WAV bytes
+  from capture to STT within a single `/metis/audio/listen` request. Set by `SimulatedAudioInput` and
+  `LocalMicAudioInput`; absent from `to_dict()`, state, event log, and all responses.
+- **`LocalFasterWhisperSTT`** — real CTranslate2/faster-whisper engine; fail-closed dual gate:
+  1. `METIS_STT_ALLOW_LOCAL=true` (env opt-in, checked inside `transcribe()` only).
+  2. Lazy `from faster_whisper import WhisperModel` — never at module load time. Missing dep → `dependency_unavailable`.
+  3. `METIS_STT_MODEL` (default `small`), `METIS_STT_MODEL_DIR` (offline model path). Model load fail → `model_unavailable`; no crash.
+- **Disabled scaffolds**: `VoskSTT`, `OpenAIWhisperSTT`, `WhisperCppSTT` — return `not_enabled`; no imports.
+- **`METIS_STT_ENGINE`** env var (default `simulated`) selects the active STT engine; `POST /metis/audio/listen` falls back to this env var when no `stt_provider` is in the payload.
+- **`stt-whisper = ["faster-whisper>=1.0"]`** optional extra in `pyproject.toml` (`pip install -e ".[stt-whisper]"`). No PyTorch or openai-whisper dependency.
+- **`GET /metis/audio/input`** now reports `stt_engine`, `stt_allow_local`, `faster_whisper_available`, `stt_model`; input device enumeration is gated behind `mic_hardware_enabled`.
+- **`docs/LOCAL_STT_SMOKE_TEST.md`**: manual PowerShell smoke-test for real STT.
+- **STT redaction contract unchanged**: `STTResult.to_dict()` exposes only `provider_id/status/text_len/text_hash/text_redacted/confidence`; recognized text stays in `_recognized_text` (in-memory) and enters only `POST /metis/voice/command`.
+- **25 new tests**; full suite: `361 passed` under Python 3.11 with no real mic and no model.
 
 Phase 0BB implemented:
 
@@ -1160,6 +1177,29 @@ For local audible speech, choose `piper` in the dashboard, enter the local Piper
 The dashboard request sets `allow_piper=true` for that selected local provider; text is passed to
 Piper over stdin and raw speech text is still not persisted in the Metis event log.
 
+## Audio Input + STT Config (Phase 0BB / 0BC)
+
+Real microphone capture and real STT are each opt-in. Neither is active by default.
+
+```powershell
+# Real mic capture (Phase 0BB) — requires pip install -e ".[mic]"
+$env:METIS_AUDIO_ALLOW_LOCAL_MIC = "true"
+
+# Real STT (Phase 0BC) — requires pip install -e ".[stt-whisper]"
+$env:METIS_STT_ALLOW_LOCAL       = "true"
+$env:METIS_STT_ENGINE            = "faster_whisper"   # default: simulated
+$env:METIS_STT_MODEL             = "small"            # tiny/base/small/medium/large
+$env:METIS_STT_MODEL_DIR         = "C:/models/whisper" # optional offline model dir
+```
+
+`mic_hardware_enabled` must be `true` in state (simulated by default). In production this flag
+should be driven by the physical cutoff switch wired through the bridge; the env flags above are
+interim software proxies. See `docs/LOCAL_MIC_SMOKE_TEST.md` and `docs/LOCAL_STT_SMOKE_TEST.md`
+for manual smoke-test steps.
+
+In-memory audio (`_wav_bytes`) and recognized text (`_recognized_text`) are never written to state,
+the event log, or any response payload. Recognized text enters only `POST /metis/voice/command`.
+
 ## BOH Retrieval Bridge Config (Phase 0B)
 
 The BOH bridge is opt-in and read-only. When `METIS_BOH_ENABLED=true` and source grounding
@@ -1296,7 +1336,7 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-271 passed under Python 3.11
+361 passed under Python 3.11
 ```
 
 Coverage includes:
@@ -1319,7 +1359,8 @@ Known environment note: Python 3.13 is present on this machine but did not have 
 
 Current phases do not implement:
 
-- Real hardware, microphone capture, wake word, real STT, or camera capture.
+- Real hardware, wake word, camera capture, or autonomous listening.
+- Real local STT without setting `METIS_STT_ALLOW_LOCAL=true` and installing `pip install -e ".[stt-whisper]"` (requires faster-whisper; no PyTorch).
 - Project Atlas integration.
 - Side-effectful external tools, arbitrary shell commands, or autonomous execution.
 - Arbitrary filesystem reads or arbitrary git commands.

@@ -1,7 +1,7 @@
 [project]
 name = "metis-head"
 version = "0.1.0"
-description = "Metis Head — simulation-first governed mock Brain for the v0.5 radio-shell buildspec (phase 0BB)"
+description = "Metis Head — simulation-first governed mock Brain for the v0.5 radio-shell buildspec (phase 0BC)"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.110",
@@ -21,6 +21,9 @@ voice = [
 ]
 mic = [
   "sounddevice>=0.4",
+]
+stt-whisper = [
+  "faster-whisper>=1.0",
 ]
 
 [tool.pytest.ini_options]
