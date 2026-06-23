@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BE` |
-| Focus | Spoken confirmation routing — a PTT/wake/listen cycle that recognizes an approval phrase routes to `voice_confirm` instead of `voice_command`; `execution_allowed` stays `false`; mic cutoff remains the highest-precedence gate. |
-| Verification | `402 passed` under Python 3.11 (no real mic, no model required). |
+| Current phase | `0BF` |
+| Focus | Browser held-to-talk verbal conversation — a "Hold to Talk" button in the dashboard uses the browser's Web Speech API for transcription, routes through the existing PTT press/release + 0BE fork, and requires no local Whisper engine. Dashboard radio panel gains **AUDIO IN** and **PTT MODE** buttons so the full voice path is operable from the radio controls without the debug test panel. |
+| Verification | `410 passed` under Python 3.11 (no real mic, no model required). |
 
 Implemented phase groups:
 
@@ -45,6 +45,7 @@ Implemented phase groups:
 - Audio input + STT: `0BA`, `0BB`, `0BC`.
 - Wake-word / push-to-talk loop: `0BD`.
 - Spoken confirmation routing: `0BE`.
+- Browser held-to-talk + radio panel controls: `0BF`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -77,6 +78,33 @@ Phase 0AY implemented:
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
+
+Phase 0BF implemented:
+
+- **`POST /metis/audio/browser_ptt`** — async multipart upload route accepting `audio: UploadFile`,
+  `stt_provider`, `stt_hint`, `options_json`. Same governance gate order as `audio_ptt`:
+  `mic_hardware_enabled` → `audio_input_enabled` → `listen_mode==push_to_talk` → `power_state==awake`.
+  Routes through `_run_stt_route_cycle` (the extracted STT+routing helper) and returns `route_used`.
+  Raw audio bytes and transcript are never persisted.
+- **`_run_stt_route_cycle` helper** — extracted from `_run_listen_cycle`; shared by all capture-based
+  routes and the new browser upload route. `_run_listen_cycle` external contract unchanged; all
+  previous tests pass.
+- **Dashboard "Hold to Talk" button** — uses the browser's `SpeechRecognition` API (no local Whisper
+  needed). Hold = recognition active; release = transcript sent as PTT release hint; `stt_provider`
+  forced to `simulated` so the hint is returned verbatim through the 0BE routing fork. Falls back to
+  the Hint/fixture field when the browser API returns no text (no internet, mic blocked, etc.). The
+  status line shows `"Recognition active — speak now"` or a specific error message.
+- **Radio panel AUDIO IN + PTT MODE buttons** — `AUDIO IN` toggles `audio_input_enabled` (turns green
+  when on); `PTT MODE` cycles `listen_mode` through `no_listen → push_to_talk → wake_word` (green
+  when push_to_talk, amber when wake_word). Both update the Radio Status readouts (`Audio In`,
+  `Listen`). The full PTT voice path is now operable from radio panel buttons alone without touching
+  the Voice Conversation Test panel checkboxes.
+- **`block_reason` in status line** — `vcShowResult` and `vcPttPress` now surface the block reason
+  directly in the status text (e.g., `blocked — audio_input_disabled`) so the cause is immediately
+  visible.
+- **8 new tests** in `tests/test_phase_0bf_browser_ptt.py` covering governance blocks (audio disabled,
+  mic off, wrong listen mode), routing (voice_command and voice_confirm paths), transcript redaction,
+  and `execution_allowed=false`. Full suite: **410 passed**.
 
 Phase 0BE implemented:
 
@@ -1372,6 +1400,7 @@ Metis — BOH remains the source of truth.
 - `POST /metis/audio/listen` (response includes `route_used`)
 - `POST /metis/audio/ptt` (response includes `route_used` on release)
 - `POST /metis/audio/wake` (response includes `route_used`)
+- `POST /metis/audio/browser_ptt` (multipart upload; governance → `_run_stt_route_cycle`; response includes `route_used`)
 - `GET /metis/personality`
 - `GET /metis/personality/console`
 - `POST /metis/llm/health`
@@ -1394,11 +1423,12 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-402 passed under Python 3.11
+410 passed under Python 3.11
 ```
 
 Coverage includes:
 
+- Browser held-to-talk governance blocks (audio disabled, mic off, wrong listen mode), routing fork, transcript redaction, `execution_allowed=false`.
 - Spoken confirmation routing: PTT/wake/listen → `voice_confirm` when phrase + pending proposal; readback when ambiguous; mic cutoff blocks before mutation; `execution_allowed` stays `false`.
 - Push-to-talk and wake-word listen loop; no-op paths; no background threads; no raw audio or transcript in state/events/responses.
 - Voice trace dashboard visibility and simulated voice confirmation.

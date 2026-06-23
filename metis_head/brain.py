@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from .artifacts import ArtifactError, list_artifacts, read_artifact, save_artifact
@@ -39,7 +39,7 @@ from .tool_plan_runner import next_plan_action
 from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .tool_task_planner import plan_tool_task
-from .audio_input import CaptureContext, LocalWakeWordDetector, audio_input_provider_from_config
+from .audio_input import CaptureContext, CaptureResult, LocalWakeWordDetector, audio_input_provider_from_config
 from .stt import _local_stt_allowed, get_recognized_text, stt_provider_from_config
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
@@ -2143,6 +2143,70 @@ def audio_transcribe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def _run_stt_route_cycle(
+    capture_result: Any,
+    stt_name: str,
+    stt_context: dict[str, Any],
+    options: dict[str, Any],
+    trigger: str,
+) -> dict[str, Any]:
+    """STT transcription + 0BE routing fork. Caller must have already captured audio.
+
+    Emits transcribing and complete events; routes recognized text to voice_confirm or
+    voice_command via the 0BE fork; returns the full listen_complete response dict.
+    Raw text is never stored; STTResult.to_dict() exposes only text_len/text_hash.
+    """
+    global STATE
+
+    stt = stt_provider_from_config(stt_name)
+    transcribing_event = _audio_input_event("transcribing", capture=capture_result, trigger=trigger)
+    STATE = reduce_metis_event(STATE, transcribing_event)
+    stt_result = stt.transcribe(capture_result, stt_context)
+
+    recognized_text = get_recognized_text(stt_result)
+
+    if not recognized_text.strip():
+        complete_event = _audio_input_event(
+            "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
+        )
+        STATE = reduce_metis_event(STATE, complete_event)
+        return {
+            "status": "no_text_recognized",
+            "capture": capture_result.to_dict(),
+            "stt": stt_result.to_dict(),
+            "voice_command": None,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    parsed_intent = _parse_voice_confirmation(recognized_text)
+    if _pending_proposals() and (
+        parsed_intent["decision"] is not None or parsed_intent["proposal_id"] is not None
+    ):
+        vc_response = voice_confirm({"text": recognized_text, "options": options})
+        route_used = "voice_confirm"
+    else:
+        vc_response = voice_command({"text": recognized_text, "options": options})
+        route_used = "voice_command"
+
+    complete_event = _audio_input_event(
+        "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
+    )
+    STATE = reduce_metis_event(STATE, complete_event)
+    vc_response["state"] = STATE
+    vc_response["leds"] = resolve_leds(STATE)
+
+    return {
+        "status": "listen_complete",
+        "capture": capture_result.to_dict(),
+        "stt": stt_result.to_dict(),
+        "voice_command": vc_response,
+        "route_used": route_used,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
 def _run_listen_cycle(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
     """One bounded capture → STT → voice_command cycle.
 
@@ -2182,57 +2246,11 @@ def _run_listen_cycle(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
         }
 
     stt_name = str(payload.get("stt_provider") or _os.environ.get("METIS_STT_ENGINE", "simulated"))
-    stt = stt_provider_from_config(stt_name)
+    hint = str(payload.get("hint") or "default")
     stt_context = {"hint": hint}
-
-    transcribing_event = _audio_input_event("transcribing", capture=capture_result, trigger=trigger)
-    STATE = reduce_metis_event(STATE, transcribing_event)
-    stt_result = stt.transcribe(capture_result, stt_context)
-
-    recognized_text = get_recognized_text(stt_result)
-
-    if not recognized_text.strip():
-        complete_event = _audio_input_event(
-            "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
-        )
-        STATE = reduce_metis_event(STATE, complete_event)
-        return {
-            "status": "no_text_recognized",
-            "capture": capture_result.to_dict(),
-            "stt": stt_result.to_dict(),
-            "voice_command": None,
-            "state": STATE,
-            "leds": resolve_leds(STATE),
-        }
-
     options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
 
-    parsed_intent = _parse_voice_confirmation(recognized_text)
-    if _pending_proposals() and (
-        parsed_intent["decision"] is not None or parsed_intent["proposal_id"] is not None
-    ):
-        vc_response = voice_confirm({"text": recognized_text, "options": options})
-        route_used = "voice_confirm"
-    else:
-        vc_response = voice_command({"text": recognized_text, "options": options})
-        route_used = "voice_command"
-
-    complete_event = _audio_input_event(
-        "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
-    )
-    STATE = reduce_metis_event(STATE, complete_event)
-    vc_response["state"] = STATE
-    vc_response["leds"] = resolve_leds(STATE)
-
-    return {
-        "status": "listen_complete",
-        "capture": capture_result.to_dict(),
-        "stt": stt_result.to_dict(),
-        "voice_command": vc_response,
-        "route_used": route_used,
-        "state": STATE,
-        "leds": resolve_leds(STATE),
-    }
+    return _run_stt_route_cycle(capture_result, stt_name, stt_context, options, trigger)
 
 
 @app.post("/metis/audio/listen")
@@ -2400,6 +2418,78 @@ def audio_wake(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     result["trigger"] = "wake"
     result["wake_phrase_detected"] = True
     return result
+
+
+@app.post("/metis/audio/browser_ptt")
+async def audio_browser_ptt(
+    audio: UploadFile = File(...),
+    stt_provider: str = Form(""),
+    stt_hint: str = Form(""),
+    options_json: str = Form("{}"),
+) -> dict[str, Any]:
+    """Browser held-to-talk — accepts a multipart audio upload from the dashboard and
+    routes it through the existing STT + 0BE confirmation routing cycle.
+
+    Governance gate order (same as audio_ptt):
+      mic_hardware_enabled → audio_input_enabled → listen_mode==push_to_talk
+      → power_state==awake
+
+    Hard boundaries: raw audio bytes and transcript are never persisted; no background
+    listener; no autonomous execution; listen_mode must be push_to_talk.
+    """
+    global STATE
+    import json as _json
+    import os as _os
+
+    if STATE.get("listen_mode") != "push_to_talk":
+        return {
+            "status": "wrong_mode",
+            "block_reason": "listen_mode_not_push_to_talk",
+            "listen_mode": STATE.get("listen_mode"),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    allowed, block_reason = _audio_capture_governance()
+    if not allowed:
+        event = _audio_input_event("blocked", block_reason=block_reason)
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": block_reason,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    wav_bytes = await audio.read()
+
+    capture_result = CaptureResult(
+        provider_id="browser_ptt",
+        status="captured",
+        captured=True,
+        audio_duration_ms=0,
+        audio_levels=[],
+        audio_spectrum_frames=[],
+        frame_count=0,
+        sample_rate=16000,
+    )
+    capture_result._wav_bytes = wav_bytes  # in-memory only; excluded from to_dict()
+
+    capturing_event = _audio_input_event("capturing", trigger="browser_ptt")
+    STATE = reduce_metis_event(STATE, capturing_event)
+
+    stt_name = stt_provider or _os.environ.get("METIS_STT_ENGINE", "simulated")
+    hint = stt_hint or "default"
+    stt_context = {"hint": hint}
+
+    try:
+        options: dict[str, Any] = _json.loads(options_json) if options_json.strip() else {}
+        if not isinstance(options, dict):
+            options = {}
+    except Exception:
+        options = {}
+
+    return _run_stt_route_cycle(capture_result, stt_name, stt_context, options, "browser_ptt")
 
 
 @app.post("/metis/replay")

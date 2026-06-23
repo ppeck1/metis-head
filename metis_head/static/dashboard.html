@@ -524,6 +524,8 @@
             <button onclick="toggleOutput()">LOUD</button>
             <button onclick="toggleAfc()">AFC</button>
             <button onclick="toggleMode()">AM/FM</button>
+            <button id="radioBtnAudioIn" onclick="toggleAudioInput()" title="Toggle audio input (software gate)">AUDIO IN</button>
+            <button id="radioBtnListenMode" onclick="cyclePttMode()" title="Cycle listen mode: no_listen → push_to_talk → wake_word">PTT MODE</button>
           </div>
           <div class="knob-control">
             <h3>Tuning / Initiative</h3>
@@ -608,6 +610,10 @@
         <button onclick="vcPttRelease()">PTT Release</button>
       </div>
       <div class="tool-row">
+        <button id="vcHoldToTalk" onpointerdown="vcBrowserPttDown(event)" onpointerup="vcBrowserPttUp(event)" onpointercancel="vcBrowserPttCancel(event)" style="user-select:none;touch-action:none">Hold to Talk</button>
+        <span id="vcBrPttStatus" style="margin-left:8px;font-style:italic;color:#666"></span>
+      </div>
+      <div class="tool-row">
         <input id="vcWakeText" type="text" placeholder="hey metis git status" style="width:300px">
         <button onclick="vcSendWake()">Send Wake Phrase</button>
       </div>
@@ -678,6 +684,8 @@
         <div class="readout"><strong>Authority</strong><span id="radioAuthority">--</span></div>
         <div class="readout"><strong>Mic</strong><span id="radioMic">--</span></div>
         <div class="readout"><strong>Camera</strong><span id="radioCamera">--</span></div>
+        <div class="readout"><strong>Audio In</strong><span id="radioAudioIn">--</span></div>
+        <div class="readout"><strong>Listen</strong><span id="radioListen">--</span></div>
       </div>
       <div class="controls" style="margin-top:12px;">
         <button onclick="toggleMic()">Mic Cutoff</button>
@@ -1578,6 +1586,16 @@
     async function toggleMic() {
       await postEvent({type: 'hardware_privacy', device: 'mic', enabled: !currentState.mic_hardware_enabled});
     }
+    async function toggleAudioInput() {
+      const next = currentState.audio_input_enabled ? 'off' : 'on';
+      await postEvent({type: 'button_event', button: 'audio_input', state: next});
+    }
+    async function cyclePttMode() {
+      const modes = ['no_listen', 'push_to_talk', 'wake_word'];
+      const cur = currentState.listen_mode || 'no_listen';
+      const next = modes[(modes.indexOf(cur) + 1) % modes.length];
+      await postEvent({type: 'button_event', button: 'listen_mode', state: next});
+    }
     async function toggleCamera() {
       await postEvent({type: 'hardware_privacy', device: 'camera', enabled: !currentState.camera_hardware_enabled});
     }
@@ -1603,6 +1621,12 @@
       setRadioText('radioAuthority', `${state.authority_state} / ${state.source_state}`);
       setRadioText('radioMic', state.mic_hardware_enabled ? 'enabled' : 'cutoff');
       setRadioText('radioCamera', state.camera_hardware_enabled ? 'enabled' : 'cutoff');
+      setRadioText('radioAudioIn', state.audio_input_enabled ? 'enabled' : 'off');
+      setRadioText('radioListen', state.listen_mode || 'no_listen');
+      const btnAIn = document.getElementById('radioBtnAudioIn');
+      if (btnAIn) btnAIn.style.background = state.audio_input_enabled ? '#2a8' : '';
+      const btnPtt = document.getElementById('radioBtnListenMode');
+      if (btnPtt) btnPtt.style.background = state.listen_mode === 'push_to_talk' ? '#2a8' : (state.listen_mode === 'wake_word' ? '#a82' : '');
 
       const meter = document.getElementById('radioMeter');
       const voiceActive = ['queued', 'synthesizing', 'speaking'].includes(state.voice_output_state);
@@ -1860,9 +1884,11 @@
       const inner = result.voice_command ? (result.voice_command.status || '') : '';
       const route = result.route_used ? ' (' + result.route_used + ')' : '';
       const trigger = (result.state && result.state.last_listen_trigger) ? ' trigger:' + result.state.last_listen_trigger : '';
-      statusEl.textContent = outer + (inner && inner !== outer ? ' / ' + inner : '') + route + trigger;
+      const blockHint = result.block_reason ? ' — ' + result.block_reason : '';
+      statusEl.textContent = outer + (inner && inner !== outer ? ' / ' + inner : '') + route + trigger + blockHint;
       const safe = {
         status: result.status,
+        block_reason: result.block_reason || undefined,
         route_used: result.route_used,
         stt: result.stt,
         capture: result.capture,
@@ -1897,7 +1923,8 @@
         const r = await fetch('/metis/audio/ptt', {method:'POST',
           headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'press'})});
         const result = await r.json();
-        document.getElementById('vcStatus').textContent = result.status || 'ptt_pressed';
+        const blockHint = result.block_reason ? ' — ' + result.block_reason : '';
+        document.getElementById('vcStatus').textContent = (result.status || 'ptt_pressed') + blockHint;
         if (result.state) { updateRadio(result.state, result.leds || {}); vcSyncState(result.state); }
         await refresh();
       } catch(e) { document.getElementById('vcStatus').textContent = String(e); }
@@ -1923,6 +1950,126 @@
         vcShowResult('wake', await r.json());
       } catch(e) { vcShowResult('wake', {}, String(e)); }
     }
+    // --- Browser held-to-talk (Phase 0BF) ---
+    // Uses the browser's Web Speech API for transcription — no local Whisper needed.
+    // The recognised text is sent as the PTT release hint; SimulatedSTT returns it verbatim.
+    // _vcBrPttReleasing flag + _vcBrPttSent guard handle the race between onresult(isFinal)
+    // and onend — whichever fires last with text wins; the other is suppressed.
+    let _vcBrPttRec = null;
+    let _vcBrPttFinalText = '';
+    let _vcBrPttInterimText = '';
+    let _vcBrPttResultIdx = 0;   // tracks cumulative result list position (avoid double-count)
+    let _vcBrPttReleasing = false;
+    let _vcBrPttSent = false;
+    function vcBrowserPttDown(evt) {
+      evt.preventDefault();
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        document.getElementById('vcBrPttStatus').textContent = 'Web Speech API not available (try Chrome).';
+        return;
+      }
+      const btn = document.getElementById('vcHoldToTalk');
+      if (btn) btn.style.background = '#c00';
+      document.getElementById('vcBrPttStatus').textContent = 'Listening…';
+      _vcBrPttFinalText = '';
+      _vcBrPttInterimText = '';
+      _vcBrPttResultIdx = 0;
+      _vcBrPttReleasing = false;
+      _vcBrPttSent = false;
+      // Press PTT on the server so listen_session_active is set
+      fetch('/metis/audio/ptt', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({action:'press'})})
+        .then(r => r.json())
+        .then(d => { if (d.state) { updateRadio(d.state, d.leds || {}); vcSyncState(d.state); } })
+        .catch(() => {});
+      _vcBrPttRec = new SR();
+      _vcBrPttRec.continuous = true;
+      _vcBrPttRec.interimResults = true;
+      _vcBrPttRec.onstart = () => {
+        document.getElementById('vcBrPttStatus').textContent = 'Recognition active — speak now';
+      };
+      _vcBrPttRec.onresult = (e) => {
+        // e.results is cumulative — only iterate new entries from _vcBrPttResultIdx
+        let intr = '';
+        for (let i = _vcBrPttResultIdx; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            _vcBrPttFinalText += e.results[i][0].transcript;
+            _vcBrPttResultIdx = i + 1;
+          } else {
+            intr += e.results[i][0].transcript;
+          }
+        }
+        _vcBrPttInterimText = intr;
+        document.getElementById('vcBrPttStatus').textContent =
+          'Heard: ' + (_vcBrPttFinalText + ' ' + intr).trim();
+        // If button already released and we now have a final result, send immediately
+        if (_vcBrPttReleasing && _vcBrPttFinalText && !_vcBrPttSent) {
+          _vcBrPttSent = true;
+          _vcBrPttDoSend();
+        }
+      };
+      _vcBrPttRec.onerror = (e) => {
+        // network: no internet for Google STT; not-allowed: mic permission denied
+        const msg = e.error === 'network' ? 'No internet — Google STT unreachable. Type hint + hold button instead.'
+                  : e.error === 'not-allowed' ? 'Mic permission denied for this page.'
+                  : 'Speech error: ' + e.error;
+        document.getElementById('vcBrPttStatus').textContent = msg;
+        _vcBrPttReleasing = false;
+        _vcBrPttCleanup();
+      };
+      _vcBrPttRec.onend = () => {
+        // Fires after all results are delivered — send whatever we have if not already sent
+        if (_vcBrPttReleasing && !_vcBrPttSent) {
+          _vcBrPttSent = true;
+          _vcBrPttDoSend();
+        }
+      };
+      _vcBrPttRec.start();
+    }
+    function vcBrowserPttUp(evt) {
+      evt.preventDefault();
+      if (!_vcBrPttRec) return;
+      document.getElementById('vcBrPttStatus').textContent = 'Processing…';
+      _vcBrPttReleasing = true;
+      try { _vcBrPttRec.stop(); } catch(e) {}
+    }
+    function vcBrowserPttCancel(evt) {
+      evt.preventDefault();
+      if (_vcBrPttRec) { try { _vcBrPttRec.abort(); } catch(e) {} }
+      document.getElementById('vcBrPttStatus').textContent = 'Cancelled.';
+      _vcBrPttCleanup();
+    }
+    async function _vcBrPttDoSend() {
+      const spokenText = (_vcBrPttFinalText + ' ' + _vcBrPttInterimText).trim();
+      // Fallback: if recognition returned nothing, use the Hint/fixture field
+      const hintField = document.getElementById('vcHint').value.trim();
+      const text = spokenText || hintField;
+      _vcBrPttCleanup();
+      if (!text) {
+        document.getElementById('vcBrPttStatus').textContent =
+          'No speech detected and hint field is empty. Type a command in Hint/fixture or check mic/internet.';
+        return;
+      }
+      const source = spokenText ? 'spoken' : 'hint';
+      document.getElementById('vcBrPttStatus').textContent = 'Sending (' + source + '): ' + text;
+      // stt_provider forced to simulated — text is already resolved; hint returned verbatim
+      const payload = Object.assign(vcPayload(), {action: 'release', hint: text, stt_provider: 'simulated'});
+      try {
+        const r = await fetch('/metis/audio/ptt', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        vcShowResult('browser_ptt', await r.json());
+      } catch(e) { vcShowResult('browser_ptt', {}, String(e)); }
+    }
+    function _vcBrPttCleanup() {
+      _vcBrPttRec = null;
+      _vcBrPttFinalText = '';
+      _vcBrPttInterimText = '';
+      _vcBrPttResultIdx = 0;
+      _vcBrPttReleasing = false;
+      const btn = document.getElementById('vcHoldToTalk');
+      if (btn) btn.style.background = '';
+    }
+    // --- end Browser held-to-talk ---
     // --- end Voice Conversation Test panel ---
     document.getElementById('chatInput').addEventListener('keydown', handleChatKeydown);
     refresh();

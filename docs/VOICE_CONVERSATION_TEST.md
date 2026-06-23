@@ -178,6 +178,92 @@ To hear the readback:
 
 ---
 
+## Path 4 — Browser held-to-talk (Phase 0BF)
+
+> Requires a browser with `MediaRecorder` / `getUserMedia` support and a working microphone.
+> The backend accepts any audio format that `MediaRecorder` produces (typically `audio/webm`).
+> The server passes the raw bytes to the configured STT provider; the `simulated` provider
+> uses the `stt_hint` field instead and ignores audio content.
+
+### 4a. Browser dashboard — Hold to Talk button
+
+1. Launch the server (see Prerequisites).
+2. Open `http://127.0.0.1:8787/` in a browser.
+3. In the **Voice Conversation Test** panel:
+   - Tick **Audio Input** and confirm **Mic Hardware** is ticked.
+   - Set **Listen Mode** to `push_to_talk`.
+4. Click and hold **Hold to Talk** — the button turns red and "Recording…" appears.
+5. Speak your command, then release the button — the result appears below.
+
+Expected: `status: listen_complete`, `route_used: voice_command` for a plain command.
+
+### 4b. Browser PTT — simulated path (no microphone required)
+
+Use the `stt_hint` field to inject text without a real mic:
+
+```powershell
+# Enable audio + push-to-talk mode
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
+  -ContentType "application/json" `
+  -Body '{"type":"button_event","button":"audio_input","state":"on"}'
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
+  -ContentType "application/json" `
+  -Body '{"type":"button_event","button":"listen_mode","state":"push_to_talk"}'
+
+# Upload a dummy audio file; stt_hint drives SimulatedSTT
+$bytes = [System.Text.Encoding]::UTF8.GetBytes("dummy")
+$boundary = "----BoundaryXYZ"
+$body = "--$boundary`r`nContent-Disposition: form-data; name=`"audio`"; filename=`"ptt.wav`"`r`nContent-Type: audio/wav`r`n`r`n" + [System.Text.Encoding]::UTF8.GetString($bytes) + "`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_provider`"`r`n`r`nsimulated`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_hint`"`r`n`r`ngit status`r`n--$boundary--"
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/browser_ptt `
+  -ContentType "multipart/form-data; boundary=$boundary" `
+  -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
+```
+
+Expected: `status: listen_complete`, `route_used: voice_command`.
+
+### 4c. Browser PTT — confirmation phrase via simulated path
+
+```powershell
+# Queue a proposal first
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
+  -ContentType "application/json" -Body '{"action":"press"}'
+$r = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
+  -ContentType "application/json" -Body '{"action":"release","hint":"git status"}'
+$proposalId = $r.state.approval_queue[-1].proposal_id
+Write-Host "Queued: $proposalId"
+
+# Upload browser PTT with confirmation phrase as stt_hint
+$hint = "confirm approve $proposalId"
+$bytes = [System.Text.Encoding]::UTF8.GetBytes("dummy")
+$boundary = "----BoundaryXYZ"
+$body = "--$boundary`r`nContent-Disposition: form-data; name=`"audio`"; filename=`"ptt.wav`"`r`nContent-Type: audio/wav`r`n`r`n" + [System.Text.Encoding]::UTF8.GetString($bytes) + "`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_provider`"`r`n`r`nsimulated`r`n--$boundary`r`nContent-Disposition: form-data; name=`"stt_hint`"`r`n`r`n$hint`r`n--$boundary--"
+$c = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/browser_ptt `
+  -ContentType "multipart/form-data; boundary=$boundary" `
+  -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
+
+Write-Host "route_used:          $($c.route_used)"        # voice_confirm
+Write-Host "confirmation_accept: $($c.voice_command.voice_confirmation.confirmation_accepted)"  # True
+Write-Host "execution_allowed:   $($c.voice_command.voice_confirmation.execution_allowed)"      # False
+```
+
+### 4d. Governance blocks
+
+```powershell
+# Block: wrong listen_mode
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
+  -ContentType "application/json" `
+  -Body '{"type":"button_event","button":"listen_mode","state":"no_listen"}'
+# Same upload → expected: status=wrong_mode, block_reason=listen_mode_not_push_to_talk
+
+# Block: mic hardware off
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/event `
+  -ContentType "application/json" `
+  -Body '{"type":"hardware_privacy","device":"mic","state":"off"}'
+# Set mode back to push_to_talk, then upload → expected: status=blocked, block_reason=mic_hardware_cutoff
+```
+
+---
+
 ## Governance invariants (verified by tests)
 
 | Invariant | Check |

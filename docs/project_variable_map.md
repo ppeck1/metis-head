@@ -1,10 +1,10 @@
 # Metis Head Project Variable Map
 
-Version: `metis_variable_map.v0.3`
+Version: `metis_variable_map.v0.4`
 
-Last phase updated: `0BE` (spoken confirmation routing in the audio listen path)
+Last phase updated: `0BF` (browser held-to-talk verbal conversation + radio panel audio controls)
 
-Full phase chain: `0A 0S 0S/S3 0S/S4 0M 0X 0Y 0R 0P 0V 0V/AUDIO9–12 0B 0C 0E 0T 0U 0W 0Q 0L 0G 0F 0J 0K 0N 0D 0I 0H 0AA–0AG 0AH–0AO 0AP–0AY 0AZ 0BA 0BB 0BC 0BD 0BE`
+Full phase chain: `0A 0S 0S/S3 0S/S4 0M 0X 0Y 0R 0P 0V 0V/AUDIO9–12 0B 0C 0E 0T 0U 0W 0Q 0L 0G 0F 0J 0K 0N 0D 0I 0H 0AA–0AG 0AH–0AO 0AP–0AY 0AZ 0BA 0BB 0BC 0BD 0BE 0BF`
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -25,6 +25,9 @@ Before committing any phase:
 
 | Phase | Decision / Constraint | Rationale |
 |---|---|---|
+| `0BF` | `POST /metis/audio/browser_ptt` accepts a `multipart/form-data` upload (`audio` file + `stt_provider` + `stt_hint` + `options_json`). Audio bytes held in `CaptureResult._wav_bytes` (in-memory only, never serialized). `stt_provider=simulated` + `stt_hint=<transcribed text>` is the primary path; SimulatedSTT returns the hint verbatim. Response routed through `_run_stt_route_cycle` identically to PTT/wake paths. Route requires `listen_mode==push_to_talk`. | Enables browser-side Web Speech API (or typed hint) to reach the same governed audio pipeline as PTT/wake without adding a separate execution path. |
+| `0BF` | Browser dashboard "Hold to Talk" button uses `SpeechRecognition` (Web Speech API). Text sent as `hint` to `POST /metis/audio/ptt` with `stt_provider=simulated`. Chrome sends audio to Google cloud STT; requires internet. Hint-field fallback works when recognition unavailable. `_vcBrPttReleasing` + `_vcBrPttSent` guard prevent double-send across `onresult`/`onend` race. | Web Speech API does not require a local microphone capture pipeline; SimulatedSTT passthrough avoids dependency on faster-whisper being enabled. |
+| `0BF` | Radio panel AUDIO IN button calls `toggleAudioInput()` → `button_event audio_input on/off`. PTT MODE button calls `cyclePttMode()` → cycles `listen_mode` through `no_listen → push_to_talk → wake_word`. Both reflected in Radio Status readouts and button background colors via `updateRadio()`. | Fulfils radio-first UX requirement: audio input and listen mode must be settable from the dashboard radio panel without using debug test-panel checkboxes. |
 | `0BE` | `_run_listen_cycle` routing fork: if `_pending_proposals()` is non-empty AND `_parse_voice_confirmation(recognized_text)` returns a non-None decision or proposal_id → routes to `voice_confirm`; otherwise routes to `voice_command`. `execution_allowed` stays `false`; no standing approval granted. | Keeps spoken confirmation in the existing governed lane without adding a new execution path or bypassing the explicit-phrase + explicit-ID gate. |
 | `0BE` | `SimulatedSTT.transcribe()` returns unknown hints verbatim (`SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default`). | Allows tests to inject arbitrary confirmation phrases (including dynamic proposal IDs) without changing the map or adding non-deterministic entries. |
 | `0BE` | `voice_confirm` still requires both an explicit decision phrase AND an explicit proposal ID in the text for approve/deny/cancel. Ambiguous phrases (e.g., "yes", "confirm approve" with no ID) return `readback_required`. | The explicit-phrase + explicit-ID gate from 0AX is unchanged. Routing to voice_confirm through the listen path does not weaken it. |
@@ -101,7 +104,7 @@ Before committing any phase:
 | `metis_tool_capability_awareness.v0.1` | `metis_tool_capability_awareness.v0.1` | `metis_head.brain` | Deterministic chat/voice response metadata for registry-derived tool awareness. |
 | `metis_voice_confirmation.v0.1` | `metis_voice_confirmation.v0.1` | `metis_head.brain` | Redacted simulated voice-confirmation event metadata for proposal review phrases. |
 | `metis_voice_confirmation_readback.v0.1` | `metis_voice_confirmation_readback.v0.1` | `metis_head.brain` | Safe spoken/readable summary for one pending proposal before voice confirmation. |
-| `metis_variable_map.v0.3` | `metis_variable_map.v0.3` | `docs/project_variable_map.md` | Documentation map version. v0.2 added Notes matrix. v0.3 adds 0BE spoken confirmation routing. |
+| `metis_variable_map.v0.4` | `metis_variable_map.v0.4` | `docs/project_variable_map.md` | Documentation map version. v0.2 added Notes matrix. v0.3 adds 0BE spoken confirmation routing. v0.4 adds 0BF browser held-to-talk and radio panel audio controls. |
 
 ---
 
@@ -264,13 +267,15 @@ Before committing any phase:
 |---|---|---|
 | `_audio_capture_governance(require_listen_mode=False)` | 0BB | Returns `(allowed, block_reason)`. Gate order: `mic_hardware_enabled` → `audio_input_enabled` → `[listen_mode != no_listen if require_listen_mode]` → `power_state == awake`. |
 | `_audio_input_event(status, *, block_reason, capture, stt_result, trigger)` | 0BA/0BD | Builds a `provider_event` dict for audio_input. `trigger` field added in 0BD; flows to `last_audio_capture.listen_trigger` via reducer. |
-| `_run_listen_cycle(payload, trigger)` | 0BD/0BE | One bounded capture→STT→route cycle. Governance verified by caller. `trigger` is `"listen"`, `"ptt"`, or `"wake"`. 0BE adds routing fork: if pending proposals exist and recognized text has a decision phrase or proposal_id → `voice_confirm`; otherwise `voice_command`. Response includes `route_used` field. Never starts a background thread. |
+| `_run_stt_route_cycle(capture_result, stt_name, stt_context, options, trigger)` | 0BF | Extracted helper: runs STT transcription + 0BE routing fork (voice_command vs voice_confirm) on an already-captured `CaptureResult`. Called by `_run_listen_cycle` and `audio_browser_ptt`. Returns response dict including `route_used`. |
+| `_run_listen_cycle(payload, trigger)` | 0BD/0BE | One bounded capture→STT→route cycle. Governance verified by caller. `trigger` is `"listen"`, `"ptt"`, or `"wake"`. 0BE adds routing fork via `_run_stt_route_cycle`. Response includes `route_used` field. Never starts a background thread. |
 | `audio_input_status` | 0BA/0BD | `GET /metis/audio/input`. Reports audio/STT providers, state fields, trigger routes, and wake_word provider scaffold. |
 | `audio_capture` | 0BA | `POST /metis/audio/input/capture`. Capture only, no STT. |
 | `audio_transcribe` | 0BA | `POST /metis/audio/transcribe`. Transcription only, no capture (requires `_wav_bytes` in payload-injected fixture). |
 | `audio_listen` | 0BA/0BD | `POST /metis/audio/listen`. Governance → `_run_listen_cycle(payload, "listen")`. |
 | `audio_ptt` | 0BD | `POST /metis/audio/ptt`. Press: sets `listen_session_active`. Release: governance → `_run_listen_cycle` → clears session. Wrong mode or pressless release → safe no-op. |
 | `audio_wake` | 0BD | `POST /metis/audio/wake`. Mode check → governance → wake_phrase prefix match → strip phrase → `_run_listen_cycle(payload, "wake")`. No match or wrong mode → `wake_not_detected`. |
+| `audio_browser_ptt` | 0BF | `POST /metis/audio/browser_ptt`. Async multipart route. Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. Reads upload bytes into `CaptureResult._wav_bytes` (in-memory). Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
 
 ---
 
@@ -606,6 +611,7 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | `POST` | `/metis/audio/listen` | 0BA/0BD/0BE | Governance → `_run_listen_cycle(payload, "listen")`. One bounded cycle. Response includes `route_used` (`voice_command` or `voice_confirm`). |
 | `POST` | `/metis/audio/ptt` | 0BD/0BE | `action=press`: sets `listen_session_active`; `action=release`: one `_run_listen_cycle` then clears session. Response includes `route_used`. Wrong mode or pressless release → safe no-op. |
 | `POST` | `/metis/audio/wake` | 0BD/0BE | Wake-phrase match → one `_run_listen_cycle`. Response includes `route_used`. No match or wrong mode → `wake_not_detected`, no capture. |
+| `POST` | `/metis/audio/browser_ptt` | 0BF | `multipart/form-data`: `audio` (UploadFile) + `stt_provider` (Form) + `stt_hint` (Form) + `options_json` (Form). Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
 | `GET` | `/metis/personality` | 0P | Return active Metis personality constitution profile and trait matrix. |
 | `GET` | `/metis/personality/console` | 0P | Serve the supplied personality console HTML. |
 | `GET` | `/metis/boh/status` | 0C | Safe BOH background link state. Never exposes any token. |
@@ -713,6 +719,7 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | Real mic PTT integration | `bridge_ptt_button`, `ptt_bridge_event` | `POST /metis/audio/ptt` accepts press/release; the physical PTT button → bridge → ptt route is future. |
 | Real STT integration | `stt_live_engine`, `faster_whisper_live`, `vosk_live` | `LocalFasterWhisperSTT` scaffold exists; scaffolds for Vosk, OpenAI Whisper, WhisperCpp also present. |
 | Real wake-word PTT confirmation | `voice_confirm_ptt_physical`, `voice_confirm_wake_physical` | Phase 0BE complete: `_run_listen_cycle` now routes to `voice_confirm` for spoken approval phrases. Remaining future work: physical PTT button wiring and real wake-word engine. |
+| Browser STT offline path | `browser_ptt_faster_whisper`, `local_stt_browser_upload` | Phase 0BF browser_ptt endpoint already accepts raw audio bytes; when `METIS_STT_ALLOW_LOCAL=true` and `METIS_STT_ENGINE=faster_whisper`, upload bytes can be routed to `LocalFasterWhisperSTT` for offline browser-held-to-talk. Currently simulated path only. |
 | Phase 0R provider research | `stt_provider_candidate`, `tts_provider_candidate`, `vision_provider_candidate`, `llm_runtime_candidate` | Record evidence-backed recommendations only after bakeoff. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |

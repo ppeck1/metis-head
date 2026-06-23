@@ -1,7 +1,36 @@
 # Active Task
 
-**Current active task:** Phase `0BF` — Physical radio panel wiring (bridge emulator → panel
-contract; see `docs/PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md` and `metis_head/panel.py`).
+**Current active task:** Phase `0BG` — (TBD; see handoff report for recommendations).
+
+---
+
+## Phase 0BF — COMPLETE
+
+Phase 0BF delivered browser held-to-talk verbal conversation via a multipart audio
+upload route that feeds into the existing STT + 0BE confirmation routing cycle.
+
+### Delivered
+
+- **`POST /metis/audio/browser_ptt`** — async multipart route accepting `audio: UploadFile`,
+  `stt_provider: str`, `stt_hint: str`, `options_json: str`. Governance gate order mirrors
+  `audio_ptt`: `mic_hardware_enabled` → `audio_input_enabled` → `listen_mode==push_to_talk`
+  → `power_state==awake`. Returns `wrong_mode` when `listen_mode != push_to_talk`.
+- **`_run_stt_route_cycle` helper** extracted from `_run_listen_cycle` — STT transcription +
+  0BE routing fork shared by both the existing capture-based routes and the new browser upload
+  route. `_run_listen_cycle` unchanged in external contract; all 402 existing tests pass.
+- **`CaptureResult` added to module-level import** in `brain.py`.
+- **Dashboard "Hold to Talk" button** in the Voice Conversation Test panel:
+  `pointerdown` starts `getUserMedia` + `MediaRecorder`; `pointerup` stops and uploads to
+  `browser_ptt`; `pointercancel` cleans up. Result flows through `vcShowResult`.
+- **8 new tests** in `tests/test_phase_0bf_browser_ptt.py`. Full suite: **410 passed**.
+
+### Boundary (preserved)
+
+`listen_mode` must be `push_to_talk` — `wake_word` and `no_listen` are rejected.
+Raw audio bytes are never persisted (in-memory only for the upload request).
+`_wav_bytes` excluded from `CaptureResult.to_dict()`, state, and event log.
+`execution_allowed` remains `false` after spoken confirmation. No background listener.
+No autonomous execution.
 
 ---
 
