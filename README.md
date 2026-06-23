@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BD` |
-| Focus | Event-driven push-to-talk and wake-word listen loop — one bounded utterance per explicit trigger, never always-listening. |
-| Verification | `389 passed` under Python 3.11 (no real mic, no model required). |
+| Current phase | `0BE` |
+| Focus | Spoken confirmation routing — a PTT/wake/listen cycle that recognizes an approval phrase routes to `voice_confirm` instead of `voice_command`; `execution_allowed` stays `false`; mic cutoff remains the highest-precedence gate. |
+| Verification | `402 passed` under Python 3.11 (no real mic, no model required). |
 
 Implemented phase groups:
 
@@ -44,6 +44,7 @@ Implemented phase groups:
 - Physical radio panel: `0AZ`.
 - Audio input + STT: `0BA`, `0BB`, `0BC`.
 - Wake-word / push-to-talk loop: `0BD`.
+- Spoken confirmation routing: `0BE`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -76,6 +77,28 @@ Phase 0AY implemented:
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
+
+Phase 0BE implemented:
+
+- **`_run_listen_cycle` routing fork**: after STT, if `_pending_proposals()` is non-empty AND
+  `_parse_voice_confirmation(recognized_text)` returns a decision phrase or explicit proposal ID,
+  routes to `voice_confirm`; otherwise routes to `voice_command` as before. Response includes
+  `route_used` field (`"voice_confirm"` or `"voice_command"`).
+- **Explicit-phrase + explicit-ID gate preserved**: `voice_confirm` still requires both a decision
+  phrase (`confirm approve`, `deny proposal`, `cancel`, etc.) and the exact proposal ID in the
+  recognized text. Ambiguous phrases (e.g., `"yes"`, `"confirm approve"` without ID) return
+  `readback_required`; proposal stays pending.
+- **`SimulatedSTT` passthrough**: `SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default` — unknown
+  hints return the hint text verbatim. Existing hints (`git_status`, `time_now`, etc.) are unchanged.
+  This allows tests to inject arbitrary confirmation phrases, including dynamic proposal IDs.
+- **Dashboard Voice Conversation Test panel**: controls for audio input on/off, mic hardware on/off,
+  listen mode, audio provider, STT provider, duration ms, and hint. Buttons: Listen Once, PTT Press,
+  PTT Release, Send Wake Phrase. Panel syncs with server state on every `refresh()`.
+- **Governance unchanged**: mic cutoff blocks PTT release before `_run_listen_cycle` is entered;
+  `execution_allowed` remains `false`; no standing approval; no new execution authority.
+- **`docs/VOICE_CONVERSATION_TEST.md`**: PowerShell smoke-test instructions for simulated, local
+  mic + faster-whisper, and Piper voice output paths.
+- **13 new tests** in `tests/test_phase_0be_voice_confirm_listen.py`; full suite: **402 passed**.
 
 Phase 0BD implemented:
 
@@ -211,7 +234,7 @@ Opus review follow-up:
 
 Handoff:
 
-- Current handoff report: `docs/HANDOFF_REPORT_2026-06-05.md`.
+- Current handoff report: `docs/HANDOFF_REPORT_2026-06-23.md`.
 
 Previous Phase 0AU status: The dashboard now turns chat `metis_tool_next_action.v0.1` guidance into a visible guided
 action strip and selects the referenced proposal or tool plan in the Tools panel. It does not click
@@ -1224,7 +1247,8 @@ interim software proxies. See `docs/LOCAL_MIC_SMOKE_TEST.md` and `docs/LOCAL_STT
 for manual smoke-test steps.
 
 In-memory audio (`_wav_bytes`) and recognized text (`_recognized_text`) are never written to state,
-the event log, or any response payload. Recognized text enters only `POST /metis/voice/command`.
+the event log, or any response payload. Recognized text enters `POST /metis/voice/command` or
+`POST /metis/voice/confirm` only (Phase 0BE routing fork); it is never persisted.
 
 ## BOH Retrieval Bridge Config (Phase 0B)
 
@@ -1340,6 +1364,14 @@ Metis — BOH remains the source of truth.
 - `POST /metis/voice/speak`
 - `POST /metis/voice/preview`
 - `POST /metis/voice/stop`
+- `POST /metis/voice/command`
+- `POST /metis/voice/confirm`
+- `GET /metis/audio/input`
+- `POST /metis/audio/input/capture`
+- `POST /metis/audio/transcribe`
+- `POST /metis/audio/listen` (response includes `route_used`)
+- `POST /metis/audio/ptt` (response includes `route_used` on release)
+- `POST /metis/audio/wake` (response includes `route_used`)
 - `GET /metis/personality`
 - `GET /metis/personality/console`
 - `POST /metis/llm/health`
@@ -1362,11 +1394,13 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-361 passed under Python 3.11
+402 passed under Python 3.11
 ```
 
 Coverage includes:
 
+- Spoken confirmation routing: PTT/wake/listen → `voice_confirm` when phrase + pending proposal; readback when ambiguous; mic cutoff blocks before mutation; `execution_allowed` stays `false`.
+- Push-to-talk and wake-word listen loop; no-op paths; no background threads; no raw audio or transcript in state/events/responses.
 - Voice trace dashboard visibility and simulated voice confirmation.
 - Deterministic voice-first tool awareness and simulated voice-command routing.
 - Dashboard guided-action shortcuts and chat-facing approval/receipt awareness.
