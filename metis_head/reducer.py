@@ -122,6 +122,9 @@ def _reduce_button(state: dict[str, Any], event: dict[str, Any]) -> None:
     elif button == "listen_mode":
         if value in {"no_listen", "wake_word", "push_to_talk"}:
             state["listen_mode"] = value
+    elif button == "wake_phrase":
+        if isinstance(value, str) and value.strip():
+            state["wake_phrase"] = value.strip().lower()
 
 
 def _reduce_privacy(state: dict[str, Any], event: dict[str, Any]) -> None:
@@ -215,6 +218,7 @@ def _reduce_provider(state: dict[str, Any], event: dict[str, Any]) -> None:
                 "text_len": event.get("text_len"),
                 "text_hash": event.get("text_hash"),
                 "text_redacted": True,
+                "listen_trigger": event.get("listen_trigger"),
             }
     elif provider == "audio_input" and status == "blocked":
         state["audio_input_state"] = "blocked"
@@ -222,6 +226,16 @@ def _reduce_provider(state: dict[str, Any], event: dict[str, Any]) -> None:
         state["last_block_reason"] = event.get("block_reason") or "audio capture blocked"
     elif provider == "audio_input" and status in {"failed", "failure"}:
         state["audio_input_state"] = "failed"
+    elif provider == "audio_input" and status == "ptt_pressed":
+        state["listen_session_active"] = True
+        state["audio_input_state"] = "capturing"
+    elif provider == "audio_input" and status == "ptt_released":
+        state["listen_session_active"] = False
+        state["last_listen_trigger"] = "ptt"
+    elif provider == "audio_input" and status == "wake_triggered":
+        state["last_listen_trigger"] = "wake"
+    elif provider == "audio_input" and status == "wake_not_detected":
+        pass  # informational; no state change needed
 
 
 def _reduce_chat(state: dict[str, Any], event: dict[str, Any]) -> None:

@@ -39,7 +39,7 @@ from .tool_plan_runner import next_plan_action
 from .tool_readiness import calculate_tool_readiness
 from .tool_registry import ToolRegistryError, build_tool_proposal_event, dry_run_tool, execute_tool, get_tool, list_tools, route_tool_request
 from .tool_task_planner import plan_tool_task
-from .audio_input import CaptureContext, audio_input_provider_from_config
+from .audio_input import CaptureContext, LocalWakeWordDetector, audio_input_provider_from_config
 from .stt import _local_stt_allowed, get_recognized_text, stt_provider_from_config
 from .voice import VoiceResult, speak_text, stop_voice, voice_options, voice_profile
 
@@ -1934,6 +1934,7 @@ def _audio_input_event(
     block_reason: str | None = None,
     capture=None,
     stt_result=None,
+    trigger: str | None = None,
 ) -> dict[str, Any]:
     event: dict[str, Any] = {
         "type": "provider_event",
@@ -1944,6 +1945,8 @@ def _audio_input_event(
     }
     if block_reason:
         event["block_reason"] = block_reason
+    if trigger:
+        event["listen_trigger"] = trigger
     if capture is not None:
         event["audio_duration_ms"] = capture.audio_duration_ms
         event["frame_count"] = capture.frame_count
@@ -2019,6 +2022,9 @@ def audio_input_status() -> dict[str, Any]:
         "audio_input_state": STATE.get("audio_input_state"),
         "audio_input_enabled": STATE.get("audio_input_enabled"),
         "listen_mode": STATE.get("listen_mode"),
+        "listen_session_active": STATE.get("listen_session_active"),
+        "wake_phrase": STATE.get("wake_phrase"),
+        "last_listen_trigger": STATE.get("last_listen_trigger"),
         "mic_hardware_enabled": STATE.get("mic_hardware_enabled"),
         "last_audio_capture": STATE.get("last_audio_capture"),
         "allow_local_mic": allow_local_mic,
@@ -2032,12 +2038,19 @@ def audio_input_status() -> dict[str, Any]:
         "selected_stt_provider": stt_engine,
         "audio_provider_health": audio_provider.health(),
         "stt_provider_health": stt_provider.health(),
+        "trigger_routes": {
+            "ptt": "POST /metis/audio/ptt",
+            "wake": "POST /metis/audio/wake",
+            "listen": "POST /metis/audio/listen",
+        },
         "providers": {
             "audio_input": ["none", "simulated", "local_mic"],
             "stt": ["none", "simulated", "faster_whisper", "local_whisper", "vosk", "openai_whisper", "whispercpp"],
+            "wake_word": ["local_wake_word (scaffold, not_enabled)"],
         },
         "boundary": (
             "Capture fail-closed behind mic_hardware_enabled; "
+            "event-driven and bounded — one utterance per explicit PTT or wake trigger, never always-listening; "
             "real mic requires METIS_AUDIO_ALLOW_LOCAL_MIC=true AND mic_hardware_enabled AND audio_input_enabled; "
             "real STT requires METIS_STT_ALLOW_LOCAL=true AND faster-whisper installed; "
             "mic_hardware_enabled should ultimately be driven by the physical cutoff switch over the bridge "
@@ -2130,13 +2143,94 @@ def audio_transcribe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def _run_listen_cycle(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
+    """One bounded capture → STT → voice_command cycle.
+
+    Governance must be verified by the caller before invoking.
+    trigger is "listen", "ptt", or "wake"; recorded in emitted events and
+    in last_audio_capture.listen_trigger but never in state/events as raw text.
+    Adds no execution authority: recognized text enters POST /metis/voice/command only.
+    """
+    global STATE
+    import os as _os
+
+    provider_name = str(payload.get("provider") or "simulated")
+    hint = str(payload.get("hint") or "default")
+    duration_ms = int(payload.get("duration_ms") or 1000)
+    context = CaptureContext(hint=hint, fixture_id=hint, duration_ms=duration_ms)
+
+    audio_provider = audio_input_provider_from_config(provider_name)
+    capturing_event = _audio_input_event("capturing", trigger=trigger)
+    STATE = reduce_metis_event(STATE, capturing_event)
+    capture_result = audio_provider.capture(context)
+
+    if not capture_result.captured:
+        fail_event = _audio_input_event(
+            "blocked",
+            block_reason=capture_result.block_reason or "capture_failed",
+            capture=capture_result,
+            trigger=trigger,
+        )
+        STATE = reduce_metis_event(STATE, fail_event)
+        return {
+            "status": "blocked",
+            "block_reason": capture_result.block_reason,
+            "captured": False,
+            "capture": capture_result.to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    stt_name = str(payload.get("stt_provider") or _os.environ.get("METIS_STT_ENGINE", "simulated"))
+    stt = stt_provider_from_config(stt_name)
+    stt_context = {"hint": hint}
+
+    transcribing_event = _audio_input_event("transcribing", capture=capture_result, trigger=trigger)
+    STATE = reduce_metis_event(STATE, transcribing_event)
+    stt_result = stt.transcribe(capture_result, stt_context)
+
+    recognized_text = get_recognized_text(stt_result)
+
+    if not recognized_text.strip():
+        complete_event = _audio_input_event(
+            "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
+        )
+        STATE = reduce_metis_event(STATE, complete_event)
+        return {
+            "status": "no_text_recognized",
+            "capture": capture_result.to_dict(),
+            "stt": stt_result.to_dict(),
+            "voice_command": None,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
+    vc_response = voice_command({"text": recognized_text, "options": options})
+
+    complete_event = _audio_input_event(
+        "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
+    )
+    STATE = reduce_metis_event(STATE, complete_event)
+    vc_response["state"] = STATE
+    vc_response["leds"] = resolve_leds(STATE)
+
+    return {
+        "status": "listen_complete",
+        "capture": capture_result.to_dict(),
+        "stt": stt_result.to_dict(),
+        "voice_command": vc_response,
+        "state": STATE,
+        "leds": resolve_leds(STATE),
+    }
+
+
 @app.post("/metis/audio/listen")
 def audio_listen(payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Orchestrated simulated path: capture → transcribe → forward to voice_command.
+    """Orchestrated path: capture → transcribe → forward to voice_command.
 
-    Respects the full capture-governance chain (mic cutoff, audio_input_enabled,
-    listen_mode, power_state). Adds no new execution authority: recognized text
-    enters the already-governed POST /metis/voice/command route.
+    Respects the full governance chain (mic cutoff, audio_input_enabled, listen_mode,
+    power_state). Adds no new execution authority.
     """
     global STATE
     payload = payload or {}
@@ -2153,67 +2247,149 @@ def audio_listen(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             "leds": resolve_leds(STATE),
         }
 
-    provider_name = str(payload.get("provider") or "simulated")
-    hint = str(payload.get("hint") or "default")
-    duration_ms = int(payload.get("duration_ms") or 1000)
-    context = CaptureContext(hint=hint, fixture_id=hint, duration_ms=duration_ms)
+    return _run_listen_cycle(payload, "listen")
 
-    audio_provider = audio_input_provider_from_config(provider_name)
-    capturing_event = _audio_input_event("capturing")
-    STATE = reduce_metis_event(STATE, capturing_event)
-    capture_result = audio_provider.capture(context)
 
-    if not capture_result.captured:
-        fail_event = _audio_input_event("blocked", block_reason=capture_result.block_reason or "capture_failed", capture=capture_result)
-        STATE = reduce_metis_event(STATE, fail_event)
+@app.post("/metis/audio/ptt")
+def audio_ptt(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Push-to-talk control. Models the radio PTT button.
+
+    action=press: validates push_to_talk mode + full governance; marks session active.
+                  Does NOT start a thread or begin capture — capture happens on release.
+    action=release: if session active + correct mode + governance passes, runs exactly
+                    one bounded _run_listen_cycle, then clears the session.
+                    A release without a prior press (listen_session_active=False) or in
+                    the wrong mode is a safe no-op (no capture, no routing).
+
+    Hard boundaries: event-driven and bounded; one utterance per trigger; never always-on.
+    """
+    global STATE
+    payload = payload or {}
+    action = str(payload.get("action") or "").strip().lower()
+
+    if action not in {"press", "release"}:
+        raise HTTPException(status_code=400, detail="action must be 'press' or 'release'")
+
+    if action == "press":
+        if STATE.get("listen_mode") != "push_to_talk":
+            return {
+                "status": "wrong_mode",
+                "block_reason": "listen_mode_not_push_to_talk",
+                "listen_mode": STATE.get("listen_mode"),
+                "state": STATE,
+                "leds": resolve_leds(STATE),
+            }
+        allowed, block_reason = _audio_capture_governance()
+        if not allowed:
+            event = _audio_input_event("blocked", block_reason=block_reason)
+            STATE = reduce_metis_event(STATE, event)
+            return {
+                "status": "blocked",
+                "block_reason": block_reason,
+                "state": STATE,
+                "leds": resolve_leds(STATE),
+            }
+        ptt_event = _audio_input_event("ptt_pressed")
+        STATE = reduce_metis_event(STATE, ptt_event)
+        return {
+            "status": "ptt_pressed",
+            "listen_session_active": STATE.get("listen_session_active"),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    # action == "release"
+    if not STATE.get("listen_session_active") or STATE.get("listen_mode") != "push_to_talk":
+        return {
+            "status": "ptt_release_ignored",
+            "listen_session_active": STATE.get("listen_session_active"),
+            "listen_mode": STATE.get("listen_mode"),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
+
+    allowed, block_reason = _audio_capture_governance()
+    if not allowed:
+        release_event = _audio_input_event("ptt_released")
+        STATE = reduce_metis_event(STATE, release_event)
+        block_event = _audio_input_event("blocked", block_reason=block_reason)
+        STATE = reduce_metis_event(STATE, block_event)
         return {
             "status": "blocked",
-            "block_reason": capture_result.block_reason,
-            "captured": False,
-            "capture": capture_result.to_dict(),
+            "block_reason": block_reason,
             "state": STATE,
             "leds": resolve_leds(STATE),
         }
 
-    import os as _os
-    stt_name = str(payload.get("stt_provider") or _os.environ.get("METIS_STT_ENGINE", "simulated"))
-    stt = stt_provider_from_config(stt_name)
-    stt_context = {"hint": hint}
+    result = _run_listen_cycle(payload, "ptt")
+    release_event = _audio_input_event("ptt_released")
+    STATE = reduce_metis_event(STATE, release_event)
+    result["state"] = STATE
+    result["leds"] = resolve_leds(STATE)
+    result["trigger"] = "ptt"
+    return result
 
-    transcribing_event = _audio_input_event("transcribing", capture=capture_result)
-    STATE = reduce_metis_event(STATE, transcribing_event)
-    stt_result = stt.transcribe(capture_result, stt_context)
 
-    recognized_text = get_recognized_text(stt_result)
+@app.post("/metis/audio/wake")
+def audio_wake(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Simulated wake-word detection endpoint.
 
-    if not recognized_text.strip():
-        complete_event = _audio_input_event("complete", capture=capture_result, stt_result=stt_result)
-        STATE = reduce_metis_event(STATE, complete_event)
+    The caller supplies text containing the wake phrase (simulating what a real
+    wake-word engine would deliver). If the text starts with the configured
+    wake_phrase AND listen_mode==wake_word AND governance passes, the phrase is
+    stripped and one bounded _run_listen_cycle runs on the remainder.
+
+    No real wake-word engine import occurs. LocalWakeWordDetector is a scaffold only.
+
+    Hard boundaries: event-driven; one utterance per trigger; never always-listening.
+    """
+    global STATE
+    payload = payload or {}
+    text = str(payload.get("text") or "").strip()
+
+    if STATE.get("listen_mode") != "wake_word":
+        event = _audio_input_event("wake_not_detected", block_reason="listen_mode_not_wake_word")
+        STATE = reduce_metis_event(STATE, event)
         return {
-            "status": "no_text_recognized",
-            "capture": capture_result.to_dict(),
-            "stt": stt_result.to_dict(),
-            "voice_command": None,
+            "status": "wake_not_detected",
+            "block_reason": "listen_mode_not_wake_word",
+            "listen_mode": STATE.get("listen_mode"),
             "state": STATE,
             "leds": resolve_leds(STATE),
         }
 
-    options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
-    vc_response = voice_command({"text": recognized_text, "options": options})
+    allowed, block_reason = _audio_capture_governance()
+    if not allowed:
+        event = _audio_input_event("blocked", block_reason=block_reason)
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "blocked",
+            "block_reason": block_reason,
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
 
-    complete_event = _audio_input_event("complete", capture=capture_result, stt_result=stt_result)
-    STATE = reduce_metis_event(STATE, complete_event)
-    vc_response["state"] = STATE
-    vc_response["leds"] = resolve_leds(STATE)
+    wake_phrase = str(STATE.get("wake_phrase") or "hey metis").lower().strip()
+    if not text.lower().startswith(wake_phrase):
+        event = _audio_input_event("wake_not_detected", block_reason="wake_phrase_not_detected")
+        STATE = reduce_metis_event(STATE, event)
+        return {
+            "status": "wake_not_detected",
+            "block_reason": "wake_phrase_not_detected",
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+        }
 
-    return {
-        "status": "listen_complete",
-        "capture": capture_result.to_dict(),
-        "stt": stt_result.to_dict(),
-        "voice_command": vc_response,
-        "state": STATE,
-        "leds": resolve_leds(STATE),
-    }
+    remainder = text[len(wake_phrase):].strip()
+
+    wake_event = _audio_input_event("wake_triggered")
+    STATE = reduce_metis_event(STATE, wake_event)
+
+    cycle_payload = {**payload, "hint": remainder or payload.get("hint") or "default"}
+    result = _run_listen_cycle(cycle_payload, "wake")
+    result["trigger"] = "wake"
+    result["wake_phrase_detected"] = True
+    return result
 
 
 @app.post("/metis/replay")

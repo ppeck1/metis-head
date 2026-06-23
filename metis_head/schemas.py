@@ -177,6 +177,9 @@ def baseline_state(*, adapters_enabled: bool = False, timestamp: str = "2026-05-
         "audio_input_state": "disabled",
         "audio_input_enabled": False,
         "listen_mode": "no_listen",
+        "listen_session_active": False,
+        "wake_phrase": "hey metis",
+        "last_listen_trigger": None,
         "last_audio_capture": None,
         "spec_traceability": {
             "canonical_state": "buildspec section 5",

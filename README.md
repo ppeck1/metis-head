@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BC` |
-| Focus | Real local STT via `LocalFasterWhisperSTT` (faster-whisper / CTranslate2), lazy-gated and opt-in. |
-| Verification | `361 passed` under Python 3.11 (no real mic, no model required). |
+| Current phase | `0BD` |
+| Focus | Event-driven push-to-talk and wake-word listen loop — one bounded utterance per explicit trigger, never always-listening. |
+| Verification | `389 passed` under Python 3.11 (no real mic, no model required). |
 
 Implemented phase groups:
 
@@ -43,6 +43,7 @@ Implemented phase groups:
 - Tool-aware chat and voice controls: `0AP`, `0AQ`, `0AR`, `0AS`, `0AT`, `0AU`, `0AV`, `0AW`, `0AX`, `0AY`.
 - Physical radio panel: `0AZ`.
 - Audio input + STT: `0BA`, `0BB`, `0BC`.
+- Wake-word / push-to-talk loop: `0BD`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -75,6 +76,31 @@ Phase 0AY implemented:
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
+
+Phase 0BD implemented:
+
+- **Event-driven bounded listen loop**: `POST /metis/audio/ptt` and `POST /metis/audio/wake` each
+  fire exactly one capture → STT → `voice_command` cycle per explicit trigger. No background threads,
+  no always-listening standby.
+- **`POST /metis/audio/ptt {"action":"press"|"release"}`**: Models the radio PTT button.
+  `press` validates `listen_mode==push_to_talk` + full governance, sets `listen_session_active=true`.
+  `release` runs one `_run_listen_cycle` then clears the session.
+  A release without a prior press, or in the wrong mode, is a safe no-op (no capture, no routing).
+- **`POST /metis/audio/wake {"text":"..."}`**: Caller supplies recognized text (simulated wake-word
+  detector path). If the text starts with the configured `wake_phrase` (default `"hey metis"`,
+  case-insensitive) **and** `listen_mode==wake_word` **and** governance passes, the phrase is stripped
+  and one cycle runs on the remainder. Otherwise returns `wake_not_detected` — no capture, no routing.
+- **`LocalWakeWordDetector` scaffold**: disabled, no external imports. Returns `not_enabled` always.
+  Stub for a future openWakeWord / Porcupine integration.
+- **New state fields**: `listen_session_active` (default `false`), `wake_phrase` (default `"hey metis"`),
+  `last_listen_trigger` (`"ptt"` | `"wake"` | `null`). All configurable via `button_event`.
+- **`GET /metis/audio/input`** now reports these fields and a `trigger_routes` map.
+- **`_run_listen_cycle(payload, trigger)`**: shared capture→STT→voice_command function; called by all
+  three audio routes (`/listen`, `/ptt`, `/wake`). Governance verified by the caller.
+- **Mic cutoff stays highest precedence**: blocks press, release, and wake before any capture.
+- **28 new tests** covering PTT/wake routing, no-op paths, mic cutoff, no background threads, no raw
+  audio/_wav_bytes/transcript in state/events/responses, no new execution authority.
+- Full suite: **389 passed** under Python 3.11 with no real mic and no model.
 
 Phase 0BC implemented:
 

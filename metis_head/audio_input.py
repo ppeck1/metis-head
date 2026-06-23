@@ -289,6 +289,25 @@ def _local_mic_allowed() -> bool:
     }
 
 
+class LocalWakeWordDetector:
+    """Disabled scaffold for a real wake-word engine (openWakeWord / Porcupine).
+
+    No external import occurs. In production this would stream audio from the mic and
+    emit a detection event when the configured wake phrase is heard. For now it always
+    returns not_enabled; the governed /metis/audio/wake route handles the simulated path.
+    """
+
+    provider_id = "local_wake_word"
+
+    def detect(self, audio_bytes: bytes | None = None) -> dict[str, Any]:
+        return {
+            "detected": False,
+            "status": "not_enabled",
+            "provider_id": self.provider_id,
+            "reason": "wake_word_engine_not_enabled",
+        }
+
+
 def audio_input_provider_from_config(provider_name: str) -> AudioInputProvider:
     if provider_name == "simulated":
         return SimulatedAudioInput()

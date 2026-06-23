@@ -1,8 +1,42 @@
 # Active Task
 
-**Current active task:** Phase `0BD` — Wake-word / push-to-talk activation + voice-only
-approval confirmation (auto-confirm loop gated behind the existing `listen_mode` and
-`mic_hardware_enabled` governance spine).
+**Current active task:** Phase `0BE` — Voice-only approval confirmation: wire real audio → STT
+into `/metis/voice/confirm` with readback + explicit-phrase gating.
+
+---
+
+## Phase 0BD — COMPLETE
+
+Phase 0BD delivered an event-driven push-to-talk and wake-word listen loop.
+
+### Delivered
+
+- **`POST /metis/audio/ptt {"action":"press"|"release"}`** — models the radio PTT button.
+  `press` validates `listen_mode==push_to_talk` + full governance chain (mic cutoff →
+  `audio_input_enabled` → `power_state`); sets `listen_session_active=true`. Does NOT start
+  a thread or begin capture. `release` runs exactly one `_run_listen_cycle`, then clears the
+  session. A press-less release or release in the wrong mode is a safe no-op.
+- **`POST /metis/audio/wake {"text":"..."}`** — caller-supplied text simulates a real wake-word
+  detector. Case-insensitive prefix match against configurable `wake_phrase` (default `"hey metis"`).
+  If match AND `listen_mode==wake_word` AND governance passes, strips phrase and runs one cycle on
+  the remainder. Otherwise returns `wake_not_detected` with no capture or routing.
+- **`LocalWakeWordDetector` scaffold** — `audio_input.py`; disabled, no external imports; stub for
+  openWakeWord / Porcupine. Returns `not_enabled` always.
+- **`_run_listen_cycle(payload, trigger)`** — shared capture → STT → `voice_command` function
+  called by `/listen`, `/ptt`, and `/wake`. Governance verified by the caller; `trigger` field
+  flows through emitted events to `last_audio_capture.listen_trigger`.
+- **New state fields**: `listen_session_active` (default `false`), `wake_phrase` (default
+  `"hey metis"`), `last_listen_trigger` (`"ptt"` | `"wake"` | `null`). Set by reducer; configurable
+  via `button_event`.
+- **`GET /metis/audio/input`** reports all new fields plus `trigger_routes` and `wake_word` scaffold
+  entry in `providers`.
+- **28 new tests** in `tests/test_phase_0bd_ptt_wake.py`; full suite: **389 passed**.
+
+### Boundary (preserved)
+
+Event-driven and bounded — one utterance per explicit PTT or wake trigger, never always-listening.
+Mic cutoff highest precedence. Standby is not always-listening. Recognized text redacted; enters
+only `POST /metis/voice/command`. No new execution authority.
 
 ---
 
@@ -71,12 +105,14 @@ tempfile path, and recognized text never stored. Recognized text still enters on
 
 ---
 
-## Next phase (`0BD`)
+## Next phase (`0BE`)
 
-- **Wake-word and push-to-talk activation loop**: auto-listen when `listen_mode ==
-  wake_word` or trigger on button event when `listen_mode == push_to_talk`.
-- **Voice-only approval confirmation**: the `/metis/voice/confirm` flow already exists;
-  `0BD` should wire it into the audio listen pipeline so a recognized approval phrase
-  can confirm a pending proposal without a separate HTTP call.
-- Gate everything behind the existing `mic_hardware_enabled` + `listen_mode` governance
-  spine; no new execution authority.
+Wire the existing `POST /metis/voice/confirm` flow into the audio listen pipeline so a
+recognized approval phrase (spoken via PTT or wake) can confirm a pending proposal without
+a separate HTTP call:
+
+- When `_run_listen_cycle` routes to `/metis/voice/command` and no matching tool route is
+  found, if there is a pending proposal, try `/metis/voice/confirm` with the recognized text.
+- Readback + explicit-phrase gating from `0AX` remains; still `execution_allowed=false`.
+- Gate everything behind the existing `mic_hardware_enabled` + `listen_mode` governance.
+- No new execution authority.
