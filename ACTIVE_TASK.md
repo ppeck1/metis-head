@@ -1,27 +1,32 @@
 # Active Task
 
-**Current active task:** Phase `0BB` — Enable `LocalMicAudioInput` (real device capture behind explicit config + hardware cutoff).
+**Current active task:** Phase `0BC` — Real local STT provider (Whisper or Vosk) as an optional extra, swappable behind `STTProvider`.
 
-Plan: Next phase scaffolded in `metis_head/audio_input.py` (`LocalMicAudioInput` provider).
+Plan: `LocalWhisperSTT` scaffold already exists in `metis_head/stt.py`; only the not-enabled guard and the optional dep need to be lifted.
 
-## Phase 0BA — COMPLETE
+## Phase 0BB — COMPLETE
 
-Phase 0BA added the modular audio-intake layer for the radio form factor. All work is committed.
+Phase 0BB enabled real local microphone capture via `LocalMicAudioInput`, triple-gated and opt-in.
 
 ### Delivered
 
-- `metis_head/audio_input.py` — `audio_input_adapter.v0.1`: `NoneAudioInput`, `SimulatedAudioInput`, disabled `LocalMicAudioInput` scaffold.
-- `metis_head/stt.py` — `stt_engine.v0.1`: `NoneSTT`, `SimulatedSTT`, disabled `LocalWhisperSTT` scaffold.
-- Canonical state: `audio_input_state`, `audio_input_enabled`, `listen_mode`, `last_audio_capture`, `input_adapters.audio_input`.
-- Endpoints: `GET /metis/audio/input`, `POST /metis/audio/input/capture`, `POST /metis/audio/transcribe`, `POST /metis/audio/listen`.
-- 35 tests; full suite `319 passed`.
+- `LocalMicAudioInput` — real `sounddevice` capture, lazy-imported, triple-gated:
+  1. `METIS_AUDIO_ALLOW_LOCAL_MIC=true` (env opt-in)
+  2. `mic_hardware_enabled` (state/hardware gate, governed in brain.py)
+  3. `audio_input_enabled` (software gate, governed in brain.py)
+- Capture pipeline: `sounddevice.rec()` → tempfile WAV → Piper WAV-analysis helpers → compact redacted `CaptureResult`. Tempfile deleted; raw PCM never stored.
+- `_audio_capture_governance(require_listen_mode=False|True)` extended; all three audio routes use it.
+- `GET /metis/audio/input`: reports `allow_local_mic`, `sounddevice_available`, `input_devices` (tolerates absent dep).
+- `mic = ["sounddevice>=0.4"]` optional extra in `pyproject.toml`.
+- `docs/LOCAL_MIC_SMOKE_TEST.md`: manual PowerShell smoke-test.
+- 17 new tests; full suite `336 passed` (no real mic in CI).
 
 ### Boundary (preserved)
 
-Capture fail-closed behind `mic_hardware_enabled`. STT output redacted. Recognized text enters the existing `POST /metis/voice/command` governed route only. No real microphone, no new deps, no new execution authority.
+Capture fail-closed at all three gates. `mic_hardware_enabled` is the hardware privacy gate (interim: env flag is proxy; production: physical cutoff switch via bridge). Raw PCM, tempfile path, and recognized text never stored. Recognized text still enters only `POST /metis/voice/command`.
 
-## Next phase (`0BB`)
+## Next phase (`0BC`)
 
-- Enable `LocalMicAudioInput` behind explicit config (`METIS_AUDIO_ALLOW_LOCAL_MIC=true`) **and** hardware cutoff.
-- Add `sounddevice` as an optional extra; tested locally, not in CI.
-- Provider slot already exists; only the not-enabled guard needs to be lifted.
+- Enable `LocalWhisperSTT` behind `METIS_STT_ALLOW_LOCAL_WHISPER=true` and optional `whisper = ["openai-whisper"]` extra.
+- Same lazy-import pattern; same triple-gate structure as `LocalMicAudioInput`.
+- STT result redaction contract unchanged: only `text_len`/`text_hash` in state/events.

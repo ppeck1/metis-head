@@ -16,6 +16,7 @@ Provider ladder:
 from __future__ import annotations
 
 import math
+import os
 import tempfile
 import wave
 from array import array
@@ -138,34 +139,141 @@ class SimulatedAudioInput(AudioInputProvider):
 
 
 class LocalMicAudioInput(AudioInputProvider):
-    """Disabled scaffold for a real device capture (Phase 0BB).
+    """Real device capture gated by METIS_AUDIO_ALLOW_LOCAL_MIC env flag.
 
-    No sounddevice or PyAudio import occurs in this phase; returns a governed
-    not-enabled result unconditionally.
+    Triple gate (all three must hold before any device access occurs):
+      1. METIS_AUDIO_ALLOW_LOCAL_MIC=true  (env opt-in, checked here)
+      2. mic_hardware_enabled              (state flag, enforced in brain.py governance)
+      3. audio_input_enabled               (state flag, enforced in brain.py governance)
+
+    sounddevice is lazy-imported inside capture() only; it is never imported at
+    module load. If the import fails the result is dependency_unavailable, not a crash.
+
+    Raw PCM and the tempfile path are never stored in state, the event log, or any
+    response payload — only the compact redacted CaptureResult fields are returned.
     """
 
     provider_id = "local_mic"
 
     def health(self) -> dict[str, Any]:
+        if not _local_mic_allowed():
+            return {
+                "provider_id": self.provider_id,
+                "status": "disabled",
+                "schema_version": self.schema_version,
+                "allow_local_mic": False,
+                "reason": "METIS_AUDIO_ALLOW_LOCAL_MIC_not_set",
+            }
+        sounddevice_ok = False
+        input_device_count = 0
+        try:
+            import sounddevice as sd  # noqa: PLC0415 – intentional lazy import
+
+            sounddevice_ok = True
+            try:
+                input_device_count = sum(
+                    1 for d in sd.query_devices() if d.get("max_input_channels", 0) > 0
+                )
+            except Exception:
+                pass
+        except ImportError:
+            pass
         return {
             "provider_id": self.provider_id,
-            "status": "disabled",
+            "status": "ok" if sounddevice_ok else "dependency_unavailable",
             "schema_version": self.schema_version,
-            "reason": "not_enabled_this_phase",
+            "allow_local_mic": True,
+            "sounddevice_available": sounddevice_ok,
+            "input_device_count": input_device_count,
         }
 
     def capture(self, context: CaptureContext) -> CaptureResult:
-        return CaptureResult(
-            provider_id=self.provider_id,
-            status="not_enabled",
-            captured=False,
-            audio_duration_ms=0,
-            audio_levels=[],
-            audio_spectrum_frames=[],
-            frame_count=0,
-            sample_rate=context.sample_rate,
-            block_reason="local_mic_not_enabled_phase_0ba",
-        )
+        # Gate 1: env opt-in (gates 2+3 enforced in brain.py before capture() is called)
+        if not _local_mic_allowed():
+            return CaptureResult(
+                provider_id=self.provider_id,
+                status="not_enabled",
+                captured=False,
+                audio_duration_ms=0,
+                audio_levels=[],
+                audio_spectrum_frames=[],
+                frame_count=0,
+                sample_rate=context.sample_rate,
+                block_reason="METIS_AUDIO_ALLOW_LOCAL_MIC_not_set",
+            )
+
+        # Lazy-import; never at module load time.
+        try:
+            import sounddevice as sd  # noqa: PLC0415
+        except ImportError:
+            return CaptureResult(
+                provider_id=self.provider_id,
+                status="dependency_unavailable",
+                captured=False,
+                audio_duration_ms=0,
+                audio_levels=[],
+                audio_spectrum_frames=[],
+                frame_count=0,
+                sample_rate=context.sample_rate,
+                block_reason="sounddevice_missing",
+            )
+
+        n_frames = max(1, int(context.sample_rate * context.duration_ms / 1000))
+        wav_path: Path | None = None
+        try:
+            recording = sd.rec(n_frames, samplerate=context.sample_rate, channels=1, dtype="int16")
+            sd.wait()
+
+            with tempfile.NamedTemporaryFile(prefix="metis_mic_audio_", suffix=".wav", delete=False) as tmp:
+                wav_path = Path(tmp.name)
+
+            with wave.open(str(wav_path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(context.sample_rate)
+                wav_file.writeframes(recording.tobytes())
+
+            from .voice import _wav_duration_ms, _wav_level_envelope, _wav_spectrum_frames
+
+            audio_levels = _wav_level_envelope(wav_path)
+            spectrum_frames = _wav_spectrum_frames(wav_path)
+            audio_duration = _wav_duration_ms(wav_path) or context.duration_ms
+
+            return CaptureResult(
+                provider_id=self.provider_id,
+                status="ok",
+                captured=True,
+                audio_duration_ms=audio_duration,
+                audio_levels=audio_levels,
+                audio_spectrum_frames=spectrum_frames,
+                frame_count=len(spectrum_frames),
+                sample_rate=context.sample_rate,
+            )
+        except Exception as exc:
+            return CaptureResult(
+                provider_id=self.provider_id,
+                status="failed",
+                captured=False,
+                audio_duration_ms=0,
+                audio_levels=[],
+                audio_spectrum_frames=[],
+                frame_count=0,
+                sample_rate=context.sample_rate,
+                block_reason=f"capture_error:{type(exc).__name__}",
+            )
+        finally:
+            if wav_path is not None:
+                try:
+                    wav_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+
+def _local_mic_allowed() -> bool:
+    """True only when METIS_AUDIO_ALLOW_LOCAL_MIC is explicitly set to a truthy value."""
+    return os.environ.get("METIS_AUDIO_ALLOW_LOCAL_MIC", "").strip().lower() in {
+        "1", "true", "yes", "on", "enabled",
+    }
 
 
 def audio_input_provider_from_config(provider_name: str) -> AudioInputProvider:

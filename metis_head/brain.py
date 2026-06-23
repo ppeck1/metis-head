@@ -1958,12 +1958,20 @@ def _audio_input_event(
     return event
 
 
-def _audio_capture_governance() -> tuple[bool, str | None]:
-    """Return (allowed, block_reason). Checks mic cutoff and software enable."""
+def _audio_capture_governance(*, require_listen_mode: bool = False) -> tuple[bool, str | None]:
+    """Return (allowed, block_reason).
+
+    Enforces: mic_hardware_enabled → audio_input_enabled
+              → [listen_mode != no_listen  (when require_listen_mode)]
+              → power_state == awake.
+    Order matches buildspec §2.5/§3.4 precedence: hardware cutoff is highest.
+    """
     if not STATE.get("mic_hardware_enabled"):
         return False, "mic_hardware_cutoff"
     if not STATE.get("audio_input_enabled"):
         return False, "audio_input_disabled"
+    if require_listen_mode and STATE.get("listen_mode", "no_listen") == "no_listen":
+        return False, "listen_mode_no_listen"
     if STATE.get("power_state") != "awake":
         return False, "standby_blocks_capture"
     return True, None
@@ -1971,8 +1979,28 @@ def _audio_capture_governance() -> tuple[bool, str | None]:
 
 @app.get("/metis/audio/input")
 def audio_input_status() -> dict[str, Any]:
-    audio_provider = audio_input_provider_from_config("simulated")
+    import os as _os
+
+    allow_local_mic = _os.environ.get("METIS_AUDIO_ALLOW_LOCAL_MIC", "").strip().lower() in {
+        "1", "true", "yes", "on", "enabled",
+    }
+    selected_provider = "local_mic" if allow_local_mic else "simulated"
+    audio_provider = audio_input_provider_from_config(selected_provider)
     stt_provider = stt_provider_from_config("simulated")
+
+    input_devices: list[dict[str, Any]] = []
+    sounddevice_available = False
+    if allow_local_mic:
+        try:
+            import sounddevice as sd  # noqa: PLC0415
+
+            sounddevice_available = True
+            for idx, device in enumerate(sd.query_devices()):
+                if device.get("max_input_channels", 0) > 0:
+                    input_devices.append({"index": idx, "name": str(device.get("name", ""))})
+        except Exception:
+            pass
+
     return {
         "audio_input_adapter_version": "audio_input_adapter.v0.1",
         "stt_engine_version": "stt_engine.v0.1",
@@ -1981,7 +2009,10 @@ def audio_input_status() -> dict[str, Any]:
         "listen_mode": STATE.get("listen_mode"),
         "mic_hardware_enabled": STATE.get("mic_hardware_enabled"),
         "last_audio_capture": STATE.get("last_audio_capture"),
-        "selected_audio_provider": "simulated",
+        "allow_local_mic": allow_local_mic,
+        "sounddevice_available": sounddevice_available,
+        "input_devices": input_devices,
+        "selected_audio_provider": selected_provider,
         "selected_stt_provider": "simulated",
         "audio_provider_health": audio_provider.health(),
         "stt_provider_health": stt_provider.health(),
@@ -1989,7 +2020,12 @@ def audio_input_status() -> dict[str, Any]:
             "audio_input": ["none", "simulated", "local_mic"],
             "stt": ["none", "simulated", "local_whisper"],
         },
-        "boundary": "Capture fail-closed behind mic_hardware_enabled; no real mic, no new execution authority.",
+        "boundary": (
+            "Capture fail-closed behind mic_hardware_enabled; "
+            "real mic requires METIS_AUDIO_ALLOW_LOCAL_MIC=true AND mic_hardware_enabled AND audio_input_enabled; "
+            "mic_hardware_enabled should ultimately be driven by the physical cutoff switch over the bridge "
+            "(software flag is an interim proxy)."
+        ),
     }
 
 
@@ -2046,12 +2082,13 @@ def audio_transcribe(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     global STATE
     payload = payload or {}
 
-    if not STATE.get("mic_hardware_enabled"):
-        event = _audio_input_event("blocked", block_reason="mic_hardware_cutoff")
+    allowed, block_reason = _audio_capture_governance()
+    if not allowed:
+        event = _audio_input_event("blocked", block_reason=block_reason)
         STATE = reduce_metis_event(STATE, event)
         return {
             "status": "blocked",
-            "block_reason": "mic_hardware_cutoff",
+            "block_reason": block_reason,
             "stt": None,
             "state": STATE,
             "leds": resolve_leds(STATE),
@@ -2087,46 +2124,13 @@ def audio_listen(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     global STATE
     payload = payload or {}
 
-    if not STATE.get("mic_hardware_enabled"):
-        event = _audio_input_event("blocked", block_reason="mic_hardware_cutoff")
+    allowed, block_reason = _audio_capture_governance(require_listen_mode=True)
+    if not allowed:
+        event = _audio_input_event("blocked", block_reason=block_reason)
         STATE = reduce_metis_event(STATE, event)
         return {
             "status": "blocked",
-            "block_reason": "mic_hardware_cutoff",
-            "captured": False,
-            "state": STATE,
-            "leds": resolve_leds(STATE),
-        }
-
-    if not STATE.get("audio_input_enabled"):
-        event = _audio_input_event("blocked", block_reason="audio_input_disabled")
-        STATE = reduce_metis_event(STATE, event)
-        return {
-            "status": "blocked",
-            "block_reason": "audio_input_disabled",
-            "captured": False,
-            "state": STATE,
-            "leds": resolve_leds(STATE),
-        }
-
-    listen_mode = STATE.get("listen_mode", "no_listen")
-    if listen_mode == "no_listen":
-        event = _audio_input_event("blocked", block_reason="listen_mode_no_listen")
-        STATE = reduce_metis_event(STATE, event)
-        return {
-            "status": "blocked",
-            "block_reason": "listen_mode_no_listen",
-            "captured": False,
-            "state": STATE,
-            "leds": resolve_leds(STATE),
-        }
-
-    if STATE.get("power_state") != "awake":
-        event = _audio_input_event("blocked", block_reason="standby_blocks_capture")
-        STATE = reduce_metis_event(STATE, event)
-        return {
-            "status": "blocked",
-            "block_reason": "standby_blocks_capture",
+            "block_reason": block_reason,
             "captured": False,
             "state": STATE,
             "leds": resolve_leds(STATE),

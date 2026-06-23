@@ -28,9 +28,9 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BA` |
-| Focus | Modular simulation-first audio-input + STT layer (`audio_input_adapter.v0.1`, `stt_engine.v0.1`). |
-| Verification | `319 passed` under Python 3.11. |
+| Current phase | `0BB` |
+| Focus | Real local microphone capture via `LocalMicAudioInput`, triple-gated and opt-in. |
+| Verification | `336 passed` under Python 3.11 (no real mic required). |
 
 Implemented phase groups:
 
@@ -42,7 +42,7 @@ Implemented phase groups:
 - Tool planning and review flow: `0AH`, `0AI`, `0AJ`, `0AK`, `0AL`, `0AM`, `0AN`, `0AO`.
 - Tool-aware chat and voice controls: `0AP`, `0AQ`, `0AR`, `0AS`, `0AT`, `0AU`, `0AV`, `0AW`, `0AX`, `0AY`.
 - Physical radio panel: `0AZ`.
-- Audio input + STT: `0BA`.
+- Audio input + STT: `0BA`, `0BB`.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -75,6 +75,21 @@ Phase 0AY implemented:
 - The trace is refreshed from `state.event_log` alongside chat/state panels.
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
+
+Phase 0BB implemented:
+
+- `LocalMicAudioInput` is now a real capture provider, triple-gated:
+  1. `METIS_AUDIO_ALLOW_LOCAL_MIC=true` (env opt-in, checked inside `capture()` only).
+  2. `mic_hardware_enabled` (state flag, enforced by `_audio_capture_governance()` before the provider is called).
+  3. `audio_input_enabled` (state flag, same governance layer).
+- `sounddevice` is lazy-imported inside `capture()` only — never at module load time. If absent, returns `dependency_unavailable` without crashing.
+- Real capture: records a short fixed-duration mono PCM sample via `sounddevice.rec()`, writes it to a tempfile WAV, analyses it with the shared Piper WAV-analysis helpers (`_wav_level_envelope`, `_wav_spectrum_frames`, `_wav_duration_ms`), then deletes the tempfile. Raw PCM and the tempfile path are never stored.
+- `GET /metis/audio/input` now includes `allow_local_mic`, `sounddevice_available`, and `input_devices` (input-capable devices by name/index) when the env flag is set; all tolerate the dep being absent.
+- `_audio_capture_governance()` extended with `require_listen_mode` parameter; all three audio routes (`/capture`, `/transcribe`, `/listen`) now use it consistently.
+- Added `mic = ["sounddevice>=0.4"]` optional extra in `pyproject.toml` (`pip install -e ".[mic]"`).
+- `docs/LOCAL_MIC_SMOKE_TEST.md`: manual PowerShell smoke-test script.
+- `mic_hardware_enabled` note: in production this flag should be driven by the physical cutoff switch wired through the bridge. The `METIS_AUDIO_ALLOW_LOCAL_MIC` env flag is an interim proxy for the software layer.
+- 17 new tests; full suite: `336 passed` under Python 3.11 with no real microphone.
 
 Phase 0BA implemented:
 
