@@ -126,7 +126,7 @@ class SimulatedSTT(STTProvider):
         if not hint:
             hint = "default"
 
-        recognized = SIMULATED_TRANSCRIPT_MAP.get(hint, SIMULATED_TRANSCRIPT_MAP["default"])
+        recognized = SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or SIMULATED_TRANSCRIPT_MAP["default"]
         text_hash = hashlib.sha1(recognized.encode("utf-8")).hexdigest()[:16]
 
         result = STTResult(

@@ -574,6 +574,46 @@
       <div class="status-line">Displays redacted simulated command and confirmation events only; raw transcript text and audio are not stored here.</div>
       <div id="voiceTrace" class="voice-trace"></div>
     </section>
+    <section class="span-12" id="voiceConversationTestPanel">
+      <h2>Voice Conversation Test</h2>
+      <div class="status-line">Event-driven and bounded — one listen cycle per explicit trigger. Mic cutoff is the highest-precedence gate. Raw audio and transcript are not persisted.</div>
+      <div class="tool-row">
+        <label style="margin-right:8px"><input id="vcAudioInputEnabled" type="checkbox" onchange="vcSetAudioInput(this.checked)"> Audio Input</label>
+        <label style="margin-right:8px"><input id="vcMicHardware" type="checkbox" onchange="vcSetMicHardware(this.checked)"> Mic Hardware</label>
+        <select id="vcListenMode" onchange="vcSetListenMode(this.value)" title="Listen mode">
+          <option value="no_listen">no_listen</option>
+          <option value="push_to_talk">push_to_talk</option>
+          <option value="wake_word">wake_word</option>
+        </select>
+      </div>
+      <div class="tool-row">
+        <label>Audio:</label>
+        <select id="vcAudioProvider">
+          <option value="simulated">simulated</option>
+          <option value="local_mic">local_mic</option>
+        </select>
+        <label style="margin-left:8px">STT:</label>
+        <select id="vcSttProvider">
+          <option value="simulated">simulated</option>
+          <option value="faster_whisper">faster_whisper</option>
+        </select>
+        <label style="margin-left:8px">Duration ms:</label>
+        <input id="vcDurationMs" type="number" value="3000" min="500" max="30000" style="width:80px">
+        <label style="margin-left:8px">Hint/fixture:</label>
+        <input id="vcHint" type="text" placeholder="git status" style="width:200px">
+      </div>
+      <div class="tool-row">
+        <button onclick="vcListenOnce()">Listen Once</button>
+        <button onclick="vcPttPress()">PTT Press</button>
+        <button onclick="vcPttRelease()">PTT Release</button>
+      </div>
+      <div class="tool-row">
+        <input id="vcWakeText" type="text" placeholder="hey metis git status" style="width:300px">
+        <button onclick="vcSendWake()">Send Wake Phrase</button>
+      </div>
+      <div id="vcStatus" class="status-line"></div>
+      <pre id="vcResult" style="max-height:200px;overflow-y:auto;font-size:12px;margin-top:6px"></pre>
+    </section>
     <section class="span-12">
       <h2>Tools</h2>
       <div class="tool-row">
@@ -1770,9 +1810,120 @@
       document.getElementById('activityText').textContent = data.leds.activity_led.state;
       document.getElementById('authorityText').textContent = data.leds.authority_led.state;
       updateRadio(data.state, data.leds);
+      vcSyncState(data.state);
       const existing = await fetch('/metis/scenario/results').then(r => r.json());
       document.getElementById('scenarios').textContent = JSON.stringify(existing, null, 2);
     }
+    // --- Voice Conversation Test panel ---
+    function vcSyncState(state) {
+      if (!state) return;
+      const ai = document.getElementById('vcAudioInputEnabled');
+      if (ai) ai.checked = Boolean(state.audio_input_enabled);
+      const mic = document.getElementById('vcMicHardware');
+      if (mic) mic.checked = Boolean(state.mic_hardware_enabled);
+      const mode = document.getElementById('vcListenMode');
+      if (mode) mode.value = state.listen_mode || 'no_listen';
+    }
+    async function vcSetAudioInput(enabled) {
+      await fetch('/metis/event', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({type:'button_event', button:'audio_input', state: enabled ? 'on' : 'off'})});
+      await refresh();
+    }
+    async function vcSetMicHardware(enabled) {
+      await fetch('/metis/event', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({type:'hardware_privacy', device:'mic', enabled: Boolean(enabled)})});
+      await refresh();
+    }
+    async function vcSetListenMode(mode) {
+      await fetch('/metis/event', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({type:'button_event', button:'listen_mode', state: mode})});
+      await refresh();
+    }
+    function vcPayload() {
+      return {
+        provider: document.getElementById('vcAudioProvider').value || 'simulated',
+        stt_provider: document.getElementById('vcSttProvider').value || 'simulated',
+        duration_ms: parseInt(document.getElementById('vcDurationMs').value) || 3000,
+        hint: document.getElementById('vcHint').value.trim() || 'default',
+        options: voiceChatOptions(),
+      };
+    }
+    function vcShowResult(label, result, error) {
+      const statusEl = document.getElementById('vcStatus');
+      const resultEl = document.getElementById('vcResult');
+      if (error) {
+        statusEl.textContent = label + ' error: ' + error;
+        resultEl.textContent = '';
+        return;
+      }
+      const outer = result.status || label;
+      const inner = result.voice_command ? (result.voice_command.status || '') : '';
+      const route = result.route_used ? ' (' + result.route_used + ')' : '';
+      const trigger = (result.state && result.state.last_listen_trigger) ? ' trigger:' + result.state.last_listen_trigger : '';
+      statusEl.textContent = outer + (inner && inner !== outer ? ' / ' + inner : '') + route + trigger;
+      const safe = {
+        status: result.status,
+        route_used: result.route_used,
+        stt: result.stt,
+        capture: result.capture,
+        listen_session_active: result.state && result.state.listen_session_active,
+        last_listen_trigger: result.state && result.state.last_listen_trigger,
+        voice_command_status: result.voice_command && result.voice_command.status,
+        voice_confirmation: result.voice_command && result.voice_command.voice_confirmation,
+        message: (result.voice_command && result.voice_command.message) || result.message,
+        proposal_queued: result.voice_command && result.voice_command.proposal_queued,
+      };
+      resultEl.textContent = JSON.stringify(safe, null, 2);
+      if (result.state && result.leds) {
+        renderChat(result.state.chat_history);
+        renderVoiceTrace(result.state.event_log);
+        updateRadio(result.state, result.leds);
+        vcSyncState(result.state);
+      }
+      const voice = (result.voice_command && result.voice_command.voice) || result.voice;
+      if (voice) pulseRadioFromVoice(voice);
+    }
+    async function vcListenOnce() {
+      document.getElementById('vcStatus').textContent = 'Listening…';
+      try {
+        const r = await fetch('/metis/audio/listen', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify(vcPayload())});
+        vcShowResult('listen', await r.json());
+      } catch(e) { vcShowResult('listen', {}, String(e)); }
+    }
+    async function vcPttPress() {
+      document.getElementById('vcStatus').textContent = 'PTT pressed…';
+      try {
+        const r = await fetch('/metis/audio/ptt', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'press'})});
+        const result = await r.json();
+        document.getElementById('vcStatus').textContent = result.status || 'ptt_pressed';
+        if (result.state) { updateRadio(result.state, result.leds || {}); vcSyncState(result.state); }
+        await refresh();
+      } catch(e) { document.getElementById('vcStatus').textContent = String(e); }
+    }
+    async function vcPttRelease() {
+      document.getElementById('vcStatus').textContent = 'PTT release — listening…';
+      try {
+        const payload = vcPayload();
+        payload.action = 'release';
+        const r = await fetch('/metis/audio/ptt', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        vcShowResult('ptt_release', await r.json());
+      } catch(e) { vcShowResult('ptt_release', {}, String(e)); }
+    }
+    async function vcSendWake() {
+      const text = document.getElementById('vcWakeText').value.trim();
+      if (!text) { document.getElementById('vcStatus').textContent = 'Enter wake phrase text first.'; return; }
+      document.getElementById('vcStatus').textContent = 'Sending wake phrase…';
+      try {
+        const payload = Object.assign(vcPayload(), {text: text});
+        const r = await fetch('/metis/audio/wake', {method:'POST',
+          headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+        vcShowResult('wake', await r.json());
+      } catch(e) { vcShowResult('wake', {}, String(e)); }
+    }
+    // --- end Voice Conversation Test panel ---
     document.getElementById('chatInput').addEventListener('keydown', handleChatKeydown);
     refresh();
     refreshLlmOptions();

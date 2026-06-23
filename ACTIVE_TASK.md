@@ -1,7 +1,40 @@
 # Active Task
 
-**Current active task:** Phase `0BE` — Voice-only approval confirmation: wire real audio → STT
-into `/metis/voice/confirm` with readback + explicit-phrase gating.
+**Current active task:** Phase `0BF` — Physical radio panel wiring (bridge emulator → panel
+contract; see `docs/PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md` and `metis_head/panel.py`).
+
+---
+
+## Phase 0BE — COMPLETE
+
+Phase 0BE wired the existing `/metis/voice/confirm` flow into the shared
+`_run_listen_cycle` so a spoken approval phrase arriving via PTT, wake, or direct
+`audio/listen` can confirm a pending proposal without a separate HTTP call.
+
+### Delivered
+
+- **`_run_listen_cycle` routing fork**: after STT, calls `_parse_voice_confirmation` +
+  `_pending_proposals`. If pending proposals exist AND the recognized text contains a
+  decision phrase or explicit proposal ID → routes to `voice_confirm`; otherwise routes
+  to `voice_command` as before. Response includes `route_used` field.
+- **`SimulatedSTT` passthrough**: `SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default`
+  — unknown hints return the hint text verbatim, enabling injection of arbitrary
+  confirmation phrases in tests.
+- **Voice Conversation Test panel** in `dashboard.html`: controls for audio input, mic
+  hardware, listen mode, audio provider, STT provider, duration, and hint. Buttons: Listen
+  Once, PTT Press, PTT Release, Send Wake Phrase. Syncs with server state on every
+  `refresh()`. Reuses `voiceChatOptions()`, `pulseRadioFromVoice()`, `renderVoiceTrace()`,
+  `updateRadio()`.
+- **13 new tests** in `tests/test_phase_0be_voice_confirm_listen.py`. Full suite: **402 passed**.
+- **`docs/VOICE_CONVERSATION_TEST.md`**: PowerShell smoke-test instructions.
+
+### Boundary (preserved)
+
+`execution_allowed` remains `false` after spoken confirmation. No standing approval.
+Mic cutoff highest precedence — blocks the PTT release before `_run_listen_cycle` is
+entered. Recognized text not persisted; `STTResult.to_dict()` exposes only
+`text_len`/`text_hash`/`text_redacted`. No background listener. One utterance per
+explicit trigger.
 
 ---
 

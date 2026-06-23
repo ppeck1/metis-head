@@ -2206,7 +2206,16 @@ def _run_listen_cycle(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
         }
 
     options = payload.get("options") if isinstance(payload.get("options"), dict) else {}
-    vc_response = voice_command({"text": recognized_text, "options": options})
+
+    parsed_intent = _parse_voice_confirmation(recognized_text)
+    if _pending_proposals() and (
+        parsed_intent["decision"] is not None or parsed_intent["proposal_id"] is not None
+    ):
+        vc_response = voice_confirm({"text": recognized_text, "options": options})
+        route_used = "voice_confirm"
+    else:
+        vc_response = voice_command({"text": recognized_text, "options": options})
+        route_used = "voice_command"
 
     complete_event = _audio_input_event(
         "complete", capture=capture_result, stt_result=stt_result, trigger=trigger
@@ -2220,6 +2229,7 @@ def _run_listen_cycle(payload: dict[str, Any], trigger: str) -> dict[str, Any]:
         "capture": capture_result.to_dict(),
         "stt": stt_result.to_dict(),
         "voice_command": vc_response,
+        "route_used": route_used,
         "state": STATE,
         "leds": resolve_leds(STATE),
     }
