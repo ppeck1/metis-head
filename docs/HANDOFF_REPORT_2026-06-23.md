@@ -6,15 +6,15 @@
 |---|---|
 | Repo | `B:\dev\metis_head\metis_head` |
 | Branch | `main` |
-| Latest commit | `77447e9` — Phase 0BD: event-driven push-to-talk and wake-word listen loop |
-| Current phase | `0BD` |
-| Verification | `389 passed` under Python 3.11 |
+| Latest commit | `4b0a58f` — Phase 0BE: spoken confirmation routing in audio listen path |
+| Current phase | `0BE` |
+| Verification | `402 passed` under Python 3.11 |
 | Public repo target | `https://github.com/ppeck1/metis-head` |
-| Variable map version | `metis_variable_map.v0.2` |
+| Variable map version | `metis_variable_map.v0.3` |
 
 ---
 
-## What Phases 0BA–0BD Added
+## What Phases 0BA–0BE Added
 
 ### 0BA — Simulated audio input + STT substrate
 
@@ -37,6 +37,15 @@
 - Disabled scaffolds: `VoskSTT`, `OpenAIWhisperSTT`, `WhisperCppSTT` (no imports, return `not_enabled`).
 - `METIS_STT_ENGINE` env var (default `simulated`) selects the active STT engine.
 - `stt-whisper = ["faster-whisper>=1.0"]` optional extra in `pyproject.toml`. No PyTorch or openai-whisper dependency.
+
+### 0BE — Spoken confirmation routing in the audio listen path
+
+- **`_run_listen_cycle` routing fork**: after STT, calls `_parse_voice_confirmation` + `_pending_proposals`. If pending proposals exist AND recognized text contains a decision phrase or explicit proposal_id → routes to `voice_confirm`; otherwise `voice_command`. Response includes `route_used` (`"voice_confirm"` or `"voice_command"`).
+- **`SimulatedSTT` passthrough**: `SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default` — unknown hints return the hint text verbatim. Enables test injection of arbitrary confirmation phrases (including dynamic proposal IDs) without changing the static map.
+- **Governance preserved**: `voice_confirm` still requires explicit decision phrase AND explicit proposal_id. Ambiguous phrases (e.g., "yes", "confirm approve" without ID) return `readback_required`. Mic cutoff blocks PTT release before `_run_listen_cycle` is entered. `execution_allowed` remains `false`; no standing approval.
+- **Dashboard Voice Conversation Test panel**: audio/listen, PTT press/release, and wake-phrase controls with audio provider, STT provider, duration, and hint fields. Syncs with server state on every `refresh()`. Reuses `voiceChatOptions()`, `pulseRadioFromVoice()`, `renderVoiceTrace()`, `updateRadio()`.
+- **13 new tests** in `tests/test_phase_0be_voice_confirm_listen.py`; full suite: **402 passed**.
+- **`docs/VOICE_CONVERSATION_TEST.md`**: PowerShell smoke-test instructions for simulated, local mic + faster-whisper, and Piper voice output paths.
 
 ### 0BD — Event-driven push-to-talk and wake-word listen loop
 
@@ -73,20 +82,22 @@
 | Real local STT via faster-whisper (env-gated) | Active (env-gated) |
 | Push-to-talk listen loop (`POST /metis/audio/ptt`) | Active |
 | Wake-word listen loop (`POST /metis/audio/wake`) | Active (simulated detector) |
+| Spoken confirmation routing (PTT/wake/listen → confirm) | Active (Phase 0BE) |
 | Real wake-word engine (openWakeWord / Porcupine) | Scaffold only |
 | Physical radio panel | Contract defined; hardware wiring future |
-| Voice-only approval confirmation (PTT/wake → confirm) | Next phase (0BE) |
 
 ---
 
 ## Audio/Voice Path — What Works Now
 
 1. Caller presses PTT → `POST /metis/audio/ptt {"action":"press"}` → `listen_session_active=true`.
-2. Caller releases PTT → `POST /metis/audio/ptt {"action":"release", "hint":"<fixture>"}` → one capture→STT→voice_command cycle. Proposal queued but not executed.
+2. Caller releases PTT → `POST /metis/audio/ptt {"action":"release", "hint":"<fixture>"}` → one capture→STT→route cycle. `route_used` is `"voice_command"` or `"voice_confirm"` depending on pending proposals and phrase content.
 3. Caller speaks wake phrase → `POST /metis/audio/wake {"text":"hey metis <command>"}` → phrase stripped → one cycle on remainder.
-4. Recognized text enters `POST /metis/voice/command` only; redacted in all state/events.
-5. Mic cutoff (`hardware_privacy device=mic state=off`) blocks press, release, and wake before any capture.
-6. All governance blocks return a structured `status: blocked` response; no partial state.
+4. If pending proposals exist and recognized text contains a decision phrase + proposal ID → routes to `POST /metis/voice/confirm` → confirms/denies/cancels with `execution_allowed=false`, no standing approval.
+5. Ambiguous phrases (no proposal ID or unrecognized decision) → `readback_required`; proposal stays pending.
+6. Recognized text never stored; `STTResult.to_dict()` exposes only `text_len`/`text_hash`/`text_redacted`.
+7. Mic cutoff (`hardware_privacy device=mic state=off`) blocks press, release, and wake before any capture.
+8. All governance blocks return a structured `status: blocked` response; no partial state.
 
 Real mic path (opt-in):
 
@@ -156,6 +167,25 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/wake `
   -ContentType "application/json" -Body '{"text":"hey metis git status"}'
 ```
 
+Spoken confirmation example (simulated, Phase 0BE):
+
+```powershell
+# Queue a proposal then confirm it by spoken phrase via PTT
+$r = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
+  -ContentType "application/json" -Body '{"action":"release","hint":"git status"}'
+$proposalId = $r.state.approval_queue[0].proposal_id
+
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
+  -ContentType "application/json" -Body '{"action":"press"}'
+$c = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/ptt `
+  -ContentType "application/json" `
+  -Body (ConvertTo-Json @{action="release"; hint="confirm approve $proposalId"})
+
+# Expected: route_used=voice_confirm, confirmation_accepted=True, execution_allowed=False
+$c.route_used
+$c.voice_command.voice_confirmation
+```
+
 ---
 
 ## Important Files
@@ -171,7 +201,9 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/wake `
 | `metis_head/stt.py` | STT providers including `LocalFasterWhisperSTT`. |
 | `metis_head/reducer.py` | Event reducer; handles all PTT/wake state transitions. |
 | `metis_head/schemas.py` | `baseline_state()` including new 0BD fields. |
-| `tests/test_phase_0bd_ptt_wake.py` | 28 new tests for PTT/wake routing, no-op paths, redaction, no execution. |
+| `tests/test_phase_0bd_ptt_wake.py` | 28 tests for PTT/wake routing, no-op paths, redaction, no execution. |
+| `tests/test_phase_0be_voice_confirm_listen.py` | 13 tests for spoken confirmation routing, readback, mic cutoff, redaction, no execution. |
+| `docs/VOICE_CONVERSATION_TEST.md` | Smoke-test instructions for simulated, local mic, and Piper paths. |
 | `scripts/launch_metis.ps1` | Repo-root-aware launch script. |
 
 ---
@@ -180,29 +212,23 @@ Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8787/metis/audio/wake `
 
 - Mic cutoff (`mic_hardware_enabled=false`) blocks all capture. Highest precedence.
 - `listen_session_active=true` is informational; governance still fires on release.
-- Recognized text is redacted: `STTResult.to_dict()` exposes only `text_len`/`text_hash`/`text_redacted`. Raw text enters only `POST /metis/voice/command`.
+- Recognized text is redacted: `STTResult.to_dict()` exposes only `text_len`/`text_hash`/`text_redacted`. Raw text enters `voice_command` or `voice_confirm` only; never stored in state or event log.
 - No background threads. No always-listening standby. One utterance per explicit trigger.
 - No new execution authority. All routing goes through the existing governed proposal/review/receipt chain.
+- `execution_allowed` remains `false` after any PTT, wake, or spoken confirmation cycle.
+- `standing_approval` is never granted by spoken confirmation.
 - `external_action_executed` remains `false` after any PTT or wake cycle.
 
 ---
 
 ## Recommended Next Phase
 
-### 0BE — Voice-only approval confirmation
+### 0BF — Physical radio panel wiring
 
-Wire `_run_listen_cycle` output into `/metis/voice/confirm` so a spoken approve/deny phrase arriving via PTT or wake can confirm a pending proposal without a separate HTTP call.
-
-Scope:
-- When a listen cycle produces recognized text and no tool route matches (or the user says something like "yes approve" / "deny proposal_..."), attempt `voice_command → confirm` routing.
-- Existing `readback_required` / explicit-phrase gate from 0AX remains.
-- Gate everything behind `mic_hardware_enabled` + `listen_mode` governance.
-- `execution_allowed` stays `false`. No new execution authority.
-- Add tests: spoken `"hey metis approve proposal_..."` via wake path confirms the proposal; ambiguous `"hey metis yes"` returns `readback_required`; mic cutoff blocks before confirm.
+Wire the panel contract (`docs/PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md` and `metis_head/panel.py`) to the bridge emulator so the physical Magnavox radio's buttons, knobs, and PTT report as governed events. The software path is complete through 0BE; 0BF is the hardware integration step.
 
 ### Future
 
-- **0BF / 1A** — Physical radio panel wiring (panel contract already defined in `docs/PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md` and `metis_head/panel.py`).
 - **Real mic PTT** — Wire the physical PTT button through the bridge emulator to `POST /metis/audio/ptt`.
 - **Real wake-word engine** — Implement `LocalWakeWordDetector.detect()` using openWakeWord or Porcupine; no streaming thread; keep event-driven contract.
 
