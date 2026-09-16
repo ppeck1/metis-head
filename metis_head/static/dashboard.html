@@ -547,6 +547,8 @@
   <header>
     <h1>Metis Head Mock Brain</h1>
     <div class="controls">
+      <a href="/setup"><button type="button">Setup / Connections</button></a>
+      <span id="buildId" class="label">build loading…</span>
       <button onclick="refresh()">Refresh</button>
       <button onclick="runAll()">Run Scenarios</button>
       <button onclick="postEvent({type:'button_event',button:'loud',state:'off'})">Mute Output</button>
@@ -614,6 +616,7 @@
         <label class="toggle-inline"><input id="voiceReplyEnabled" type="checkbox"> Voice replies</label>
         <button onclick="refreshVoiceOptions()">Refresh Voices</button>
         <button onclick="previewVoice()">Preview Voice</button>
+        <button id="retryVoicePlayback" onclick="retryClientVoice()" hidden>Play blocked audio</button>
         <button onclick="stopClientVoice()">Stop Voice</button>
       </div>
       <div id="piperControls" class="tool-row" style="display:none;">
@@ -622,12 +625,10 @@
         <input id="piperConfig" type="text" placeholder="Piper .onnx.json config path">
       </div>
       <div class="tool-row" aria-label="Personal context selection">
-        <select id="googleAccount" onchange="discoverGoogleCalendars()"><option value="">No Google account</option></select>
-        <select id="googleCalendars" multiple size="3" aria-label="Selected Google calendars"></select>
+        <span id="googleProfileLabels">No Google labels loaded.</span>
         <input id="conversationTimezone" type="text" value="America/New_York" aria-label="Conversation timezone">
         <input id="atlasProject" type="text" placeholder="Atlas project name" aria-label="Selected Atlas project">
-        <button onclick="savePersonalContext()">Save Personal Context</button>
-        <button onclick="refreshGoogleAccounts()">Refresh Accounts</button>
+        <button onclick="location.href='/setup'">Manage connections</button>
       </div>
       <div id="personalContextStatus" class="status-line"></div>
       <div id="voiceStatus" class="status-line"></div>
@@ -678,27 +679,28 @@
       </div>
       <div class="tool-row">
         <label>Audio:</label>
-        <select id="vcAudioProvider">
+        <select id="vcAudioProvider" onchange="vcUpdateCaptureControls()">
           <option value="simulated">simulated</option>
-          <option value="local_mic">local_mic</option>
+          <option value="local_mic" selected>browser microphone</option>
         </select>
         <label style="margin-left:8px">STT:</label>
         <select id="vcSttProvider">
           <option value="simulated">simulated</option>
-          <option value="faster_whisper">faster_whisper</option>
+          <option value="faster_whisper" selected>faster_whisper</option>
         </select>
         <label style="margin-left:8px">Duration ms:</label>
         <input id="vcDurationMs" type="number" value="3000" min="500" max="30000" style="width:80px">
         <label style="margin-left:8px">Hint/fixture:</label>
         <input id="vcHint" type="text" placeholder="git status" style="width:200px">
       </div>
-      <div class="tool-row">
+      <div class="tool-row" id="vcFixtureControls">
         <button onclick="vcListenOnce()">Listen Once</button>
         <button onclick="vcPttPress()">PTT Press</button>
         <button onclick="vcPttRelease()">PTT Release</button>
+        <span class="status-line">Simulated-input controls</span>
       </div>
       <div class="tool-row">
-        <button id="vcHoldToTalk" onpointerdown="vcBrowserPttDown(event)" onpointerup="vcBrowserPttUp(event)" onpointercancel="vcBrowserPttCancel(event)" style="user-select:none;touch-action:none">Hold to Talk</button>
+        <button id="vcHoldToTalk" onpointerdown="vcBrowserPttDown(event)" onpointerup="vcBrowserPttUp(event)" onpointercancel="vcBrowserPttCancel(event)" style="user-select:none;touch-action:none">Hold to Talk (browser mic)</button>
         <span id="vcBrPttStatus" style="margin-left:8px;font-style:italic;color:#666"></span>
       </div>
       <div class="tool-row">
@@ -840,14 +842,24 @@
       <pre id="eventLog"></pre>
     </section>
   </main>
-  <script src="/static/voice_capture.js"></script>
-  <script src="/static/conversation_client.js"></script>
+  <script src="/static/voice_capture.js?v=20260916b"></script>
+  <script src="/static/conversation_client.js?v=20260916b"></script>
   <script>
     const metisConversation = new MetisConversationClient();
     const metisPlayback = new MetisPlaybackController(undefined, undefined, {
-      getSessionId: () => metisConversation.sessionId
+      getSessionId: () => metisConversation.sessionId,
+      onStateChange: (event) => {
+        const retry = document.getElementById('retryVoicePlayback');
+        retry.hidden = event.state !== 'blocked';
+        const status = document.getElementById('voiceStatus');
+        if (event.state === 'blocked') status.textContent = 'Browser playback was blocked. Click Play blocked audio.';
+        if (event.state === 'playing') status.textContent = 'Browser playback started. Confirm separately whether it is audible.';
+        if (event.state === 'completed') status.textContent = 'Browser playback completed.';
+        if (event.state === 'failed') status.textContent = `Browser playback failed: ${event.failure_code || 'unknown error'}`;
+      }
     });
     const privateChatHistory = [];
+    let setupActiveContext = {account_ids: [], calendars_by_account: {}};
     window.addEventListener('pagehide', () => {
       metisPlayback.stop('page_closed');
       metisConversation.close();
@@ -1292,99 +1304,85 @@
       return options;
     }
     async function previewVoice() {
-      const voice = voiceChatOptions();
-      const response = await fetch('/metis/voice/preview', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({...voice, enabled: true, text: 'Metis voice preview.'})
-      });
-      const result = await response.json();
-      document.getElementById('voiceStatus').textContent = response.ok
-        ? `${result.provider}:${result.voice_id} / ${result.spoken ? 'spoken' : result.block_reason || 'not spoken'}`
-        : String(result.detail || 'Voice preview failed');
-      if (response.ok && result.voice_schema) {
-        pulseRadioFromVoice(result);
+      try {
+        const voice = voiceChatOptions();
+        const sessionId = await metisConversation.ensureSession(conversationContext());
+        const response = await fetch('/metis/voice/preview', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            ...voice, session_id: sessionId, client_id: metisConversation.clientId,
+            enabled: true, text: 'Metis voice preview.'
+          })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : JSON.stringify(result.detail));
+        document.getElementById('voiceStatus').textContent =
+          `${result.provider}:${result.voice_id} / ${result.metadata?.playback_id ? 'queued for this browser' : result.block_reason || 'not queued'}`;
+        if (result.voice_schema) {
+          pulseRadioFromVoice(result);
+        } else {
+          await metisPlayback.playNext(metisConversation.clientId);
+        }
+        await refresh();
+      } catch (error) {
+        document.getElementById('voiceStatus').textContent = `Voice preview failed: ${String(error)}`;
       }
-      await refresh();
-    }
-    function selectedCalendarIds() {
-      return [...document.getElementById('googleCalendars').selectedOptions].map(option => option.value);
     }
     function conversationContext() {
+      const accountIds = setupActiveContext.account_ids || [];
+      const calendarMap = setupActiveContext.calendars_by_account || {};
       return {
-        account_id: document.getElementById('googleAccount').value || null,
-        calendar_ids: selectedCalendarIds(),
+        account_id: accountIds.length === 1 ? accountIds[0] : null,
+        account_ids: accountIds,
+        calendar_ids: accountIds.length === 1 ? (calendarMap[accountIds[0]] || []) : [],
+        calendars_by_account: calendarMap,
         timezone: document.getElementById('conversationTimezone').value.trim() || 'America/New_York',
         project_id: document.getElementById('atlasProject').value.trim() || null
       };
     }
+    async function refreshSetupContext() {
+      try {
+        const setupStatus = await fetch('/metis/setup').then(response => response.json());
+        if (setupStatus.setup?.provider?.choice === 'ollama') {
+          document.getElementById('chatProvider').value = 'ollama';
+          if (setupStatus.setup.provider.base_url) document.getElementById('ollamaBaseUrl').value = setupStatus.setup.provider.base_url;
+          if (setupStatus.setup.provider.model) {
+            const modelSelect = document.getElementById('ollamaModel');
+            if (![...modelSelect.options].some(option => option.value === setupStatus.setup.provider.model)) {
+              modelSelect.add(new Option(setupStatus.setup.provider.model));
+            }
+            modelSelect.value = setupStatus.setup.provider.model;
+          }
+        }
+        if (setupStatus.setup?.voice) {
+          document.getElementById('voiceReplyEnabled').checked = Boolean(setupStatus.setup.voice.enabled);
+          document.getElementById('voiceProvider').value = setupStatus.setup.voice.engine;
+          renderVoiceIds(setupStatus.setup.voice.voice_id || undefined);
+        }
+        setupActiveContext = await fetch('/metis/setup/conversation-context').then(async response => {
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.detail || 'Setup context unavailable');
+          return result;
+        });
+        const labels = Object.values(setupActiveContext.labels || {});
+        document.getElementById('googleProfileLabels').textContent = labels.length
+          ? `Google labels: ${labels.join(', ')}. Mention a label when you want Google data.`
+          : 'No Google accounts connected.';
+        const build = await fetch('/metis/build').then(response => response.json());
+        document.getElementById('buildId').textContent = `build ${build.build_id}`;
+      } catch (error) {
+        document.getElementById('personalContextStatus').textContent = String(error);
+      }
+    }
     async function refreshGoogleAccounts() {
       const status = document.getElementById('personalContextStatus');
       try {
-        const response = await fetch('/metis/connectors/google/accounts');
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || 'Google account discovery failed');
-        const select = document.getElementById('googleAccount');
-        const previous = select.value;
-        select.innerHTML = '<option value="">No Google account</option>';
-        for (const account of result.accounts || []) {
-          const option = document.createElement('option');
-          option.value = account.account_id;
-          option.textContent = `${account.account_id} (${account.status})`;
-          select.appendChild(option);
-        }
-        if ([...select.options].some(option => option.value === previous)) select.value = previous;
-        status.textContent = `${result.count || 0} Google account(s) configured.`;
-        if (select.value) await discoverGoogleCalendars();
-      } catch (error) {
-        status.textContent = String(error);
-      }
-    }
-    async function discoverGoogleCalendars() {
-      const accountId = document.getElementById('googleAccount').value;
-      const calendars = document.getElementById('googleCalendars');
-      calendars.innerHTML = '';
-      if (!accountId) return;
-      const status = document.getElementById('personalContextStatus');
-      status.textContent = 'Discovering authorized calendars...';
-      try {
-        const response = await fetch('/metis/connectors/google/calendars', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({account_id: accountId})
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || 'Calendar discovery failed');
-        for (const calendar of result.data || []) {
-          const option = document.createElement('option');
-          option.value = calendar.calendar_id;
-          option.textContent = calendar.primary ? `${calendar.name} (primary)` : calendar.name;
-          option.selected = Boolean(calendar.selected);
-          calendars.appendChild(option);
-        }
-        status.textContent = result.error ? result.error.message : `${(result.data || []).length} authorized calendar(s) discovered.`;
-      } catch (error) {
-        status.textContent = String(error);
-      }
-    }
-    async function savePersonalContext() {
-      const context = conversationContext();
-      const status = document.getElementById('personalContextStatus');
-      try {
-        const sessionId = await metisConversation.ensureSession(context);
-        if (context.account_id) {
-          const selectionResponse = await fetch('/metis/connectors/google/selection', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({account_id: context.account_id, calendar_ids: context.calendar_ids, session_id: sessionId})
-          });
-          const selection = await selectionResponse.json();
-          if (!selectionResponse.ok) throw new Error(selection.detail || 'Calendar selection failed');
-        }
-        const contextResponse = await fetch(`/metis/sessions/${encodeURIComponent(sessionId)}/context`, {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(context)
-        });
-        const result = await contextResponse.json();
-        if (!contextResponse.ok) throw new Error(result.detail || 'Personal context update failed');
-        status.textContent = 'Personal context saved for this tab; calendar selection is persisted server-side.';
+        await refreshSetupContext();
+        const labels = Object.values(setupActiveContext.labels || {});
+        status.textContent = labels.length
+          ? `${labels.length} labeled Google connection(s). Metis routes by label and asks if unclear.`
+          : 'No Google accounts configured.';
       } catch (error) {
         status.textContent = String(error);
       }
@@ -1416,6 +1414,7 @@
       document.getElementById('chatStatus').textContent = 'Generating...';
       try {
         if (metisPlayback.current) await stopClientVoice(true);
+        await routeProfileForMessage(message);
         const result = await metisConversation.requestChat(message, chatOptions(), conversationContext());
         privateChatHistory.push({role: 'user', content: message}, {role: 'assistant', content: result.message});
         const labels = [`${result.provider}:${result.model}`];
@@ -1447,6 +1446,39 @@
       } finally {
         sendButton.disabled = false;
       }
+    }
+    async function routeProfileForMessage(message) {
+      const response = await fetch('/metis/setup/resolve-profile', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message})
+      });
+      const resolved = await response.json();
+      if (!response.ok) throw new Error(resolved.detail || 'Profile-label routing failed');
+      const current = setupActiveContext.account_ids || [];
+      const next = resolved.account_ids || [];
+      const shouldAdopt = resolved.explicit_match || (resolved.status === 'sole_profile' && current.length === 0);
+      if (shouldAdopt) {
+        if (JSON.stringify(current) !== JSON.stringify(next) && metisConversation.sessionId) {
+          await metisConversation.close();
+          privateChatHistory.length = 0;
+          renderChat(privateChatHistory);
+        }
+        setupActiveContext = {...setupActiveContext, ...resolved};
+        document.getElementById('personalContextStatus').textContent =
+          `Using Google label${resolved.matched_labels.length === 1 ? '' : 's'}: ${resolved.matched_labels.join(', ')}.`;
+      } else if (current.length === 0 && resolved.status === 'clarification_required') {
+        setupActiveContext = {
+          ...setupActiveContext,
+          account_ids: [],
+          account_id: null,
+          calendars_by_account: {},
+          calendar_ids: []
+        };
+        document.getElementById('personalContextStatus').textContent =
+          `No Google label selected. Metis can ask which of: ${resolved.available_labels.join(', ')}.`;
+      }
+      return resolved;
     }
     function handleChatKeydown(event) {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -2097,6 +2129,13 @@
         document.getElementById('voiceStatus').textContent = 'Client playback failed: ' + String(error);
       }
     }
+    async function retryClientVoice() {
+      try {
+        await metisPlayback.resumeBlocked();
+      } catch (error) {
+        document.getElementById('voiceStatus').textContent = 'Client playback retry failed: ' + String(error);
+      }
+    }
     async function stopClientVoice(notifyServer = true) {
       metisPlayback.stop('client_stopped');
       if (notifyServer) {
@@ -2167,6 +2206,27 @@
       if (mic) mic.checked = Boolean(state.mic_hardware_enabled);
       const mode = document.getElementById('vcListenMode');
       if (mode) mode.value = state.listen_mode || 'no_listen';
+      vcUpdateCaptureControls();
+    }
+    function vcUpdateCaptureControls() {
+      const provider = document.getElementById('vcAudioProvider')?.value || 'simulated';
+      const fixtures = document.getElementById('vcFixtureControls');
+      if (fixtures) fixtures.style.display = provider === 'simulated' ? 'flex' : 'none';
+      const hold = document.getElementById('vcHoldToTalk');
+      if (hold) hold.disabled = provider !== 'local_mic';
+      const browserStatus = document.getElementById('vcBrPttStatus');
+      if (browserStatus && !browserStatus.textContent) {
+        browserStatus.textContent = provider === 'local_mic'
+          ? 'Hold the button while speaking; release to transcribe.'
+          : 'Select local_mic to use this browser microphone.';
+      }
+    }
+    function vcErrorDetail(detail) {
+      if (typeof detail === 'string') return detail;
+      if (detail && typeof detail === 'object') {
+        return detail.blocked_reason || detail.message || JSON.stringify(detail);
+      }
+      return 'Voice request failed';
     }
     async function vcSetAudioInput(enabled) {
       await fetch('/metis/event', {method:'POST', headers:{'Content-Type':'application/json'},
@@ -2208,6 +2268,7 @@
       statusEl.textContent = outer + (inner && inner !== outer ? ' / ' + inner : '') + route + trigger + blockHint;
       const safe = {
         status: result.status,
+        recognized_text: result.recognized_text,
         block_reason: result.block_reason || undefined,
         route_used: result.route_used,
         stt: result.stt,
@@ -2434,7 +2495,13 @@
           document.getElementById('vcBrPttStatus').textContent = 'Voice session expired. Press and speak again to create a new session; audio was not replayed.';
           return;
         }
-        if (!response.ok) throw new Error(result.detail || 'Voice request failed');
+        if (!response.ok) {
+          const detail = vcErrorDetail(result.detail);
+          document.getElementById('vcBrPttStatus').textContent = response.status === 502
+            ? 'Microphone capture completed; the model reply failed: ' + detail
+            : 'Voice processing failed: ' + detail;
+          throw new Error(detail);
+        }
         const reply = result.voice_command;
         if (result.recognized_text && reply && reply.message) {
           privateChatHistory.push(
@@ -2443,8 +2510,16 @@
           );
           renderChat(privateChatHistory);
         }
+        document.getElementById('vcBrPttStatus').textContent = result.recognized_text
+          ? 'Transcribed: "' + result.recognized_text + '"'
+          : (result.status === 'no_text_recognized' ? 'No speech was recognized.' : 'Voice turn completed.');
         vcShowResult('browser_ptt', result);
-      } catch(e) { vcShowResult('browser_ptt', {}, String(e)); }
+      } catch(e) {
+        if (document.getElementById('vcBrPttStatus').textContent === 'Finalizing local WAV…') {
+          document.getElementById('vcBrPttStatus').textContent = 'Voice request failed: ' + String(e);
+        }
+        vcShowResult('browser_ptt', {}, String(e));
+      }
     }
     async function vcBrowserPttCancel(evt) {
       evt.preventDefault();
@@ -2459,7 +2534,8 @@
     refresh();
     refreshLlmOptions();
     refreshVoiceOptions();
-    refreshGoogleAccounts();
+    vcUpdateCaptureControls();
+    refreshSetupContext().then(refreshGoogleAccounts);
     refreshTools();
     refreshToolPlans();
     refreshBohStatus();

@@ -176,6 +176,46 @@ class GoogleReadBroker:
     def selected_calendar_ids(self, account_id: str) -> tuple[str, ...]:
         return self._selections.get(account_id, ())
 
+    def restrict_to(
+        self,
+        account_ids: Sequence[str],
+        calendars_by_account: Mapping[str, Sequence[str]],
+    ) -> "GoogleReadBroker":
+        """Return an enforcement clone limited to one conversation's exact grants."""
+        allowed = frozenset(account_ids)
+        broker = GoogleReadBroker(
+            {key: value for key, value in self._transports.items() if key in allowed},
+            {key: value for key, value in self._grants.items() if key in allowed},
+            clock=self._clock,
+        )
+        broker._selections = {
+            account_id: tuple(
+                dict.fromkeys(str(item) for item in calendars_by_account.get(account_id, ()) if str(item))
+            )
+            for account_id in allowed
+        }
+        broker._enforce_selections = True
+        return broker
+
+    def restrict_to(
+        self,
+        account_ids: Sequence[str],
+        calendars_by_account: Mapping[str, Sequence[str]],
+    ) -> "GoogleReadBroker":
+        """Return an enforcement clone limited to one conversation's exact grants."""
+        allowed = frozenset(account_ids)
+        broker = GoogleReadBroker(
+            {key: value for key, value in self._transports.items() if key in allowed},
+            {key: value for key, value in self._grants.items() if key in allowed},
+            clock=self._clock,
+        )
+        broker._selections = {
+            account_id: tuple(dict.fromkeys(str(item) for item in calendars_by_account.get(account_id, ()) if str(item)))
+            for account_id in allowed
+        }
+        broker._enforce_selections = True
+        return broker
+
     def list_calendars(
         self, *, account_id: str, max_calendars: int = 100, max_pages: int = 10
     ) -> ConnectorResult[tuple[GoogleCalendar, ...]]:

@@ -9,9 +9,9 @@ Public repository target: `https://github.com/ppeck1/metis-head`
 
 <!-- PROJECT_OPS_CAPSULE:README_AUDIT_START -->
 Project Ops Capsule:
-- Last run ID: 20260630-194344-metis-mcp-live-test
+- Last run ID: 20260916-metis-completion-release
 - Last README audit: updated
-- Last verified: 2026-06-30T19:43:44-04:00
+- Last verified: 2026-09-16
 <!-- PROJECT_OPS_CAPSULE:README_AUDIT_END -->
 
 ## Project Media
@@ -34,9 +34,14 @@ Reference and dashboard media are tracked for public review:
 |---|---|
 | Current phase | Completion release candidate (`G0`-`G5` fixture integration) |
 | Focus | Private contextual sessions, real browser WAV PTT, typed tool loop, Google read adapters, credential/budget boundaries, and truthful readiness. |
-| Verification | `571 passed in 13.05s` under Python 3.11 after the C01-C10 and independent-review regressions. Isolated wheel install and packaged browser assets are verified. Live device/account/model acceptance remains separate. |
+| Verification | Completion release verified under Python 3.11 (`603 passed`), including user-confirmed browser microphone input and Piper audio output, faster-whisper transcription, persisted Ollama selection, and resumable setup state. Live Google consent remains operator-completed. |
 
 Completion-release behavior:
+
+- Open `/setup` for the permanent resumable provider, speaker, microphone, Google-profile, and project setup flow. Settings are backend-persisted; browser storage never holds credentials.
+- The saved Setup conversation provider and Ollama model drive Virtual Chat and voice turns after restart. `Mock` remains an explicit deterministic test fixture, not the normal configured conversation path.
+- Voice Preview now enters the same session-owned browser playback queue as a spoken reply. A separate user-clicked tone isolates browser/OS output from Piper and model setup.
+- Four editable Google profile slots support one default or an explicit authorized set; switching a dashboard profile closes the old private conversation.
 
 - Each browser tab owns a private bounded session. Session transcripts are used transiently for context but are redacted from global state and safe exports.
 - Hold to Talk captures bounded WAV audio only after server authorization, posts it to the local STT route, and supports cancellation during permission, capture, model work, synthesis, and browser playback.
@@ -1265,13 +1270,13 @@ This keeps each commit reviewable without needing to rediscover the architecture
 Run tests:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m pytest
+python -m pytest -q
 ```
 
 Run the mock Brain:
 
 ```powershell
-.\scripts\launch_metis.ps1 -PythonExe "C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe" -Port 8787
+.\scripts\launch_metis.ps1 -PythonExe "python" -Port 8787
 ```
 
 Dashboard:
@@ -1286,7 +1291,8 @@ is started from another directory.
 
 ## LLM Provider Config
 
-Default provider is mock:
+When neither the environment nor saved Setup state selects a live provider, the safe fallback is
+the deterministic mock provider:
 
 ```powershell
 $env:METIS_LLM_PROVIDER="mock"
@@ -1298,11 +1304,15 @@ Ollama:
 $env:METIS_LLM_PROVIDER="ollama"
 $env:METIS_OLLAMA_BASE_URL="http://127.0.0.1:11434"
 $env:METIS_OLLAMA_MODEL="llama3.1"
+$env:METIS_OLLAMA_TIMEOUT_SECONDS="120" # bounded 10-600 seconds
 ```
 
-The dashboard can also select `Ollama` in the Virtual Chat panel, refresh models
-from the configured base URL, and send the selected model in the chat request.
-This is a UI override; it does not change your shell environment.
+The setup wizard persists the selected conversation provider, base URL, and model in the
+non-secret per-user setup state. Unless an environment variable explicitly overrides it, the
+dashboard restores that saved Ollama selection after restart. The Virtual Chat panel can refresh
+the locally installed model list and sends the selected model with both typed and voice turns.
+The timeout remains bounded; the longer default accommodates first-token warm-up for larger local
+models.
 
 OpenAI:
 
@@ -1338,12 +1348,12 @@ $env:METIS_PIPER_PLAYBACK_MODE="async"                 # async or sync
 $env:METIS_VOICE_NORMALIZE_TEXT="true"
 ```
 
-Default local Piper paths are auto-detected when installed/downloaded:
+Default local Piper assets are auto-detected when installed/downloaded:
 
 ```text
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\Scripts\piper.exe
-B:\dev\metis_head\metis_head\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx
-B:\dev\metis_head\metis_head\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx.json
+<python-scripts>\piper.exe
+<repo>\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx
+<repo>\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx.json
 ```
 
 `system` is present as a gated provider shape only. Real OS speech remains disabled unless
@@ -1358,7 +1368,9 @@ Set `METIS_PIPER_PLAYBACK=true` only for legacy playback on the backend Windows 
 
 ## Audio Input + STT Config (Phase 0BB / 0BC)
 
-Real microphone capture and real STT are each opt-in. Neither is active by default.
+Browser microphone capture is user-gesture and permission gated. It does not require the
+server-host microphone adapter. The tracked launcher enables local faster-whisper defaults when
+the variables are otherwise unset; direct process startup remains fail-closed.
 
 ```powershell
 # Real mic capture (Phase 0BB) â€” requires pip install -e ".[mic]"
@@ -1376,9 +1388,10 @@ should be driven by the physical cutoff switch wired through the bridge; the env
 interim software proxies. See `docs/LOCAL_MIC_SMOKE_TEST.md` and `docs/LOCAL_STT_SMOKE_TEST.md`
 for manual smoke-test steps.
 
-In-memory audio (`_wav_bytes`) and recognized text (`_recognized_text`) are never written to state,
-the event log, or any response payload. Recognized text enters `POST /metis/voice/command` or
-`POST /metis/voice/confirm` only (Phase 0BE routing fork); it is never persisted.
+In-memory audio (`_wav_bytes`) and recognized text (`_recognized_text`) are never written to
+canonical state or the event log. The recognized text is returned transiently to the requesting
+local browser so the operator can verify transcription, then enters `POST /metis/voice/command` or
+`POST /metis/voice/confirm`; safe exports retain only length/hash metadata.
 
 ## BOH Retrieval Bridge Config (Phase 0B)
 
@@ -1408,25 +1421,25 @@ are not executed.
 Emit one canonical bridge event as JSON:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator control initiative 0.82 --raw 839
+python -m metis_head.bridge_emulator control initiative 0.82 --raw 839
 ```
 
 Post an event directly to a running mock Brain:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator --post http://127.0.0.1:8787 button am_fm fm
+python -m metis_head.bridge_emulator --post http://127.0.0.1:8787 button am_fm fm
 ```
 
 Replay a JSONL bridge log locally through the deterministic reducer:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator replay .\events.jsonl --local-final-state
+python -m metis_head.bridge_emulator replay .\events.jsonl --local-final-state
 ```
 
 Replay JSONL into the mock Brain:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator --post http://127.0.0.1:8787 replay .\events.jsonl
+python -m metis_head.bridge_emulator --post http://127.0.0.1:8787 replay .\events.jsonl
 ```
 
 ### Background Link Manager (Phase 0C)
@@ -1559,7 +1572,7 @@ Project Atlas proposal tools remain proposal-only in Metis and are not invoked b
 Last verified:
 
 ```text
-421 passed under Python 3.11
+603 passed under Python 3.11
 ```
 
 Coverage includes:

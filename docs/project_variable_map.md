@@ -259,6 +259,8 @@ Before committing any phase:
 | `METIS_STATE_DIR` | directory path | `%LOCALAPPDATA%\MetisHead` on Windows; XDG/local-state equivalent elsewhere | `runtime_paths.py` | Per-user writable root; avoids installed-package state. |
 | `METIS_CONNECTIONS_FILE` | file path | `<state-dir>\connections.json` | credentials/Google | Non-secret connection, grant, and selected-calendar metadata. |
 | `METIS_USAGE_FILE` | file path | `<state-dir>\usage.json` | usage accounting | Durable paid-usage ledger override; paid application dispatch remains disabled. |
+| `METIS_SETUP_FILE` | file path | `<state-dir>\setup.json` | setup wizard | Versioned non-secret provider, audio-verification, and four-profile preference state. |
+| `METIS_BUILD_ID` | string | derived Git revision | runtime evidence | Optional sanitized source identity override; never include credentials or private paths. |
 
 ---
 
@@ -395,7 +397,8 @@ Provider events pass through the same reducer used by `/metis/event`. Non-event 
 |---|---|---|---|
 | `METIS_LLM_PROVIDER` | `mock`, `ollama`, `openai` | `mock` | Selects the Phase 0R virtual chat provider. |
 | `METIS_OLLAMA_BASE_URL` | URL | `http://127.0.0.1:11434` | Ollama API base URL. |
-| `METIS_OLLAMA_MODEL` | model name | none | Required when `METIS_LLM_PROVIDER=ollama`. |
+| `METIS_OLLAMA_MODEL` | model name | saved Setup model or none | Environment override takes precedence over the non-secret provider/model saved by `/setup`. |
+| `METIS_OLLAMA_TIMEOUT_SECONDS` | seconds | `120` | Shared local-model request/orchestration bound; invalid values fall back to 120 and valid values are clamped to 10-600. |
 | `OPENAI_API_KEY` | secret | none | Never committed. Legacy direct dispatch is fail-closed; production paid use additionally requires the bounded adapter and an explicit budget. |
 | `METIS_OPENAI_MODEL` | model name | `gpt-4o-mini` | Paid model identifier; configuration alone does not enable dispatch. |
 

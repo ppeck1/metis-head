@@ -113,6 +113,7 @@
         const sessionId = this.getSessionId();
         return !sessionId || command.session_id === sessionId;
       });
+      this.onStateChange = typeof options.onStateChange === 'function' ? options.onStateChange : function () {};
       this.current = null;
       this._epoch = 0;
     }
@@ -148,12 +149,30 @@
       active.audio.onerror = null;
       try { active.audio.pause(); } catch (_) {}
       this._ack(active.command, active.clientId, 'failed', reason || 'client_stopped').catch(() => {});
+      this._notify('failed', active.command, reason || 'client_stopped');
+    }
+
+    async resumeBlocked() {
+      const active = this.current;
+      if (!active || !active.blocked || active.settled) return null;
+      try {
+        await active.audio.play();
+      } catch (error) {
+        if (error && error.name === 'NotAllowedError') {
+          this._notify('blocked', active.command, 'audio_play_rejected');
+          return null;
+        }
+        await active.finish('failed', 'audio_play_rejected');
+        return null;
+      }
+      return this._confirmStarted(active);
     }
 
     async _play(command, clientId, epoch) {
       const audio = new this.AudioType(command.audio_ref);
-      const active = {audio, command, clientId, epoch, settled: false, started: false, pendingTerminal: null};
+      const active = {audio, command, clientId, epoch, settled: false, started: false, blocked: false, pendingTerminal: null};
       this.current = active;
+      this._notify('loading', command);
       const finish = async (state, failureCode) => {
         if (active.settled) return;
         if (!active.started && state !== 'failed') {
@@ -163,15 +182,27 @@
         active.settled = true;
         if (this.current === active) this.current = null;
         await this._ack(command, clientId, state, failureCode);
+        this._notify(state, command, failureCode);
       };
+      active.finish = finish;
       audio.onended = () => { finish('completed').catch(() => {}); };
       audio.onerror = () => { finish('failed', 'audio_decode_failed').catch(() => {}); };
       try {
         await audio.play();
-      } catch (_) {
+      } catch (error) {
+        if (error && error.name === 'NotAllowedError') {
+          active.blocked = true;
+          this._notify('blocked', command, 'audio_play_rejected');
+          return command;
+        }
         await finish('failed', 'audio_play_rejected');
         return null;
       }
+      return this._confirmStarted(active);
+    }
+
+    async _confirmStarted(active) {
+      const {audio, command, clientId, epoch, finish} = active;
       if (epoch !== this._epoch || this.current !== active) {
         try { audio.pause(); } catch (_) {}
         await finish('failed', 'stale_playback');
@@ -188,6 +219,8 @@
         throw error;
       }
       active.started = true;
+      active.blocked = false;
+      this._notify('playing', command);
       if (active.pendingTerminal) {
         const pending = active.pendingTerminal;
         active.pendingTerminal = null;
@@ -219,6 +252,10 @@
       });
       if (!response.ok) throw new Error(`Playback acknowledgement rejected (${response.status}).`);
       return response.json();
+    }
+
+    _notify(state, command, failureCode) {
+      try { this.onStateChange({state, command, failure_code: failureCode || null}); } catch (_) {}
     }
   }
 

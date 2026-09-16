@@ -76,6 +76,8 @@ class SessionContext:
     project_id: str | None = None
     timezone: str | None = None
     calendar_ids: tuple[str, ...] = ()
+    account_ids: tuple[str, ...] = ()
+    calendars_by_account: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +213,8 @@ class SessionStore:
         project_id: str | None | object = _UNSET,
         timezone: str | None | object = _UNSET,
         calendar_ids: Iterable[str] | None = None,
+        account_ids: Iterable[str] | None = None,
+        calendars_by_account: Mapping[str, Iterable[str]] | None = None,
     ) -> SessionSnapshot:
         """Atomically replace selectable context for an active session.
 
@@ -224,6 +228,12 @@ class SessionStore:
                 project_id=session.context.project_id if project_id is _UNSET else project_id,  # type: ignore[arg-type]
                 timezone=session.context.timezone if timezone is _UNSET else timezone,  # type: ignore[arg-type]
                 calendar_ids=session.context.calendar_ids if calendar_ids is None else tuple(calendar_ids),
+                account_ids=session.context.account_ids if account_ids is None else tuple(account_ids),
+                calendars_by_account=(
+                    session.context.calendars_by_account
+                    if calendars_by_account is None
+                    else tuple((key, tuple(values)) for key, values in calendars_by_account.items())
+                ),
             )
             session.context = self._normalize_context(candidate)
             session.updated_at = self._clock()
@@ -354,6 +364,7 @@ class SessionStore:
             "active": snapshot.active,
             "context": {
                 "account_selected": snapshot.context.account_id is not None,
+                "selected_account_count": len(snapshot.context.account_ids),
                 "project_selected": snapshot.context.project_id is not None,
             },
             "history": [
@@ -413,11 +424,38 @@ class SessionStore:
                 calendars.append(clean)
             if len(calendars) > 32:
                 raise ValueError("too many selected calendars")
+        accounts: list[str] = []
+        for value in context.account_ids:
+            clean = scalar(value, "account_id")
+            if clean is not None and clean not in accounts:
+                accounts.append(clean)
+            if len(accounts) > 8:
+                raise ValueError("too many selected accounts")
+        primary = scalar(context.account_id, "account_id")
+        if accounts and primary and primary not in accounts:
+            raise ValueError("primary account must be within selected accounts")
+        calendar_map: list[tuple[str, tuple[str, ...]]] = []
+        for raw_account, raw_calendars in context.calendars_by_account:
+            clean_account = scalar(raw_account, "account_id")
+            if clean_account is None or clean_account not in accounts:
+                raise ValueError("calendar account must be within selected accounts")
+            clean_calendars: list[str] = []
+            for value in raw_calendars:
+                clean = scalar(value, "calendar_id")
+                if clean is not None and clean not in clean_calendars:
+                    clean_calendars.append(clean)
+                if len(clean_calendars) > 32:
+                    raise ValueError("too many selected calendars")
+            calendar_map.append((clean_account, tuple(clean_calendars)))
+        if accounts and primary and calendars and not any(item[0] == primary for item in calendar_map):
+            calendar_map.append((primary, tuple(calendars)))
         return SessionContext(
-            account_id=scalar(context.account_id, "account_id"),
+            account_id=primary,
             project_id=scalar(context.project_id, "project_id"),
             timezone=scalar(context.timezone, "timezone"),
             calendar_ids=tuple(calendars),
+            account_ids=tuple(accounts),
+            calendars_by_account=tuple(calendar_map),
         )
 
     def _accepts_locked(self, session: _Session | None, token: TurnToken) -> bool:

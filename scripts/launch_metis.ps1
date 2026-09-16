@@ -20,6 +20,9 @@ $McpGateDefaults = @{
     METIS_MCP_ENABLED = "true"
     METIS_MCP_BOH_ENABLED = "true"
     METIS_MCP_ATLAS_ENABLED = "true"
+    METIS_STT_ALLOW_LOCAL = "true"
+    METIS_STT_ENGINE = "faster_whisper"
+    METIS_STT_MODEL = "base.en"
 }
 
 foreach ($Name in $McpGateDefaults.Keys) {

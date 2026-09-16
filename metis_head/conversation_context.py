@@ -19,6 +19,9 @@ class TrustedConversationContext:
     selected_project_id: str | None
     available_accounts: tuple[str, ...]
     allowed_tools: tuple[str, ...]
+    selected_account_ids: tuple[str, ...] = ()
+    selected_calendars_by_account: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    profile_labels: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +52,13 @@ def assemble_conversation_context(
     calendars = ", ".join(trusted.selected_calendar_ids) or "none selected"
     tools = ", ".join(trusted.allowed_tools) or "none"
     selected_account = trusted.selected_account_id or "none selected"
+    selected_accounts = ", ".join(trusted.selected_account_ids) or selected_account
+    calendar_map = "; ".join(
+        f"{account}: {', '.join(calendar_ids) or 'none selected'}"
+        for account, calendar_ids in trusted.selected_calendars_by_account
+    ) or f"{selected_account}: {calendars}"
     selected_project = trusted.selected_project_id or "none selected"
+    profile_labels = ", ".join(trusted.profile_labels) or "none"
     system = (
         f"{personality_system_prompt(mode)}\n\n"
         "You are Metis Head's governed personal conversation coordinator. "
@@ -59,8 +68,13 @@ def assemble_conversation_context(
         f"Trusted current local datetime: {now_text}. Trusted timezone: {trusted.timezone_name}. "
         f"Connected account identifiers available to choose from: {accounts}. "
         f"Selected account: {selected_account}. Selected calendars: {calendars}. "
+        f"Server-authorized account set for this conversation: {selected_accounts}. "
+        f"Authorized calendar selections by account: {calendar_map}. "
+        f"User-facing Google profile labels: {profile_labels}. "
         f"Selected project: {selected_project}. Allowed tool names: {tools}. "
-        "Use selected identifiers when present. If an ambiguity materially changes the result, ask the user rather than guessing. "
+        "Use selected identifiers when present. Refer to Google accounts by their user-facing profile labels, not by email or internal identifier. "
+        "When multiple profile labels are available and the user's Google-data request does not make the intended label clear, ask which label to use rather than guessing. "
+        "If an ambiguity materially changes the result, ask the user rather than guessing. "
         "For relative dates such as tomorrow or Friday, compute an explicit timezone-aware interval and perform a fresh read. "
         f"Conversation depth: {state.get('conversation_depth_bucket')}; initiative: {state.get('initiative_bucket')}; "
         f"interaction mode: {state.get('interaction_mode')}; personality version: {PERSONALITY_VERSION}."

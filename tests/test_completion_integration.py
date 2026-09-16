@@ -89,8 +89,50 @@ def test_browser_capture_authorizes_before_microphone_and_emits_wav():
     assert "track.stop()" in source
     assert "audio/wav" in source
     dashboard = (Path(__file__).resolve().parents[1] / "metis_head" / "static" / "dashboard.html").read_text(encoding="utf-8")
-    assert '<script src="/static/voice_capture.js"></script>' in dashboard
+    assert '<script src="/static/voice_capture.js?v=' in dashboard
     assert "form.append('audio', wav" in dashboard
+    assert 'id="vcFixtureControls"' in dashboard
+    assert "Hold to Talk (browser mic)" in dashboard
+    assert "Microphone capture completed; the model reply failed:" in dashboard
+
+
+def test_local_ollama_timeout_is_long_enough_for_model_warmup(monkeypatch):
+    monkeypatch.setenv("METIS_OLLAMA_TIMEOUT_SECONDS", "175")
+    coordinator = brain._build_personal_coordinator(
+        {"model": "fixture"},
+        broker=GoogleReadBroker({}, {}),
+    )
+
+    assert coordinator._limits.max_total_seconds == 175
+
+
+def test_llm_options_uses_persisted_setup_when_environment_is_unset(monkeypatch):
+    class SetupFixture:
+        def load(self):
+            return {
+                "provider": {
+                    "choice": "ollama",
+                    "model": "saved-model:latest",
+                    "base_url": "http://127.0.0.1:11434",
+                }
+            }
+
+    monkeypatch.delenv("METIS_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("METIS_OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("METIS_OLLAMA_BASE_URL", raising=False)
+    monkeypatch.setattr(brain, "_setup_store", lambda: SetupFixture())
+    monkeypatch.setattr(brain, "list_ollama_models", lambda base_url: {
+        "available": True,
+        "base_url": base_url,
+        "models": [{"name": "saved-model:latest"}],
+        "error": None,
+    })
+
+    options = brain.llm_options()
+
+    assert options["selected_provider"] == "ollama"
+    assert options["ollama_model"] == "saved-model:latest"
+    assert options["ollama_base_url"] == "http://127.0.0.1:11434"
 
 
 def test_legacy_local_mic_ptt_is_explicitly_disabled_until_press_time_capture_exists():

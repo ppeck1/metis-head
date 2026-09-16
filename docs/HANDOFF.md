@@ -1,34 +1,37 @@
-# Handoff
+# Current Handoff — setup, browser audio, and labeled connections
 
-## Candidate
+Source baseline is commit `97467f832aed067997a8f27cefb0ffd44cc9705f` on `codex/metis-completion-2026-09-16`, with the current working changes identified in the UI as `97467f832aed+working`.
 
-- Branch: `codex/metis-completion-2026-09-16`
-- Baseline: `5eebb0384416116e6244542cac3224664963cf32`
-- Scope: local typed/browser-voice assistant with private sessions, Ollama tool loop, selected read-only Google data, and named Atlas/BOH reads.
-- Boundary: no deployment, publication, external mutation, paid request, or MCE activation.
+## Implemented
 
-## Capability status
+- `/setup` is a permanent resumable page. Speaker tone, owned Piper preview, microphone level/capture, local transcription, Google connections, and provider checks are separate and retryable.
+- Voice preview now requires a browser session and uses the same artifact ownership, playback queue, acknowledgements, Stop, and cancellation lifecycle as conversational speech. The former preview path synthesized a WAV but never queued it for the browser.
+- The speaker test is a user-clicked Web Audio tone independent of LLM, Google, STT, Piper, and backend audio. Software completion and the user's audibility confirmation remain separate.
+- Browser calls bind native `window.fetch`, fixing the former `Illegal invocation` preview failure. Static setup/dashboard responses use no-store caching and versioned script URLs.
+- Autoplay rejection retains the owned command and exposes **Play blocked audio**; acknowledgements are sent only after a successful retry.
+- The microphone setup check supplies capture authorization, displays input level, and calls `/metis/setup/audio/transcribe`; audio/text are transient and no LLM is invoked.
+- **Connect Google account** accepts a Desktop OAuth client JSON in memory, opens Google consent, verifies identity, and stores tokens only in Windows Credential Manager. Only real connections render and each has a Remove button.
+- Google labels route exact account/calendar authorization. Multiple labels plus an unclear request authorize no account and instruct the model to ask rather than guess. The dashboard account picker and setup checkboxes are removed.
+- Provider choices are truthful: Ollama is selectable; ordinary OpenAI API and Codex App Server are visible but unavailable because neither production dispatch nor the required least-authority integration is composed.
+- `/metis/build` exposes sanitized source attribution. Port 8787 was restarted from this checkout after a stale process was found serving an older route set.
 
-Component and controlled production-path fixtures cover early turn ownership, cancellation/error recovery, browser WAV capture, owned playback, authoritative context, Google discovery/selections/grants, Atlas registry/provenance, and concurrent durable paid accounting. Live microphone, speech models, OAuth accounts, Ollama model, and current MCP sources remain target-machine checks.
+## Verified on this workstation
 
-Final local verification: `571 passed in 13.05s`; compileall, dashboard JavaScript parsing, and diff hygiene passed. An independent read-only review found three integration gaps, which were repaired and covered by delayed-retrieval/pre-registration cancellation, attribution, session selection, unselected-calendar, and cross-account denial regressions.
+- Ollama is reachable and the installed `qwen3.5:9b` model is reported available. No model has been selected on Paul's behalf in saved setup.
+- Full suite: `601 passed in 15.59s`.
+- Real Piper synthesis queued an owned WAV (59,948 bytes, RIFF). A second 86,060-byte Piper phrase was transcribed by local faster-whisper (`base.en`) with `persisted=false`.
+- OAuth start with a fake desktop configuration returned a Google authorization URL and `client_config_persisted=false`.
+- Physical audibility, live browser microphone capture, Google consent, full browser conversation, and Stop timing remain manual because browser control failed during initialization. Software tests do not imply Paul heard sound.
+- Four profile slots exist, but zero Google identities are currently connected. Live four-account acceptance therefore remains blocked on user sign-in/consent.
 
-OpenAI chat is deliberately unavailable in the application even if an API key exists. The accounting foundation is tested, but production paid-provider composition requires a separate credential/pricing decision and authorization.
+## Exact next local check
 
-## Extracted boundaries
+1. Open `http://127.0.0.1:8787/setup` and confirm the build label ends in `+working`.
+2. Select an installed Ollama model and run the bounded provider test.
+3. Click **Play local tone**, then record **I heard it** or **I did not hear it**.
+4. Click **Play real speech preview**. This creates a fresh owned artifact; do not prefetch its one-use URL.
+5. Start a microphone sample, speak, stop, and verify the displayed real transcript.
+6. Choose a private Desktop OAuth JSON, click **Connect Google account**, complete consent, and assign a label. Repeat or remove connections as needed.
+7. Return to Metis, name a label in a Google request, verify an ambiguous new request causes a question, press Stop during speech, then run another turn.
 
-- `conversation/`: private sessions, turn tokens, legal state transitions, cancellation.
-- `audio/` and `static/conversation_client.js`: bounded artifacts, playback queue/acknowledgements, browser epochs.
-- `conversation_context.py`: trusted clock/selections/capabilities and separately delimited untrusted BOH evidence.
-- `connectors/` and `personal_orchestration.py`: Google/Atlas transports, grants, discovery, tool registry, provenance.
-- `model_adapters/`: bounded provider-neutral and local Ollama codecs.
-- `usage/`: reservations, reconciliation, cross-process locking, exports.
-- `runtime_paths.py` and `startup_readiness.py`: installed-state paths and truthful capability checks.
-
-## Verification and blockers
-
-See `docs/COMPLETION_LEDGER.md` for C01-C10/N0-N8 status and `docs/ACCEPTANCE.md` for exact setup and live checks. Live results must not be inferred from fixture results.
-
-## Rollback
-
-Use the branch/commit history and scoped diffs. Never run a blanket reset/clean against this checkout; earlier Phase 0BH-0BM work and local ignored configuration coexist with this candidate.
+No deployment, remote exposure, paid request, credential export, or write-capable Google/Atlas/BOH operation was added.

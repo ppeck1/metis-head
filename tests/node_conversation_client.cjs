@@ -156,6 +156,50 @@ async function rejectedPlayGetsPreStartFailureAck() {
   assert.equal(controller.current, null);
 }
 
+async function blockedAutoplayCanResumeFromUserGesture() {
+  class InitiallyBlockedAudio extends FakeAudio {
+    constructor(src) {
+      super(src);
+      this.attempts = 0;
+    }
+    async play() {
+      this.attempts += 1;
+      if (this.attempts === 1) {
+        const error = new Error('user gesture required');
+        error.name = 'NotAllowedError';
+        throw error;
+      }
+      this.played = true;
+    }
+  }
+  const calls = [];
+  const states = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({url, options});
+    if (url.startsWith('/metis/playback/next')) {
+      return response({command: {kind: 'play', playback_id: 'blocked', session_id: 's', audio_ref: '/blocked'}});
+    }
+    return response({status: 'accepted'});
+  };
+  const controller = new MetisPlaybackController(fetchImpl, InitiallyBlockedAudio, {
+    getSessionId: () => 's',
+    onStateChange: (event) => states.push(event.state)
+  });
+  const command = await controller.playNext('tab');
+  assert.equal(command.playback_id, 'blocked');
+  assert.equal(controller.current.blocked, true);
+  assert.equal(calls.filter((call) => call.url === '/metis/playback/ack').length, 0);
+  await controller.resumeBlocked();
+  controller.current.audio.onended();
+  await settle();
+  const acknowledgements = calls.filter((call) => call.url === '/metis/playback/ack')
+    .map((call) => JSON.parse(call.options.body).state);
+  assert.deepEqual(acknowledgements, ['started', 'completed']);
+  assert.ok(states.includes('blocked'));
+  assert.ok(states.includes('playing'));
+  assert.ok(states.includes('completed'));
+}
+
 async function main() {
   await deduplicatesSessionCreation();
   await cancellationBeforeSessionRegistrationDispatchesNoChat();
@@ -164,6 +208,7 @@ async function main() {
   await lateQueueResponseCannotRestartAfterStop();
   await drainsStopThenPlaysAndAcknowledges();
   await rejectedPlayGetsPreStartFailureAck();
+  await blockedAutoplayCanResumeFromUserGesture();
   process.stdout.write('conversation client lifecycle tests passed\n');
 }
 

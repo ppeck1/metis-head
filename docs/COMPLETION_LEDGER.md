@@ -1,5 +1,20 @@
 # Completion Release Ledger
 
+## 2026-09-16 browser audio/setup increment
+
+| Task | Owner | Dependencies | Status | Acceptance evidence / blocker |
+|---|---|---|---|---|
+| Owned speech preview | coordinator | session/playback lifecycle | implemented, automated/live-backend verified | Piper generated a queued, decodable non-silent WAV; physical audibility needs Paul |
+| Speaker + microphone diagnostics | browser/audio module | browser user gesture | implemented, automated verified | target-browser bridge unavailable; manual UI check remains |
+| Resumable setup state/UI | setup module + coordinator | runtime paths/readiness | implemented | four non-secret profile slots and revisioned persistence; `/setup` served on active runtime |
+| Exact profile sets | coordinator | Google metadata/session auth | implemented, fixture verified | exact selected set reaches authorization; live identities require OAuth consent |
+| Provider choices | provider module | official documentation | implemented | Ollama enabled; OpenAI API/Codex App Server visibly unavailable, no hidden paid fallback |
+| Review export | coordinator | final suite/evidence | pending final packaging | generated after final test run |
+
+The audio root cause was not Piper or Windows: the preview endpoint synthesized an artifact but never bound it to a session/turn or enqueued a browser playback command. The repaired endpoint fails unless owned playback is queued.
+
+Final integrated suite after independent-review authorization fixes: `598 passed in 16.04s`.
+
 Baseline: `5eebb0384416116e6244542cac3224664963cf32` plus preserved uncommitted Phase 0BH-0BM work. Branch: `codex/metis-completion-2026-09-16`. No reset, clean, push, deployment, external write, paid request, or MCE activation was performed.
 
 Evidence states are deliberately separate: component, production-path fixture, and live target-machine evidence.

@@ -16,6 +16,7 @@
       this.authorize = options.authorize;
       this.cleanup = typeof options.cleanup === 'function' ? options.cleanup : async function () {};
       this.onStatus = options.onStatus || function () {};
+      this.onLevel = typeof options.onLevel === 'function' ? options.onLevel : function () {};
       this.mediaDevices = options.mediaDevices || (global.navigator && global.navigator.mediaDevices);
       this.AudioContextType = options.AudioContext || global.AudioContext || global.webkitAudioContext;
       this.frameSize = positiveInteger(options.frameSize, 4096);
@@ -157,6 +158,9 @@
       }
       this.frames.push(new Float32Array(samples));
       this.sampleCount += samples.length;
+      let sumSquares = 0;
+      for (let index = 0; index < samples.length; index += 1) sumSquares += samples[index] * samples[index];
+      this.onLevel(Math.min(1, Math.sqrt(sumSquares / Math.max(1, samples.length)) * 4));
     }
 
     _isCurrent(epoch) {

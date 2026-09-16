@@ -3,13 +3,16 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from hashlib import sha1
 from pathlib import Path
+import html
 import re
 import os
+import json
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from .artifacts import ArtifactError, list_artifacts, read_artifact, save_artifact
@@ -57,6 +60,10 @@ from .personal_orchestration import atlas_registry_entries, google_broker_entrie
 from .mcp_access import call_configured_mcp_tool
 from .conversation_context import TrustedConversationContext, assemble_conversation_context, trusted_now
 from .runtime_paths import connections_path
+from .setup_state import SetupStateError, SetupStateStore
+from .provider_capabilities import provider_capabilities
+from .build_info import build_info
+from .google_oauth_web import GoogleOAuthWebError, GoogleOAuthWebManager
 
 
 @asynccontextmanager
@@ -74,6 +81,7 @@ SCENARIO_RESULTS: list[dict[str, Any]] = []
 SESSIONS = SessionStore()
 PLAYBACK = PlaybackQueue(SESSIONS.accepts)
 ACTIVE_PERSONAL_COORDINATORS: dict[str, PersonalConversationCoordinator] = {}
+GOOGLE_OAUTH_WEB = GoogleOAuthWebManager()
 BROWSER_PTT_MAX_UPLOAD_BYTES = 1_000_000
 BROWSER_PTT_ALLOWED_CONTENT_TYPES = {
     "audio/wav",
@@ -87,17 +95,157 @@ BROWSER_PTT_WAV_TYPES = {"audio/wav", "audio/wave", "audio/x-wav", "application/
 
 @app.get("/")
 def dashboard() -> FileResponse:
-    return FileResponse(Path(__file__).parent / "static" / "dashboard.html")
+    return _static_file("dashboard.html")
+
+
+def _static_file(name: str, *, media_type: str | None = None) -> FileResponse:
+    return FileResponse(
+        Path(__file__).parent / "static" / name,
+        media_type=media_type,
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @app.get("/static/voice_capture.js")
 def voice_capture_script() -> FileResponse:
-    return FileResponse(Path(__file__).parent / "static" / "voice_capture.js", media_type="application/javascript")
+    return _static_file("voice_capture.js", media_type="application/javascript")
 
 
 @app.get("/static/conversation_client.js")
 def conversation_client_script() -> FileResponse:
-    return FileResponse(Path(__file__).parent / "static" / "conversation_client.js", media_type="application/javascript")
+    return _static_file("conversation_client.js", media_type="application/javascript")
+
+
+@app.get("/setup")
+def setup_page() -> FileResponse:
+    return _static_file("setup.html")
+
+
+@app.get("/static/audio_setup.js")
+def audio_setup_script() -> FileResponse:
+    return _static_file("audio_setup.js", media_type="application/javascript")
+
+
+@app.get("/static/setup_wizard.js")
+def setup_wizard_script() -> FileResponse:
+    return _static_file("setup_wizard.js", media_type="application/javascript")
+
+
+def _setup_store() -> SetupStateStore:
+    return SetupStateStore()
+
+
+@app.get("/metis/build")
+def runtime_build() -> dict[str, object]:
+    return build_info()
+
+
+@app.get("/metis/setup")
+def setup_status() -> dict[str, Any]:
+    try:
+        setup = _setup_store().public_view(include_account_ids=True)
+    except SetupStateError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "setup": setup,
+        "providers": provider_capabilities(),
+        "build": build_info(),
+        "connections": google_accounts()["accounts"],
+        "readiness": startup_readiness(),
+        "llm_options": llm_options(setup["provider"].get("base_url")),
+        "voice_options": voice_options(STATE),
+    }
+
+
+@app.patch("/metis/setup")
+def update_setup(payload: dict[str, Any]) -> dict[str, Any]:
+    patch = payload.get("patch") if isinstance(payload.get("patch"), dict) else payload
+    profile_updates = patch.get("google_profiles") if isinstance(patch, dict) else None
+    provider_update = patch.get("provider") if isinstance(patch, dict) else None
+    if isinstance(provider_update, dict) and provider_update.get("choice"):
+        requested = str(provider_update["choice"])
+        capability = next(
+            (item for item in provider_capabilities()["providers"] if item["id"] == requested), None
+        )
+        if capability is None or not capability["selectable"]:
+            raise HTTPException(status_code=400, detail="selected conversation provider is not available")
+    if isinstance(profile_updates, dict):
+        connected = {
+            str(item.get("account_id")) for item in _google_store().list_connections()
+            if item.get("provider") == "google" and item.get("status") == "connected"
+        }
+        for update in profile_updates.values():
+            if isinstance(update, dict) and update.get("account_id") and str(update["account_id"]) not in connected:
+                raise HTTPException(status_code=400, detail="profile identity must be a verified connected Google account")
+    try:
+        state = _setup_store().update(
+            patch, expected_revision=payload.get("expected_revision") if "patch" in payload else None
+        )
+    except SetupStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"setup": state, "restart_required": False}
+
+
+@app.get("/metis/setup/conversation-context")
+def setup_conversation_context() -> dict[str, Any]:
+    try:
+        state = _setup_store().load()
+    except SetupStateError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    connected = [item for item in state["google_profiles"] if item.get("account_id")]
+    return {
+        "mode": "label_routed",
+        "account_ids": [],
+        "account_id": None,
+        "calendars_by_account": {},
+        "calendar_ids": [],
+        "labels": {item["account_id"]: item["label"] for item in connected},
+    }
+
+
+def _profile_label_aliases(label: str) -> tuple[str, ...]:
+    normalized = " ".join(re.findall(r"[a-z0-9]+", label.casefold()))
+    aliases = {normalized} if normalized else set()
+    aliases.update(part for part in normalized.split() if len(part) >= 3)
+    return tuple(sorted(aliases, key=len, reverse=True))
+
+
+@app.post("/metis/setup/resolve-profile")
+def resolve_setup_profile(payload: dict[str, Any]) -> dict[str, Any]:
+    message = str(payload.get("message") or "").strip().casefold()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    state = _setup_store().load()
+    profiles = [item for item in state["google_profiles"] if item.get("account_id")]
+    matched = []
+    for profile in profiles:
+        aliases = _profile_label_aliases(str(profile["label"]))
+        if any(re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", message) for alias in aliases):
+            matched.append(profile)
+    if not matched and len(profiles) == 1:
+        matched = profiles
+        status = "sole_profile"
+    elif matched:
+        status = "matched"
+    elif profiles:
+        status = "clarification_required"
+    else:
+        status = "no_profiles"
+    account_ids = tuple(item["account_id"] for item in matched)
+    calendars = {item["account_id"]: list(item.get("calendar_ids") or ()) for item in matched}
+    _validate_persisted_google_selections(
+        account_ids, {key: tuple(value) for key, value in calendars.items()}
+    )
+    return {
+        "status": status,
+        "explicit_match": status == "matched",
+        "account_ids": list(account_ids),
+        "account_id": account_ids[0] if len(account_ids) == 1 else None,
+        "calendars_by_account": calendars,
+        "calendar_ids": calendars.get(account_ids[0], []) if len(account_ids) == 1 else [],
+        "matched_labels": [item["label"] for item in matched],
+        "available_labels": [item["label"] for item in profiles],
+    }
 
 
 @app.get("/metis/startup/readiness")
@@ -120,7 +268,19 @@ def create_session(payload: dict[str, Any]) -> dict[str, Any]:
         str(item) for item in context_payload.get("calendar_ids", ())
         if isinstance(item, str) and item.strip()
     ) if isinstance(context_payload.get("calendar_ids"), list) else ()
-    _validate_persisted_google_selection(account_id, calendar_ids)
+    account_ids = tuple(
+        str(item).strip() for item in context_payload.get("account_ids", ())
+        if isinstance(item, str) and item.strip()
+    ) if isinstance(context_payload.get("account_ids"), list) else (() if account_id is None else (account_id,))
+    if account_id is not None and account_ids and account_id not in account_ids:
+        raise HTTPException(status_code=400, detail="primary account must be within selected accounts")
+    raw_calendar_map = context_payload.get("calendars_by_account")
+    calendars_by_account = {
+        str(key).strip(): tuple(str(item).strip() for item in values if isinstance(item, str) and item.strip())
+        for key, values in raw_calendar_map.items()
+        if isinstance(key, str) and key.strip() and isinstance(values, list)
+    } if isinstance(raw_calendar_map, dict) else ({account_id: calendar_ids} if account_id else {})
+    _validate_persisted_google_selections(account_ids, calendars_by_account)
     try:
         snapshot = SESSIONS.create_session(
             client_id,
@@ -129,6 +289,8 @@ def create_session(payload: dict[str, Any]) -> dict[str, Any]:
                 project_id=_optional_session_value(context_payload.get("project_id")),
                 timezone=_optional_session_value(context_payload.get("timezone")),
                 calendar_ids=calendar_ids,
+                account_ids=account_ids,
+                calendars_by_account=tuple(calendars_by_account.items()),
             ),
         )
     except (ValueError, RuntimeError) as exc:
@@ -150,6 +312,12 @@ def update_session_context(session_id: str, payload: dict[str, Any]) -> dict[str
     calendar_ids = payload.get("calendar_ids")
     if calendar_ids is not None and not isinstance(calendar_ids, list):
         raise HTTPException(status_code=400, detail="calendar_ids must be an array")
+    account_ids_payload = payload.get("account_ids")
+    if account_ids_payload is not None and not isinstance(account_ids_payload, list):
+        raise HTTPException(status_code=400, detail="account_ids must be an array")
+    calendars_map_payload = payload.get("calendars_by_account")
+    if calendars_map_payload is not None and not isinstance(calendars_map_payload, dict):
+        raise HTTPException(status_code=400, detail="calendars_by_account must be an object")
     try:
         prior = SESSIONS.snapshot(session_id).context
     except KeyError as exc:
@@ -159,7 +327,25 @@ def update_session_context(session_id: str, payload: dict[str, Any]) -> dict[str
         tuple(str(item).strip() for item in calendar_ids if isinstance(item, str) and item.strip())
         if calendar_ids is not None else prior.calendar_ids
     )
-    _validate_persisted_google_selection(effective_account, effective_calendars)
+    effective_accounts = tuple(
+        str(item).strip() for item in account_ids_payload if isinstance(item, str) and item.strip()
+    ) if account_ids_payload is not None else prior.account_ids
+    if not effective_accounts and effective_account:
+        effective_accounts = (effective_account,)
+    if effective_account is not None and effective_accounts and effective_account not in effective_accounts:
+        raise HTTPException(status_code=400, detail="primary account must be within selected accounts")
+    effective_calendar_map = (
+        {
+            str(key).strip(): tuple(str(item).strip() for item in values if isinstance(item, str) and item.strip())
+            for key, values in calendars_map_payload.items()
+            if isinstance(key, str) and key.strip() and isinstance(values, list)
+        }
+        if calendars_map_payload is not None
+        else dict(prior.calendars_by_account)
+    )
+    if effective_account and (calendar_ids is not None or effective_account not in effective_calendar_map):
+        effective_calendar_map[effective_account] = effective_calendars
+    _validate_persisted_google_selections(effective_accounts, effective_calendar_map)
     try:
         updates: dict[str, Any] = {}
         if "account_id" in payload:
@@ -170,6 +356,10 @@ def update_session_context(session_id: str, payload: dict[str, Any]) -> dict[str
             updates["timezone"] = _optional_session_value(payload.get("timezone"))
         if "calendar_ids" in payload:
             updates["calendar_ids"] = calendar_ids
+        if "account_ids" in payload:
+            updates["account_ids"] = account_ids_payload
+        if "calendars_by_account" in payload:
+            updates["calendars_by_account"] = effective_calendar_map
         snapshot = SESSIONS.update_context(session_id, **updates)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=404 if isinstance(exc, KeyError) else 400, detail=str(exc)) from exc
@@ -226,6 +416,17 @@ def _validate_persisted_google_selection(account_id: str | None, calendar_ids: t
     selected = {str(item) for item in record.get("selected_calendar_ids", ())}
     if any(item not in selected for item in calendar_ids):
         raise HTTPException(status_code=400, detail="session calendars must be within the persisted selection")
+
+
+def _validate_persisted_google_selections(
+    account_ids: tuple[str, ...], calendars_by_account: dict[str, tuple[str, ...]]
+) -> None:
+    if len(set(account_ids)) != len(account_ids):
+        raise HTTPException(status_code=400, detail="selected Google accounts must be unique")
+    if any(account not in account_ids for account in calendars_by_account):
+        raise HTTPException(status_code=400, detail="calendar selections must be keyed by a selected Google account")
+    for account in account_ids:
+        _validate_persisted_google_selection(account, calendars_by_account.get(account, ()))
 
 
 def _session_turn(payload: dict[str, Any], user_message: str, options: dict[str, Any]) -> TurnToken | None:
@@ -286,6 +487,7 @@ def _build_personal_coordinator(
     broker: GoogleReadBroker | None = None,
     *,
     selected_account_id: str | None = None,
+    selected_account_ids: tuple[str, ...] = (),
 ) -> PersonalConversationCoordinator:
     model = str(options.get("model") or os.environ.get("METIS_OLLAMA_MODEL") or "").strip()
     if not model:
@@ -294,11 +496,24 @@ def _build_personal_coordinator(
     if not base_url.endswith("/v1"):
         base_url = f"{base_url}/v1"
     broker = broker or _google_read_broker()
+    authorized_ids = frozenset(selected_account_ids or (() if selected_account_id is None else (selected_account_id,)))
     accounts = {
         account.account_id: AccountGrant(account.account_id, frozenset(account.scopes))
         for account in broker.accounts()
-        if selected_account_id is not None and account.account_id == selected_account_id
+        if account.account_id in authorized_ids
     }
+    try:
+        timeout_seconds = float(
+            options.get("request_timeout_seconds")
+            or os.environ.get("METIS_OLLAMA_TIMEOUT_SECONDS")
+            or 120
+        )
+    except (TypeError, ValueError):
+        timeout_seconds = 120.0
+    # Local models can need a long first-token warm-up, especially after a model
+    # switch. Keep the conversation bounded while avoiding a false failure at
+    # the old 30-second default.
+    timeout_seconds = max(10.0, min(timeout_seconds, 600.0))
     return PersonalConversationCoordinator(
         entries=_personal_tool_entries(broker),
         authorization=AuthorizationContext(accounts=accounts),
@@ -307,8 +522,14 @@ def _build_personal_coordinator(
             base_url=base_url,
             cancellation=cancellation,
             max_output_tokens=int(options.get("max_output_tokens") or 512),
+            request_timeout_seconds=timeout_seconds,
         ),
-        limits=LoopLimits(max_rounds=4, max_tool_calls=6, max_calls_per_round=3, max_total_seconds=30),
+        limits=LoopLimits(
+            max_rounds=4,
+            max_tool_calls=6,
+            max_calls_per_round=3,
+            max_total_seconds=timeout_seconds,
+        ),
     )
 
 
@@ -323,9 +544,16 @@ def _run_personal_ollama_turn(
     session_context = SESSIONS.snapshot(token.session_id).context
     available_accounts = tuple(account.account_id for account in broker.accounts())
     selected_account = session_context.account_id
+    selected_accounts = session_context.account_ids
     if selected_account is None and len(available_accounts) == 1:
         selected_account = available_accounts[0]
-    coordinator = _build_personal_coordinator(options, broker, selected_account_id=selected_account)
+        selected_accounts = (selected_account,)
+    if len(selected_accounts) > 1:
+        coordinator = _build_personal_coordinator(
+            options, broker, selected_account_id=selected_account, selected_account_ids=selected_accounts
+        )
+    else:
+        coordinator = _build_personal_coordinator(options, broker, selected_account_id=selected_account)
     ACTIVE_PERSONAL_COORDINATORS[token.session_id] = coordinator
     try:
         outcome = coordinator.run_turn(
@@ -362,11 +590,15 @@ def _trusted_conversation_context(
     selected_account: str | None = None
     selected_project: str | None = None
     selected_calendars: tuple[str, ...] = ()
+    selected_accounts: tuple[str, ...] = ()
+    selected_calendar_map: tuple[tuple[str, tuple[str, ...]], ...] = ()
     if token is not None:
         context = SESSIONS.snapshot(token.session_id).context
         selected_account = context.account_id
         selected_project = context.project_id
         selected_calendars = tuple(getattr(context, "calendar_ids", ()) or ())
+        selected_accounts = tuple(getattr(context, "account_ids", ()) or ())
+        selected_calendar_map = tuple(getattr(context, "calendars_by_account", ()) or ())
         timezone_name = str(getattr(context, "timezone", None) or timezone_name)
     accounts = tuple(account.account_id for account in broker.accounts())
     if token is None:
@@ -377,7 +609,17 @@ def _trusted_conversation_context(
     elif selected_account is None and len(accounts) == 1:
         selected_account = accounts[0]
         selected_calendars = broker.selected_calendar_ids(selected_account)
+        selected_accounts = (selected_account,)
+        selected_calendar_map = ((selected_account, selected_calendars),)
     entries = _personal_tool_entries(broker)
+    try:
+        profile_labels = tuple(
+            str(item["label"])
+            for item in _setup_store().load()["google_profiles"]
+            if item.get("account_id")
+        )
+    except SetupStateError:
+        profile_labels = ()
     return TrustedConversationContext(
         now=trusted_now(timezone_name),
         timezone_name=timezone_name,
@@ -386,6 +628,9 @@ def _trusted_conversation_context(
         selected_project_id=selected_project,
         available_accounts=accounts,
         allowed_tools=tuple(sorted(entries)),
+        selected_account_ids=selected_accounts,
+        selected_calendars_by_account=selected_calendar_map,
+        profile_labels=profile_labels,
     )
 
 
@@ -403,6 +648,72 @@ def google_accounts() -> dict[str, Any]:
         if item.get("provider") == "google"
     ]
     return {"provider": "google", "accounts": accounts, "count": len(accounts)}
+
+
+@app.post("/metis/connectors/google/oauth/start")
+async def google_oauth_start(
+    request: Request,
+    client_secrets: UploadFile | None = File(None),
+) -> dict[str, Any]:
+    """Start a local, read-only Google OAuth flow without persisting client JSON."""
+    if client_secrets is not None:
+        raw = await client_secrets.read(65_537)
+        if len(raw) > 65_536:
+            raise HTTPException(status_code=413, detail="OAuth client JSON exceeds the 64 KiB limit")
+        try:
+            config = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="OAuth client file is not valid JSON") from exc
+    else:
+        configured_path = os.environ.get("METIS_GOOGLE_CLIENT_SECRETS", "").strip()
+        if not configured_path:
+            raise HTTPException(
+                status_code=400,
+                detail="Choose your Google desktop OAuth client JSON, then click Connect Google account",
+            )
+        try:
+            config = json.loads(Path(configured_path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=400, detail="configured Google OAuth client JSON is unavailable") from exc
+    callback = str(request.url_for("google_oauth_callback"))
+    parsed = urlparse(callback)
+    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise HTTPException(status_code=400, detail="Google OAuth callback must remain on loopback")
+    try:
+        started = GOOGLE_OAUTH_WEB.start(config, redirect_uri=callback)
+    except GoogleOAuthWebError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "authorization_required", **started, "client_config_persisted": False}
+
+
+@app.get("/metis/connectors/google/oauth/callback", name="google_oauth_callback")
+def google_oauth_callback(request: Request, state: str = "", error: str = "") -> HTMLResponse:
+    if error:
+        return HTMLResponse(
+            "<h1>Google connection was not completed</h1><p>You can close this window and retry in Metis.</p>",
+            status_code=400,
+            headers={"Cache-Control": "no-store"},
+        )
+    try:
+        result = GOOGLE_OAUTH_WEB.complete(
+            state=state,
+            authorization_response=str(request.url),
+            store=_google_store(),
+        )
+    except (GoogleOAuthWebError, RuntimeError) as exc:
+        return HTMLResponse(
+            f"<h1>Google connection failed</h1><p>{html.escape(str(exc))}</p><p>Close this window and retry in Metis.</p>",
+            status_code=400,
+            headers={"Cache-Control": "no-store"},
+        )
+    duplicate = " The existing connection was refreshed." if result["duplicate_identity"] else ""
+    return HTMLResponse(
+        "<h1>Google account connected</h1>"
+        f"<p>The verified identity was connected with read-only grants.{duplicate}</p>"
+        "<p>You may close this window and return to Metis.</p>"
+        "<script>if(window.opener){window.opener.postMessage('metis-google-connected', window.location.origin);}window.close();</script>",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/metis/connectors/google/selection")
@@ -1756,11 +2067,31 @@ def tool_execute(tool_id: str, payload: dict[str, Any] | None = None) -> dict[st
 def llm_options(base_url: str | None = None) -> dict[str, Any]:
     import os
 
-    ollama_base_url = base_url or os.environ.get("METIS_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    saved_provider: dict[str, Any] = {}
+    try:
+        setup_provider = _setup_store().load().get("provider")
+        if isinstance(setup_provider, dict):
+            saved_provider = setup_provider
+    except (OSError, SetupStateError):
+        # Environment-only operation remains available if the local setup
+        # document is absent or invalid.
+        saved_provider = {}
+
+    saved_choice = str(saved_provider.get("choice") or "").strip().lower()
+    saved_model = str(saved_provider.get("model") or "").strip() or None
+    configured_provider = os.environ.get("METIS_LLM_PROVIDER")
+    if not configured_provider and saved_choice == "ollama" and saved_model:
+        configured_provider = "ollama"
+    ollama_base_url = (
+        base_url
+        or os.environ.get("METIS_OLLAMA_BASE_URL")
+        or saved_provider.get("base_url")
+        or "http://127.0.0.1:11434"
+    )
     return {
-        "selected_provider": os.environ.get("METIS_LLM_PROVIDER", "mock"),
+        "selected_provider": configured_provider or "mock",
         "ollama_base_url": ollama_base_url,
-        "ollama_model": os.environ.get("METIS_OLLAMA_MODEL"),
+        "ollama_model": os.environ.get("METIS_OLLAMA_MODEL") or saved_model,
         "openai_model": os.environ.get("METIS_OPENAI_MODEL", "gpt-4o-mini"),
         "ollama": list_ollama_models(ollama_base_url),
     }
@@ -2180,6 +2511,16 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     if session_token is not None and not SESSIONS.accepts(session_token):
         raise HTTPException(status_code=409, detail="turn was cancelled during connector restoration")
     if session_token is not None:
+        session_context = SESSIONS.snapshot(session_token.session_id).context
+        selected_accounts = session_context.account_ids or (
+            (session_context.account_id,) if session_context.account_id else ()
+        )
+        if selected_accounts:
+            calendar_map = dict(session_context.calendars_by_account)
+            if session_context.account_id and session_context.account_id not in calendar_map:
+                calendar_map[session_context.account_id] = session_context.calendar_ids
+            broker = broker.restrict_to(selected_accounts, calendar_map)
+    if session_token is not None:
         context_history = [
             {"role": item.role, "content": item.text}
             for item in SESSIONS.private_history(session_token.session_id)
@@ -2405,13 +2746,33 @@ def voice_stop(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 def voice_preview(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = payload or {}
     text = str(payload.get("text") or "Metis voice preview.")
-    options = {"voice": {**payload, "enabled": payload.get("enabled", True)}}
-    result = speak_text(text, STATE, options)
-    _apply_voice_result(result)
-    response = {**_voice_response_payload(result), "state": STATE, "leds": resolve_leds(STATE)}
-    if not result.ok:
-        raise HTTPException(status_code=502, detail=response)
-    return response
+    session_id = _optional_session_value(payload.get("session_id"))
+    if session_id is None:
+        raise HTTPException(status_code=400, detail="session_id is required for owned browser playback")
+    try:
+        token = SESSIONS.begin_turn(
+            session_id, origin=TurnOrigin.TEXT, initial_stage=TurnStage.SYNTHESIZING
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    options = {"voice": {**payload, "enabled": True, "speak_response": True}}
+    try:
+        response = _speak_chat_response(text, options, token)
+    except Exception as exc:
+        if SESSIONS.accepts(token):
+            SESSIONS.transition(token, TurnStage.FAILED, failure_code="tts_exception")
+        raise HTTPException(status_code=502, detail="speech preview synthesis failed") from exc
+    if not response or not response.get("ok"):
+        if SESSIONS.accepts(token):
+            SESSIONS.transition(token, TurnStage.FAILED, failure_code="tts_failed")
+        raise HTTPException(status_code=502, detail=response or {"blocked_reason": "tts_failed"})
+    if not response.get("metadata", {}).get("playback_id"):
+        if SESSIONS.accepts(token):
+            SESSIONS.transition(token, TurnStage.FAILED, failure_code="playback_not_queued")
+        raise HTTPException(status_code=502, detail="speech was synthesized but browser playback was not queued")
+    return {**response, "state": STATE, "leds": resolve_leds(STATE)}
 
 
 def _voice_origin_privacy_enabled(options: dict[str, Any]) -> bool:
@@ -3272,6 +3633,48 @@ def _validate_browser_ptt_upload(content_type: str, wav_bytes: bytes) -> None:
         len(wav_bytes) >= 44 and wav_bytes[:4] == b"RIFF" and wav_bytes[8:12] == b"WAVE"
     ):
         raise HTTPException(status_code=400, detail="invalid WAV upload")
+
+
+@app.post("/metis/setup/audio/transcribe")
+async def setup_audio_transcribe(
+    audio: UploadFile = File(...),
+    stt_provider: str = Form(""),
+) -> dict[str, Any]:
+    """Run one explicit, in-memory microphone/STT check without invoking the LLM."""
+    if not STATE.get("mic_hardware_enabled"):
+        raise HTTPException(status_code=409, detail="mic_hardware_cutoff")
+    if STATE.get("power_state") != "awake":
+        raise HTTPException(status_code=409, detail="standby_blocks_capture")
+    content_type = _normalized_upload_content_type(audio)
+    wav_bytes = await audio.read(BROWSER_PTT_MAX_UPLOAD_BYTES + 1)
+    _validate_browser_ptt_upload(content_type, wav_bytes)
+    capture = CaptureResult(
+        provider_id="browser_setup",
+        status="captured",
+        captured=True,
+        audio_duration_ms=0,
+        audio_levels=[],
+        audio_spectrum_frames=[],
+        frame_count=0,
+        sample_rate=16000,
+    )
+    capture._wav_bytes = wav_bytes
+    provider_name = stt_provider.strip() or os.environ.get("METIS_STT_ENGINE", "faster_whisper")
+    try:
+        result = await run_in_threadpool(
+            stt_provider_from_config(provider_name).transcribe, capture, {}
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"speech-to-text failed: {type(exc).__name__}") from exc
+    transcript = get_recognized_text(result).strip()
+    return {
+        "status": "transcribed" if transcript else "no_text_recognized",
+        "provider": result.provider_id,
+        "transcript": transcript,
+        "stt": result.to_dict(),
+        "persisted": False,
+        "llm_invoked": False,
+    }
 
 
 @app.post("/metis/audio/browser_ptt")
