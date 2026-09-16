@@ -148,6 +148,14 @@ def test_ollama_tool_call_cannot_switch_to_an_unselected_connected_account(tmp_p
 
     monkeypatch.setattr(brain, "_google_store", lambda: store)
     monkeypatch.setattr(brain, "_google_read_broker", lambda: broker)
+    monkeypatch.setattr(
+        brain,
+        "_setup_store",
+        lambda: type("SetupFixture", (), {"load": lambda self: {"google_profiles": [
+            {"slot_id": "work", "label": "Work", "account_id": "work@example.test", "calendar_ids": ["team"]},
+            {"slot_id": "other", "label": "Other", "account_id": "other@example.test", "calendar_ids": ["primary"]},
+        ]}})(),
+    )
     monkeypatch.setattr(BoundedUrllibJsonTransport, "post_json", fake_post)
     with TestClient(brain.app) as client:
         session_id = client.post(

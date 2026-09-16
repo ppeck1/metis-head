@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from threading import RLock
 import time
 from typing import Any, Callable, Mapping
+from urllib.parse import parse_qs, urlparse
 
 from .connectors.google_api import GOOGLE_READ_SCOPES
 from .google_oauth import _connected_account_id, _granted_scopes
@@ -15,6 +16,7 @@ from .google_oauth import _connected_account_id, _granted_scopes
 class _Pending:
     flow: Any
     expires_at: float
+    redirect_uri: str
 
 
 class GoogleOAuthWebError(ValueError):
@@ -54,7 +56,7 @@ class GoogleOAuthWebManager:
             raise GoogleOAuthWebError("Google OAuth did not return a valid authorization request")
         with self._lock:
             self._discard_expired()
-            self._pending[str(state)] = _Pending(flow, self._clock() + self._ttl)
+            self._pending[str(state)] = _Pending(flow, self._clock() + self._ttl, redirect_uri)
         return {"authorization_url": str(authorization_url), "state": str(state)}
 
     def complete(
@@ -65,12 +67,41 @@ class GoogleOAuthWebManager:
         store: Any,
         build_factory: Callable[..., Any] | None = None,
     ) -> dict[str, Any]:
+        requested_state = str(state or "")
         with self._lock:
             self._discard_expired()
-            pending = self._pending.pop(state, None)
+            pending = self._pending.pop(requested_state, None)
         if pending is None:
             raise GoogleOAuthWebError("Google connection request expired or has already been used")
-        pending.flow.fetch_token(authorization_response=authorization_response)
+        callback = urlparse(authorization_response)
+        expected = urlparse(pending.redirect_uri)
+        if (
+            callback.scheme != expected.scheme
+            or callback.hostname != expected.hostname
+            or callback.port != expected.port
+            or callback.path != expected.path
+            or callback.hostname not in {"127.0.0.1", "localhost", "::1"}
+        ):
+            raise GoogleOAuthWebError("Google connection callback did not match the loopback request")
+        query = parse_qs(callback.query, keep_blank_values=True)
+        returned_state = query.get("state", [""])[0]
+        if returned_state != requested_state:
+            raise GoogleOAuthWebError("Google connection callback state did not match")
+        if query.get("error"):
+            detail = query.get("error_description", query["error"])[0]
+            raise GoogleOAuthWebError(f"Google connection was denied: {detail}")
+        code = query.get("code", [""])[0]
+        if not code:
+            raise GoogleOAuthWebError("Google connection callback did not include an authorization code")
+        try:
+            # Supplying the code directly is the supported installed-app loopback
+            # path. Passing an http:// authorization_response asks oauthlib to
+            # treat the callback as a general web redirect and rejects it as an
+            # insecure transport, even though Google permits loopback redirects.
+            # Token exchange still goes to Google's HTTPS token endpoint.
+            pending.flow.fetch_token(code=code)
+        except Exception as exc:
+            raise GoogleOAuthWebError("Google token exchange failed; retry the connection") from exc
         credentials = pending.flow.credentials
         scopes = _granted_scopes(credentials)
         if build_factory is None:
@@ -94,7 +125,7 @@ class GoogleOAuthWebManager:
 
     def _discard_expired(self) -> None:
         now = self._clock()
-        self._pending = {key: value for key, value in self._pending.items() if value.expires_at >= now}
+        self._pending = {key: value for key, value in self._pending.items() if value.expires_at > now}
 
 
 __all__ = ["GoogleOAuthWebError", "GoogleOAuthWebManager"]

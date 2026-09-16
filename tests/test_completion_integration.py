@@ -182,6 +182,21 @@ def test_ordinary_chat_route_runs_real_ollama_adapter_tool_result_round_trip(mon
         clock=lambda: datetime(2026, 9, 16, 12, tzinfo=UTC),
     )
     monkeypatch.setattr(brain, "_google_read_broker", lambda: broker)
+    monkeypatch.setattr(
+        brain,
+        "_setup_store",
+        lambda: type("SetupFixture", (), {"load": lambda self: {"google_profiles": [{
+            "slot_id": "personal", "label": "Personal", "account_id": "personal", "calendar_ids": ["primary"]
+        }]}})(),
+    )
+    monkeypatch.setattr(
+        brain,
+        "_google_store",
+        lambda: type("CredentialFixture", (), {"list_connections": lambda self: [{
+            "provider": "google", "status": "connected", "account_id": "personal",
+            "selected_calendar_ids": ["primary"],
+        }]})(),
+    )
 
     def fake_post(self, *, url, payload, timeout_seconds, cancellation):
         provider_payloads.append(payload)

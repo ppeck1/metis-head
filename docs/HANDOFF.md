@@ -1,37 +1,41 @@
-# Current Handoff — setup, browser audio, and labeled connections
+# Current handoff — account-aware local assistant repair
 
-Source baseline is commit `97467f832aed067997a8f27cefb0ffd44cc9705f` on `codex/metis-completion-2026-09-16`, with the current working changes identified in the UI as `97467f832aed+working`.
+Date: 2026-09-16. Branch: `codex/metis-completion-2026-09-16`. This checkpoint continues from `354b570` and preserves the previously confirmed browser microphone, faster-whisper, Piper, and genuine local Ollama evidence.
 
 ## Implemented
 
-- `/setup` is a permanent resumable page. Speaker tone, owned Piper preview, microphone level/capture, local transcription, Google connections, and provider checks are separate and retryable.
-- Voice preview now requires a browser session and uses the same artifact ownership, playback queue, acknowledgements, Stop, and cancellation lifecycle as conversational speech. The former preview path synthesized a WAV but never queued it for the browser.
-- The speaker test is a user-clicked Web Audio tone independent of LLM, Google, STT, Piper, and backend audio. Software completion and the user's audibility confirmation remain separate.
-- Browser calls bind native `window.fetch`, fixing the former `Illegal invocation` preview failure. Static setup/dashboard responses use no-store caching and versioned script URLs.
-- Autoplay rejection retains the owned command and exposes **Play blocked audio**; acknowledgements are sent only after a successful retry.
-- The microphone setup check supplies capture authorization, displays input level, and calls `/metis/setup/audio/transcribe`; audio/text are transient and no LLM is invoked.
-- **Connect Google account** accepts a Desktop OAuth client JSON in memory, opens Google consent, verifies identity, and stores tokens only in Windows Credential Manager. Only real connections render and each has a Remove button.
-- Google labels route exact account/calendar authorization. Multiple labels plus an unclear request authorize no account and instruct the model to ask rather than guess. The dashboard account picker and setup checkboxes are removed.
-- Provider choices are truthful: Ollama is selectable; ordinary OpenAI API and Codex App Server are visible but unavailable because neither production dispatch nor the required least-authority integration is composed.
-- `/metis/build` exposes sanitized source attribution. Port 8787 was restarted from this checkout after a stale process was found serving an older route set.
+- Server-authoritative Google account routing uses exact full labels and unique aliases. Shared words are ambiguous, exclusions never authorize, deliberate combined requests select exactly the named accounts, and disconnected/changed mappings are revoked before dispatch.
+- Typed and transcribed requests enter the same account-routing step. An unresolved question is retained privately through clarification; adopting the clarified account clears older account-private history before the original question is answered.
+- Google OAuth loopback completion validates callback origin/path, expiring state, denial, code presence, and single use. It exchanges the code through the real Google library without globally relaxing HTTPS validation.
+- Setup state schema v2 stores a variable-length collection of stable Google profile records and migrates the old four-slot state. The UI renders arbitrary real connections, supports per-account calendar discovery and selection, preserves an explicitly empty grant, and removes one connection without shifting the others.
+- Saved Ollama, Piper voice, and faster-whisper settings are applied in deterministic order. Conversation controls wait for voice catalog and setup initialization; stale catalog responses cannot switch a valid saved voice to mock.
+- Suspended browser audio contexts are resumed before capture. Cancel, page exit, and newer attempts invalidate delayed capture/transcription results. Unsupported STT choices are no longer offered in Setup.
+- Atlas ordinary tool registration and final transport dispatch both honor Tool Control Center read state. Explicit named-project MCP status/brief questions resolve the exact project and call the named tool rather than returning a five-project diagnostic list.
+- Startup readiness reports effective configuration sources separately from verified local execution and operator-confirmed physical output.
 
-## Verified on this workstation
+## Verification completed
 
-- Ollama is reachable and the installed `qwen3.5:9b` model is reported available. No model has been selected on Paul's behalf in saved setup.
-- Full suite: `601 passed in 15.59s`.
-- Real Piper synthesis queued an owned WAV (59,948 bytes, RIFF). A second 86,060-byte Piper phrase was transcribed by local faster-whisper (`base.en`) with `persisted=false`.
-- OAuth start with a fake desktop configuration returned a Google authorization URL and `client_config_persisted=false`.
-- Physical audibility, live browser microphone capture, Google consent, full browser conversation, and Stop timing remain manual because browser control failed during initialization. Software tests do not imply Paul heard sound.
-- Four profile slots exist, but zero Google identities are currently connected. Live four-account acceptance therefore remains blocked on user sign-in/consent.
+- `python -m pytest -q` — **620 passed in 16.68s** on Windows/Python 3.11.
+- `python -m compileall -q metis_head tests` — passed.
+- `node tests\node_audio_setup.cjs` — passed.
+- `node tests\node_voice_capture.cjs` — passed.
+- `node tests\node_setup_connections.cjs` — passed with six dummy connections and independent removal/reload.
+- `git diff --check` — passed; only Windows line-ending conversion notices were emitted.
+- Focused real-library OAuth tests mock only the exchange/API transport; no live Google request or credential was used.
+- Atlas Off and named-project status behavior were verified with fixture transports; no live Atlas helper request was made.
 
-## Exact next local check
+## Live/manual boundary
 
-1. Open `http://127.0.0.1:8787/setup` and confirm the build label ends in `+working`.
-2. Select an installed Ollama model and run the bounded provider test.
-3. Click **Play local tone**, then record **I heard it** or **I did not hear it**.
-4. Click **Play real speech preview**. This creates a fresh owned artifact; do not prefetch its one-use URL.
-5. Start a microphone sample, speak, stop, and verify the displayed real transcript.
-6. Choose a private Desktop OAuth JSON, click **Connect Google account**, complete consent, and assign a label. Repeat or remove connections as needed.
-7. Return to Metis, name a label in a Google request, verify an ambiguous new request causes a question, press Stop during speech, then run another turn.
+- Prior evidence records operator-confirmed browser microphone input, faster-whisper transcription, and Piper output. Automated WAV/Node tests are not presented as new physical-audio confirmation.
+- Google sign-in/consent, selection of a real calendar, and a real label-specific Gmail/calendar read require the operator's Google account and remain a user action.
+- Do not remove a real connection as a test shortcut. The six-connection/removal acceptance is covered with dummy state.
+- No paid request, Google write, email send, calendar creation, MCE activation, Atlas mutation, BOH mutation, or GitHub write is part of runtime acceptance.
 
-No deployment, remote exposure, paid request, credential export, or write-capable Google/Atlas/BOH operation was added.
+## Exact remaining operator journey
+
+1. Open `/setup`, confirm the current build identity, and verify the saved Ollama model, Piper voice, and faster-whisper selection survived reload.
+2. Run one real spoken question and follow-up, press Stop during speech, and confirm the next turn works.
+3. Connect one Google account through the popup, discover calendars, explicitly select one, save, reload, and run one label-specific read. Repeat for additional accounts only as desired.
+4. With Atlas read mode and the local helper configured, ask for one named project's status; turn Atlas Off and confirm the same request reports unavailable without transport.
+
+The release/export excludes OAuth client files, tokens, credentials, personal setup state, recordings, virtual environments, local MCP commands/databases, and model weights.

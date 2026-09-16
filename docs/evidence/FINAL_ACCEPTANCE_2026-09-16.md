@@ -1,41 +1,57 @@
-# Final acceptance evidence — 2026-09-16
+# Final acceptance evidence — 2026-09-16 account-aware repair
 
-- Source baseline: `97467f832aed067997a8f27cefb0ffd44cc9705f`
 - Branch: `codex/metis-completion-2026-09-16`
-- Runtime build ID: `97467f832aed+working`
+- Working source baseline before checkpoint commit: `354b570253f0`
+- Runtime build while validating: `354b570253f0+working`
 - Interpreter: Python 3.11
 - App URL: `http://127.0.0.1:8787/` (loopback)
 
-## Latest automated run
-
-Command:
+## Automated verification
 
 ```powershell
 python -m pytest -q
 ```
 
-Result: `603 passed in 15.94s`
+Result: **620 passed in 16.68s**.
 
 Additional checks:
 
 - `python -m compileall -q metis_head tests` — passed.
-- `node --check metis_head\static\setup_wizard.js` — passed.
-- `node --check metis_head\static\audio_setup.js` — passed.
 - `node tests\node_audio_setup.cjs` — passed.
-- `node tests\node_conversation_client.cjs` — passed.
-- `git diff --check` — passed; Windows line-ending conversion warnings only.
+- `node tests\node_voice_capture.cjs` — passed.
+- `node tests\node_setup_connections.cjs` — passed with six dummy connections, stable IDs, independent removal, and reload.
+- `git diff --check` — passed; Windows line-ending conversion notices only.
 
-## Runtime checks
+Production-path regressions cover:
 
-- A stale process on port 8787 was stopped by exact PID and restarted from the current checkout.
-- `/metis/build`, `/metis/setup`, and `/metis/startup/readiness` are served by the restarted runtime.
-- Ollama health: reachable. Saved Setup selection `mistral-small3.2:24b` is restored by Virtual Chat and voice turns; a live bounded request returned a genuine Ollama answer.
-- Setup page: HTTP 200; no-store caching; Connect/Remove UI present; old CLI-only OAuth text absent; bound browser fetch present.
-- Real Piper preview: session-owned `play` command, `audio/wav`, 59,948 bytes, RIFF header.
-- Local STT: `faster_whisper`, dependency available, model `base.en`, health `ok`. An 86,060-byte Piper phrase returned status `transcribed`, provider `faster_whisper`, and `persisted=false`.
-- OAuth start with a fake desktop client produced a Google authorization URL and `client_config_persisted=false`.
-- Browser-control bridge: unavailable because its trusted Node helper exited during initialization twice. No headless/cloud browser was substituted.
-- Browser microphone capture, faster-whisper transcription, and Piper audio output were confirmed by the operator.
-- Google connections: zero; four profile slots are present but live account acceptance is blocked on user sign-in and consent.
+- exact full-label and unique-alias account routing, exclusions, ambiguity, deliberate combined accounts, revoked mappings, and typed/voice clarification;
+- real Google OAuth library callback handling with token/API transport mocked, strict expiry/state/single-use/denial behavior, and no HTTPS-validation bypass;
+- calendar discovery and empty/non-empty persisted grant enforcement;
+- saved voice/STT initialization ordering and stale catalog/capture/transcription cancellation;
+- variable-length setup schema migration and six dummy connections;
+- Atlas Off blocking ordinary registry transport plus exact named-project MCP status routing.
 
-No credentials, OAuth material, personal content, recording, model weights, browser profile, or private `.project` data is included in release evidence.
+## Restarted runtime check
+
+The old process was stopped and the tracked launcher restarted the application from this checkout. Sanitized endpoint inspection reported:
+
+- setup schema: `2`;
+- effective LLM: `ollama` from saved Setup state;
+- effective STT: `faster_whisper` from the explicit launcher environment override;
+- effective TTS: `piper` from saved Setup state.
+
+Configuration is not treated as execution evidence. The readiness payload separately reports effective configuration, recorded successful local probes, and operator-confirmed physical output.
+
+## Browser and live-service boundary
+
+Windows browser control was attempted twice after the restart. The trusted helper exited during initialization with `helper_unknown_error: setup refresh had errors`; no UI action was performed. A headless/cloud browser was not substituted.
+
+Preserved prior target-machine evidence: the operator confirmed browser microphone capture, faster-whisper transcription, and audible Piper output earlier on 2026-09-16. This repair did not independently re-confirm physical microphone/speaker behavior.
+
+Still requires the operator:
+
+- reload `/setup` and the dashboard, confirm saved model/voice/STT, run one spoken question and follow-up, Stop speech, then run another turn;
+- complete Google sign-in/consent, discover and select a real calendar, save/reload, and run a label-specific read;
+- run a named-project read with the configured local Atlas helper, then turn Atlas Off and confirm the blocked response.
+
+No paid request, live Google request, email send, calendar write, real connection removal, live Atlas request, MCE activation, credential export, or mutation-capable helper action was performed.

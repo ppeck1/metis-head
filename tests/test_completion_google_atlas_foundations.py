@@ -176,6 +176,29 @@ def test_restore_keeps_persisted_selection_for_real_discovery():
     assert calendars.data[0].selected is True
 
 
+def test_empty_persisted_selection_grants_no_calendar_even_if_google_marks_one_selected():
+    transport, _, _ = _transport({
+        None: {"items": [{"id": "primary", "summary": "Primary", "selected": True}]}
+    })
+    broker = GoogleReadBroker.from_connection_records(
+        [{
+            "provider": "google", "status": "connected", "account_id": "work@example.test",
+            "scopes": [CALENDAR_SCOPE], "selected_calendar_ids": [],
+        }],
+        {"work@example.test": transport},
+        clock=lambda: NOW,
+    )
+
+    discovered = broker.list_calendars(account_id="work@example.test")
+    events = broker.calendar_events(
+        account_id="work@example.test", calendar_ids=["primary"],
+        start=NOW, end=datetime(2026, 9, 17, 12, tzinfo=UTC), timezone="UTC",
+    )
+
+    assert discovered.data[0].selected is False
+    assert events.error and events.error.code is ErrorCode.PERMISSION_DENIED
+
+
 def test_versioned_selection_never_broadens_enforced_calendar_grant():
     policy = GoogleAccountPolicy.from_record(
         {

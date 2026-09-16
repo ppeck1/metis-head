@@ -611,9 +611,9 @@
         <select id="ollamaModel"></select>
       </div>
       <div class="tool-row">
-        <select id="voiceProvider" onchange="handleVoiceProviderChange()"></select>
-        <select id="voiceId"></select>
-        <label class="toggle-inline"><input id="voiceReplyEnabled" type="checkbox"> Voice replies</label>
+        <select id="voiceProvider" onchange="markVoiceProviderTouched()" disabled></select>
+        <select id="voiceId" onchange="markVoiceSelectionTouched()" disabled></select>
+        <label class="toggle-inline"><input id="voiceReplyEnabled" type="checkbox" disabled> Voice replies</label>
         <button onclick="refreshVoiceOptions()">Refresh Voices</button>
         <button onclick="previewVoice()">Preview Voice</button>
         <button id="retryVoicePlayback" onclick="retryClientVoice()" hidden>Play blocked audio</button>
@@ -635,7 +635,7 @@
       <div id="chatLog" class="chat-log"></div>
       <div class="chat-composer">
         <textarea id="chatInput" spellcheck="true" placeholder="Ask Metis a governed virtual-chat question (Enter to send, Shift+Enter for newline)"></textarea>
-        <button id="chatSend" class="send" onclick="sendChat()">Send</button>
+        <button id="chatSend" class="send" onclick="sendChat()" disabled>Send</button>
       </div>
       <div class="composer-actions">
         <div id="chatStatus" class="status-line"></div>
@@ -700,7 +700,7 @@
         <span class="status-line">Simulated-input controls</span>
       </div>
       <div class="tool-row">
-        <button id="vcHoldToTalk" onpointerdown="vcBrowserPttDown(event)" onpointerup="vcBrowserPttUp(event)" onpointercancel="vcBrowserPttCancel(event)" style="user-select:none;touch-action:none">Hold to Talk (browser mic)</button>
+        <button id="vcHoldToTalk" disabled onpointerdown="vcBrowserPttDown(event)" onpointerup="vcBrowserPttUp(event)" onpointercancel="vcBrowserPttCancel(event)" style="user-select:none;touch-action:none">Hold to Talk (browser mic)</button>
         <span id="vcBrPttStatus" style="margin-left:8px;font-style:italic;color:#666"></span>
       </div>
       <div class="tool-row">
@@ -842,7 +842,7 @@
       <pre id="eventLog"></pre>
     </section>
   </main>
-  <script src="/static/voice_capture.js?v=20260916b"></script>
+  <script src="/static/voice_capture.js?v=20260916h"></script>
   <script src="/static/conversation_client.js?v=20260916b"></script>
   <script>
     const metisConversation = new MetisConversationClient();
@@ -868,6 +868,9 @@
     let currentLeds = null;
     let bohSeenTransitions = 0;
     let voiceOptionsCatalog = [];
+    const voiceCatalogState = new MetisVoiceCatalogState();
+    let savedSttProvider = 'faster_whisper';
+    let conversationSettingsReady = false;
     let toolsCatalog = [];
     let controlCenterSnapshot = null;
     let proposalsCatalog = [];
@@ -1229,17 +1232,25 @@
       document.getElementById('ollamaModel').disabled = !ollamaOnly;
     }
     async function refreshVoiceOptions() {
+      const request = voiceCatalogState.beginRequest();
       const status = document.getElementById('voiceStatus');
       status.textContent = 'Refreshing voices...';
       const data = await fetch('/metis/voice/options').then(r => r.json());
+      if (!voiceCatalogState.accepts(request)) return false;
       voiceOptionsCatalog = data.options || [];
       const providerSelect = document.getElementById('voiceProvider');
       const voiceSelect = document.getElementById('voiceId');
       document.getElementById('piperExe').value = data.piper?.exe || document.getElementById('piperExe').value || '';
       document.getElementById('piperModel').value = data.piper?.model || document.getElementById('piperModel').value || '';
       document.getElementById('piperConfig').value = data.piper?.config || document.getElementById('piperConfig').value || '';
-      const previousProvider = providerSelect.value || data.selected_provider || 'mock';
-      const previousVoice = voiceSelect.value || data.selected_voice_id || 'metis-counsel-mock';
+      const preferred = voiceCatalogState.preferred(
+        providerSelect.value,
+        voiceSelect.value,
+        data.selected_provider,
+        data.selected_voice_id
+      );
+      const previousProvider = preferred.engine;
+      const previousVoice = preferred.voice_id;
       const providers = [...new Set(voiceOptionsCatalog.map(option => option.provider))];
       providerSelect.innerHTML = '';
       for (const provider of providers) {
@@ -1254,6 +1265,15 @@
       status.textContent = current
         ? `${current.option_id} / ${current.status} / ${current.privacy_class}`
         : `${data.selected_voice_id} / ${data.selected_provider}`;
+      const savedVoiceSelection = voiceCatalogState.saved();
+      if (savedVoiceSelection && (
+        providerSelect.value !== savedVoiceSelection.engine
+        || (savedVoiceSelection.voice_id && voiceSelect.value !== savedVoiceSelection.voice_id)
+      )) {
+        document.getElementById('voiceReplyEnabled').checked = false;
+        status.textContent = `Saved voice ${savedVoiceSelection.engine}:${savedVoiceSelection.voice_id || '(default)'} is unavailable; voice replies are off.`;
+      }
+      return true;
     }
     function renderVoiceIds(preferredVoice) {
       const provider = document.getElementById('voiceProvider').value;
@@ -1282,6 +1302,25 @@
         ? `${current.option_id} / ${current.status} / ${current.privacy_class}`
         : '';
       document.getElementById('piperControls').style.display = document.getElementById('voiceProvider').value === 'piper' ? 'flex' : 'none';
+    }
+    function markVoiceSelectionTouched() {
+      voiceCatalogState.markTouched();
+      const current = voiceOptionsCatalog.find(option => option.option_id === document.getElementById('voiceId').value);
+      document.getElementById('voiceStatus').textContent = current
+        ? `${current.option_id} / ${current.status} / ${current.privacy_class}`
+        : '';
+    }
+    function markVoiceProviderTouched() {
+      voiceCatalogState.markTouched();
+      handleVoiceProviderChange();
+    }
+    function setConversationSettingsReady(ready) {
+      conversationSettingsReady = Boolean(ready);
+      document.getElementById('voiceProvider').disabled = !conversationSettingsReady;
+      document.getElementById('voiceId').disabled = !conversationSettingsReady;
+      document.getElementById('voiceReplyEnabled').disabled = !conversationSettingsReady;
+      document.getElementById('chatSend').disabled = !conversationSettingsReady;
+      vcUpdateCaptureControls();
     }
     function voiceChatOptions() {
       const speak = document.getElementById('voiceReplyEnabled').checked;
@@ -1356,9 +1395,30 @@
           }
         }
         if (setupStatus.setup?.voice) {
+          const savedVoiceSelection = {
+            engine: setupStatus.setup.voice.engine,
+            voice_id: setupStatus.setup.voice.voice_id || null
+          };
+          voiceCatalogState.setSaved(savedVoiceSelection);
+          savedSttProvider = setupStatus.setup.voice.stt_provider || 'faster_whisper';
           document.getElementById('voiceReplyEnabled').checked = Boolean(setupStatus.setup.voice.enabled);
-          document.getElementById('voiceProvider').value = setupStatus.setup.voice.engine;
-          renderVoiceIds(setupStatus.setup.voice.voice_id || undefined);
+          if (voiceOptionsCatalog.some(option => option.provider === savedVoiceSelection.engine)) {
+            document.getElementById('voiceProvider').value = savedVoiceSelection.engine;
+            renderVoiceIds(savedVoiceSelection.voice_id || undefined);
+            const selected = voiceOptionsCatalog.find(option =>
+              option.provider === savedVoiceSelection.engine
+              && option.option_id === document.getElementById('voiceId').value
+            );
+            if (!selected || (savedVoiceSelection.voice_id && selected.option_id !== savedVoiceSelection.voice_id)) {
+              document.getElementById('voiceReplyEnabled').checked = false;
+              document.getElementById('voiceStatus').textContent =
+                `Saved voice ${savedVoiceSelection.engine}:${savedVoiceSelection.voice_id || '(default)'} is unavailable; voice replies are off.`;
+            }
+          }
+          const sttSelect = document.getElementById('vcSttProvider');
+          if ([...sttSelect.options].some(option => option.value === savedSttProvider)) {
+            sttSelect.value = savedSttProvider;
+          }
         }
         setupActiveContext = await fetch('/metis/setup/conversation-context').then(async response => {
           const result = await response.json();
@@ -1375,10 +1435,10 @@
         document.getElementById('personalContextStatus').textContent = String(error);
       }
     }
-    async function refreshGoogleAccounts() {
+    async function refreshGoogleAccounts(reloadSetup = true) {
       const status = document.getElementById('personalContextStatus');
       try {
-        await refreshSetupContext();
+        if (reloadSetup) await refreshSetupContext();
         const labels = Object.values(setupActiveContext.labels || {});
         status.textContent = labels.length
           ? `${labels.length} labeled Google connection(s). Metis routes by label and asks if unclear.`
@@ -1414,9 +1474,22 @@
       document.getElementById('chatStatus').textContent = 'Generating...';
       try {
         if (metisPlayback.current) await stopClientVoice(true);
-        await routeProfileForMessage(message);
         const result = await metisConversation.requestChat(message, chatOptions(), conversationContext());
-        privateChatHistory.push({role: 'user', content: message}, {role: 'assistant', content: result.message});
+        let displayedMessage = message;
+        if (result.account_resolution) {
+          const resolved = result.account_resolution;
+          if (resolved.history_reset) privateChatHistory.length = 0;
+          if (resolved.display_request) displayedMessage = resolved.display_request;
+          if ((resolved.account_ids || []).length) {
+            setupActiveContext = {...setupActiveContext, ...resolved};
+            document.getElementById('personalContextStatus').textContent =
+              `Using Google label${resolved.matched_labels.length === 1 ? '' : 's'}: ${resolved.matched_labels.join(', ')}.`;
+          } else if (resolved.status === 'clarification_required') {
+            setupActiveContext = {...setupActiveContext, account_ids: [], account_id: null, calendars_by_account: {}, calendar_ids: []};
+            document.getElementById('personalContextStatus').textContent = 'Waiting for account clarification.';
+          }
+        }
+        privateChatHistory.push({role: 'user', content: displayedMessage}, {role: 'assistant', content: result.message});
         const labels = [`${result.provider}:${result.model}`];
         if (result.proposal_queued) labels.push('proposal queued');
         if (result.plan_queued) labels.push('plan_queued');
@@ -1446,39 +1519,6 @@
       } finally {
         sendButton.disabled = false;
       }
-    }
-    async function routeProfileForMessage(message) {
-      const response = await fetch('/metis/setup/resolve-profile', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({message})
-      });
-      const resolved = await response.json();
-      if (!response.ok) throw new Error(resolved.detail || 'Profile-label routing failed');
-      const current = setupActiveContext.account_ids || [];
-      const next = resolved.account_ids || [];
-      const shouldAdopt = resolved.explicit_match || (resolved.status === 'sole_profile' && current.length === 0);
-      if (shouldAdopt) {
-        if (JSON.stringify(current) !== JSON.stringify(next) && metisConversation.sessionId) {
-          await metisConversation.close();
-          privateChatHistory.length = 0;
-          renderChat(privateChatHistory);
-        }
-        setupActiveContext = {...setupActiveContext, ...resolved};
-        document.getElementById('personalContextStatus').textContent =
-          `Using Google label${resolved.matched_labels.length === 1 ? '' : 's'}: ${resolved.matched_labels.join(', ')}.`;
-      } else if (current.length === 0 && resolved.status === 'clarification_required') {
-        setupActiveContext = {
-          ...setupActiveContext,
-          account_ids: [],
-          account_id: null,
-          calendars_by_account: {},
-          calendar_ids: []
-        };
-        document.getElementById('personalContextStatus').textContent =
-          `No Google label selected. Metis can ask which of: ${resolved.available_labels.join(', ')}.`;
-      }
-      return resolved;
     }
     function handleChatKeydown(event) {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -2213,7 +2253,12 @@
       const fixtures = document.getElementById('vcFixtureControls');
       if (fixtures) fixtures.style.display = provider === 'simulated' ? 'flex' : 'none';
       const hold = document.getElementById('vcHoldToTalk');
-      if (hold) hold.disabled = provider !== 'local_mic';
+      if (hold) hold.disabled = !conversationSettingsReady || provider !== 'local_mic';
+      const stt = document.getElementById('vcSttProvider');
+      if (stt) {
+        stt.value = provider === 'local_mic' ? savedSttProvider : 'simulated';
+        stt.disabled = provider === 'local_mic';
+      }
       const browserStatus = document.getElementById('vcBrPttStatus');
       if (browserStatus && !browserStatus.textContent) {
         browserStatus.textContent = provider === 'local_mic'
@@ -2462,8 +2507,26 @@
       },
       onStatus: (message) => { document.getElementById('vcBrPttStatus').textContent = message; }
     });
+    let _vcAttempt = 0;
+    let _vcActiveAttempt = 0;
+    let _vcRequestController = null;
+    let _vcPageActive = true;
+    function vcAttemptCurrent(attempt) {
+      return _vcPageActive && attempt === _vcAttempt;
+    }
+    function vcInvalidateAttempt() {
+      _vcAttempt += 1;
+      _vcActiveAttempt = _vcAttempt;
+      if (_vcRequestController) {
+        _vcRequestController.abort();
+        _vcRequestController = null;
+      }
+      return _vcAttempt;
+    }
     async function vcBrowserPttDown(evt) {
       evt.preventDefault();
+      const attempt = vcInvalidateAttempt();
+      _vcActiveAttempt = attempt;
       const btn = document.getElementById('vcHoldToTalk');
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         document.getElementById('vcBrPttStatus').textContent = 'Browser microphone capture unavailable; typed chat remains available.';
@@ -2472,12 +2535,19 @@
       if (btn && evt.pointerId !== undefined && btn.setPointerCapture) btn.setPointerCapture(evt.pointerId);
       if (btn) btn.style.background = '#c00';
       const started = await _metisCapture.start();
+      if (!vcAttemptCurrent(attempt)) {
+        if (started) await _metisCapture.cancel();
+        return;
+      }
       if (!started && btn) btn.style.background = '';
     }
     async function vcBrowserPttUp(evt) {
       evt.preventDefault();
+      const attempt = _vcActiveAttempt;
+      if (!vcAttemptCurrent(attempt)) return;
       document.getElementById('vcBrPttStatus').textContent = 'Finalizing local WAV…';
       const wav = await _metisCapture.stop();
+      if (!vcAttemptCurrent(attempt)) return;
       const btn = document.getElementById('vcHoldToTalk');
       if (btn && evt.pointerId !== undefined && btn.hasPointerCapture?.(evt.pointerId)) btn.releasePointerCapture(evt.pointerId);
       _vcBrPttCleanup();
@@ -2487,9 +2557,12 @@
       form.append('stt_provider', document.getElementById('vcSttProvider').value || 'faster_whisper');
       form.append('stt_hint', document.getElementById('vcHint').value.trim());
       form.append('options_json', JSON.stringify(vcPayload().options || {}));
+      const controller = new AbortController();
+      _vcRequestController = controller;
       try {
-        const response = await fetch('/metis/audio/browser_ptt', {method:'POST', body: form});
+        const response = await fetch('/metis/audio/browser_ptt', {method:'POST', body: form, signal: controller.signal});
         const result = await response.json();
+        if (!vcAttemptCurrent(attempt)) return;
         if (response.status === 404) {
           metisConversation.invalidateSession(metisConversation.sessionId);
           document.getElementById('vcBrPttStatus').textContent = 'Voice session expired. Press and speak again to create a new session; audio was not replayed.';
@@ -2515,27 +2588,44 @@
           : (result.status === 'no_text_recognized' ? 'No speech was recognized.' : 'Voice turn completed.');
         vcShowResult('browser_ptt', result);
       } catch(e) {
+        if (!vcAttemptCurrent(attempt) || e?.name === 'AbortError') return;
         if (document.getElementById('vcBrPttStatus').textContent === 'Finalizing local WAV…') {
           document.getElementById('vcBrPttStatus').textContent = 'Voice request failed: ' + String(e);
         }
         vcShowResult('browser_ptt', {}, String(e));
+      } finally {
+        if (_vcRequestController === controller) _vcRequestController = null;
       }
     }
     async function vcBrowserPttCancel(evt) {
       evt.preventDefault();
+      const attempt = vcInvalidateAttempt();
       await _metisCapture.cancel();
+      if (!vcAttemptCurrent(attempt)) return;
       document.getElementById('vcBrPttStatus').textContent = 'Cancelled; microphone tracks stopped.';
       _vcBrPttCleanup();
     }
     // --- end Browser held-to-talk ---
-    window.addEventListener('pagehide', () => { _metisCapture.cancel().catch(() => {}); });
+    window.addEventListener('pagehide', () => {
+      _vcPageActive = false;
+      vcInvalidateAttempt();
+      _metisCapture.cancel().catch(() => {});
+    });
     // --- end Voice Conversation Test panel ---
     document.getElementById('chatInput').addEventListener('keydown', handleChatKeydown);
     refresh();
     refreshLlmOptions();
-    refreshVoiceOptions();
     vcUpdateCaptureControls();
-    refreshSetupContext().then(refreshGoogleAccounts);
+    (async () => {
+      setConversationSettingsReady(false);
+      try {
+        await refreshVoiceOptions();
+        await refreshSetupContext();
+        await refreshGoogleAccounts(false);
+      } finally {
+        setConversationSettingsReady(true);
+      }
+    })();
     refreshTools();
     refreshToolPlans();
     refreshBohStatus();

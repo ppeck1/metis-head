@@ -45,6 +45,18 @@ function browser(overrides) {
   }, overrides || {});
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return {promise, resolve, reject};
+}
+
+async function settle() {
+  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
 async function speakerTestRequiresHumanConfirmation() {
   const updates = [];
   const controller = new MetisAudioSetupController({
@@ -144,6 +156,72 @@ async function cancellationCleansCapture() {
   assert.equal(result.state, AUDIO_SETUP_STATES.IDLE);
 }
 
+async function cancelledTranscriptionCannotPublishLateResult() {
+  const gate = deferred();
+  const transcripts = [];
+  const controller = new MetisAudioSetupController({
+    global: browser(),
+    AudioContext: FakeAudioContext,
+    captureFactory: () => ({
+      async start() { return true; },
+      async stop() { return new Blob(['wav'], {type: 'audio/wav'}); },
+      async cancel() {}
+    }),
+    transcribe: () => gate.promise,
+    onTranscript: (text) => transcripts.push(text)
+  });
+  await controller.startMicrophoneTest();
+  const stopping = controller.stopMicrophoneTest();
+  await settle();
+  await controller.cancelMicrophoneTest();
+  gate.resolve({transcript: 'stale words'});
+  const result = await stopping;
+  assert.equal(result.state, AUDIO_SETUP_STATES.IDLE);
+  assert.deepEqual(transcripts, []);
+  assert.equal(controller.transcript, '');
+}
+
+async function cancelledStartCannotBecomeRecordingLater() {
+  const gate = deferred();
+  let captureCancelled = false;
+  const controller = new MetisAudioSetupController({
+    global: browser(),
+    AudioContext: FakeAudioContext,
+    captureFactory: () => ({
+      start: () => gate.promise,
+      async cancel() { captureCancelled = true; }
+    })
+  });
+  const starting = controller.startMicrophoneTest();
+  await controller.cancelMicrophoneTest();
+  gate.resolve(true);
+  const result = await starting;
+  assert.equal(result.state, AUDIO_SETUP_STATES.IDLE);
+  assert.equal(captureCancelled, true);
+}
+
+async function staleCaptureCallbacksCannotOverwriteNewerState() {
+  const gate = deferred();
+  let captureOptions = null;
+  const controller = new MetisAudioSetupController({
+    global: browser(),
+    AudioContext: FakeAudioContext,
+    captureFactory: (options) => {
+      captureOptions = options;
+      return {start: () => gate.promise, async cancel() {}};
+    }
+  });
+  const starting = controller.startMicrophoneTest();
+  await controller.cancelMicrophoneTest();
+  captureOptions.onStatus('stale status');
+  captureOptions.onLevel(0.9);
+  gate.reject(new Error('late failure'));
+  const result = await starting;
+  assert.equal(result.state, AUDIO_SETUP_STATES.IDLE);
+  assert.equal(result.message, 'Microphone test cancelled.');
+  assert.equal(result.inputLevel, null);
+}
+
 async function main() {
   await speakerTestRequiresHumanConfirmation();
   await negativeSpeakerConfirmationIsActionable();
@@ -151,6 +229,9 @@ async function main() {
   await microphoneUsesCaptureAndBoundedTranscription();
   await microphoneFailureDoesNotInvokeTranscription();
   await cancellationCleansCapture();
+  await cancelledTranscriptionCannotPublishLateResult();
+  await cancelledStartCannotBecomeRecordingLater();
+  await staleCaptureCallbacksCannotOverwriteNewerState();
   process.stdout.write('audio setup controller tests passed\n');
 }
 

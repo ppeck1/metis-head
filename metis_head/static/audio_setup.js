@@ -38,6 +38,7 @@
       this.inputLevel = null;
       this.capture = null;
       this._speakerAttempt = 0;
+      this._microphoneAttempt = 0;
     }
 
     checkCapabilities() {
@@ -158,6 +159,7 @@
       }
       if (this.capture) return this.snapshot();
 
+      const attempt = ++this._microphoneAttempt;
       this.transcript = '';
       this.inputLevel = null;
       this._setState(AUDIO_SETUP_STATES.MICROPHONE_STARTING, 'Requesting microphone access…');
@@ -165,8 +167,11 @@
         mediaDevices: this.mediaDevices,
         authorize: this.captureOptions.authorize || (async () => ({status: 'ptt_pressed'})),
         cleanup: this.captureOptions.cleanup || (async () => {}),
-        onStatus: (message) => this._captureStatus(message),
+        onStatus: (message) => {
+          if (attempt === this._microphoneAttempt) this._captureStatus(message);
+        },
         onLevel: (level) => {
+          if (attempt !== this._microphoneAttempt) return;
           this.inputLevel = boundedNumber(level, 0, 0, 1);
           this.onStatus(this.snapshot());
         }
@@ -175,7 +180,14 @@
         this.capture = this.captureFactory
           ? this.captureFactory(options)
           : new this.VoiceCaptureType(options);
-        const started = await this.capture.start();
+        const capture = this.capture;
+        const started = await capture.start();
+        if (attempt !== this._microphoneAttempt || this.capture !== capture) {
+          if (started && typeof capture.cancel === 'function') {
+            try { await capture.cancel(); } catch (_) {}
+          }
+          return this.snapshot();
+        }
         if (!started) {
           this.capture = null;
           const reason = this.message && this.message !== 'Requesting microphone access…'
@@ -189,6 +201,7 @@
           'Microphone is recording locally. Speak a short phrase, then stop.'
         );
       } catch (error) {
+        if (attempt !== this._microphoneAttempt) return this.snapshot();
         this.capture = null;
         return this._setState(AUDIO_SETUP_STATES.MICROPHONE_ERROR, microphoneErrorMessage(error), error);
       }
@@ -199,9 +212,11 @@
         return this._setState(AUDIO_SETUP_STATES.MICROPHONE_ERROR, 'Start the microphone test before stopping it.');
       }
       const capture = this.capture;
+      const attempt = this._microphoneAttempt;
       this.capture = null;
       try {
         const wav = await capture.stop();
+        if (attempt !== this._microphoneAttempt) return this.snapshot();
         if (!wav) {
           return this._setState(AUDIO_SETUP_STATES.MICROPHONE_ERROR, 'No microphone audio was captured.');
         }
@@ -213,6 +228,7 @@
         }
         this._setState(AUDIO_SETUP_STATES.MICROPHONE_TRANSCRIBING, 'Checking the captured phrase with speech-to-text…');
         const result = await this.transcribe(wav);
+        if (attempt !== this._microphoneAttempt) return this.snapshot();
         const transcript = normalizeTranscript(result);
         if (!transcript) {
           return this._setState(AUDIO_SETUP_STATES.MICROPHONE_ERROR, 'Speech-to-text returned no recognized phrase.');
@@ -221,11 +237,13 @@
         this.onTranscript(transcript, result);
         return this._setState(AUDIO_SETUP_STATES.MICROPHONE_COMPLETE, 'Microphone and speech-to-text test completed.');
       } catch (error) {
+        if (attempt !== this._microphoneAttempt) return this.snapshot();
         return this._setState(AUDIO_SETUP_STATES.MICROPHONE_ERROR, microphoneErrorMessage(error), error);
       }
     }
 
     async cancelMicrophoneTest() {
+      ++this._microphoneAttempt;
       const capture = this.capture;
       this.capture = null;
       if (capture && typeof capture.cancel === 'function') {

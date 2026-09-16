@@ -255,7 +255,7 @@ class GoogleReadBroker:
                             name=str(raw.get("summaryOverride") or raw.get("summary") or calendar_id),
                             primary=bool(raw.get("primary", False)),
                             selected=(calendar_id in self._selections.get(account_id, ()))
-                            if self._selections.get(account_id)
+                            if self._enforce_selections
                             else bool(raw.get("selected", False)),
                             access_role=str(raw.get("accessRole") or "unknown"),
                             timezone=str(raw["timeZone"]) if raw.get("timeZone") else None,

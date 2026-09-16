@@ -134,3 +134,40 @@ def test_whisper_dependency_without_confirmed_model_assets_is_only_configured(mo
     assert stt["status"] == "configured"
     assert "not confirmed" in stt["reason"]
     assert report["ready_for_browser_audio"] is False
+
+
+def test_readiness_uses_persisted_effective_settings_and_separates_evidence():
+    setup = {
+        "provider": {
+            "choice": "ollama",
+            "model": "saved-model:latest",
+            "last_verification": {
+                "status": "verified",
+                "timestamp": "2026-09-16T12:00:00Z",
+            },
+        },
+        "voice": {
+            "enabled": True,
+            "engine": "piper",
+            "stt_provider": "faster_whisper",
+            "last_verification": {
+                "status": "verified",
+                "timestamp": "2026-09-16T12:01:00Z",
+            },
+        },
+    }
+
+    report = build_startup_readiness({}, setup_state=setup)
+
+    assert report["selected_llm_provider"] == "ollama"
+    assert report["selected_stt_provider"] == "faster_whisper"
+    assert report["selected_tts_provider"] == "piper"
+    assert report["effective_configuration"]["llm"] == {
+        "provider": "ollama",
+        "model": "saved-model:latest",
+        "source": "setup",
+    }
+    assert report["effective_configuration"]["stt"]["source"] == "setup"
+    assert report["evidence"]["successful_local_execution"]["llm"].startswith("verified_local_probe:")
+    assert report["evidence"]["operator_confirmed_physical_output"]["tts"].startswith("operator_confirmed:")
+    assert report["evidence"]["successful_local_execution"]["stt"] == "not_recorded"

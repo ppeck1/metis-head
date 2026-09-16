@@ -162,7 +162,7 @@ def test_setup_page_and_build_contract_are_served(tmp_path, monkeypatch):
         build = client.get("/metis/build")
     assert page.status_code == 200 and "Setup / Connections" in page.text
     assert status.status_code == 200
-    assert len(status.json()["setup"]["google_profiles"]) == 4
+    assert status.json()["setup"]["google_profiles"] == []
     assert status.json()["providers"]["providers"][1]["selectable"] is False
     assert build.json()["schema"] == "metis.build.v1"
 
@@ -170,17 +170,29 @@ def test_setup_page_and_build_contract_are_served(tmp_path, monkeypatch):
 def test_profile_labels_route_exact_account_or_require_clarification(tmp_path, monkeypatch):
     monkeypatch.setenv("METIS_SETUP_FILE", str(tmp_path / "setup.json"))
     monkeypatch.setattr(brain, "_google_store", lambda: _Connections())
-    profiles = {
-        "profile_1": {"label": "Personal / Main", "account_id": "personal@example.test"},
-        "profile_2": {"label": "Nursing", "account_id": "nursing@example.test"},
-        "profile_3": {"label": "Photography", "account_id": "photo@example.test"},
-        "profile_4": {"label": "Sinternet Cult", "account_id": "shop@example.test"},
-    }
+    profiles = [
+        {
+            "slot_id": slot, "label": label, "account_id": account,
+            "calendar_ids": ["primary"], "scopes": ["https://www.googleapis.com/auth/calendar.readonly"],
+            "status": "verified", "last_verification": None,
+        }
+        for slot, label, account in (
+            ("profile_1", "Personal / Main", "personal@example.test"),
+            ("profile_2", "Nursing", "nursing@example.test"),
+            ("profile_3", "Photography", "photo@example.test"),
+            ("profile_4", "Sinternet Cult", "shop@example.test"),
+        )
+    ]
     with TestClient(brain.app) as client:
         current = client.get("/metis/setup").json()["setup"]
         saved = client.patch(
             "/metis/setup",
-            json={"patch": {"google_profiles": profiles}, "expected_revision": current["revision"]},
+            json={"patch": {
+                "google_profiles": profiles,
+                "profile_selection": {
+                    "mode": "default", "default_slot_id": "profile_1", "active_slot_ids": ["profile_1"],
+                },
+            }, "expected_revision": current["revision"]},
         )
         matched = client.post(
             "/metis/setup/resolve-profile", json={"message": "What is on my Nursing calendar?"}

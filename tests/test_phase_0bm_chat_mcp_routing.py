@@ -148,6 +148,60 @@ def test_chat_routes_project_atlas_mcp_read_without_llm(monkeypatch) -> None:
     assert r"B:\private" not in rendered
 
 
+def test_named_project_atlas_status_resolves_then_reads_exact_project(monkeypatch) -> None:
+    _clear_mcp_env(monkeypatch)
+    env = {
+        "METIS_MCP_ENABLED": "true",
+        "METIS_MCP_ATLAS_ENABLED": "true",
+        "METIS_MCP_ATLAS_COMMAND": r"C:\private\atlas-mcp.exe",
+    }
+    state = replay_events(
+        baseline_state(),
+        [
+            {"type": "tool_control_toggle", "control": "tool_usage", "mode": "read", "enabled": True},
+            {"type": "tool_control_toggle", "control": "project_atlas_mcp", "mode": "read", "enabled": True},
+        ],
+    )
+    calls: list[dict[str, Any]] = []
+
+    def fake_call(server_id: str, tool_name: str, arguments: dict[str, Any], *, env: dict[str, str]) -> dict[str, Any]:
+        calls.append({"server_id": server_id, "tool_name": tool_name, "arguments": arguments})
+        if tool_name == "list_projects":
+            return {
+                "status": "read_only_complete",
+                "result_hash": "atlaslist001",
+                "result": {"content": [{"type": "text", "text": json.dumps({"projects": [
+                    {"project_id": "space-nurse-42", "name": "Space Nurse", "status": "active"},
+                    {"project_id": "other-1", "name": "Other Project", "status": "paused"},
+                ]})}]},
+            }
+        assert tool_name == "get_project_status"
+        return {
+            "status": "read_only_complete",
+            "result_hash": "atlasstatus001",
+            "result": {"content": [{"type": "text", "text": json.dumps({
+                "project_id": "space-nurse-42", "name": "Space Nurse", "status": "active"
+            })}]},
+        }
+
+    result = route_mcp_chat_read(
+        "Using Project Atlas MCP, what is the status of Space Nurse?",
+        state,
+        env=env,
+        call_tool=fake_call,
+    )
+
+    assert result is not None
+    assert result["source_state"] == "sourced"
+    assert result["metadata"]["tool_name"] == "get_project_status"
+    assert "Space Nurse" in result["message"]
+    assert "active" in result["message"]
+    assert calls == [
+        {"server_id": "project_atlas", "tool_name": "list_projects", "arguments": {"limit": 100}},
+        {"server_id": "project_atlas", "tool_name": "get_project_status", "arguments": {"project_id": "space-nurse-42"}},
+    ]
+
+
 def test_chat_mcp_read_blocks_when_control_center_read_is_off(monkeypatch) -> None:
     _clear_mcp_env(monkeypatch)
     _enable_boh(monkeypatch)

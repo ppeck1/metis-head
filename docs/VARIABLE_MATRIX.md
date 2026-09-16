@@ -55,6 +55,9 @@ The detailed project variable map remains docs/project_variable_map.md. This cap
 | METIS_CONNECTIONS_FILE | Exact non-secret connection metadata file override | `<METIS_STATE_DIR>\connections.json` | no | host | yes |
 | METIS_USAGE_FILE | Exact durable paid-usage ledger override | `<METIS_STATE_DIR>\usage.json` | no | host | yes |
 | METIS_SETUP_FILE | Exact non-secret setup wizard state file override | `<METIS_STATE_DIR>\setup.json` | no | host | yes |
+| setup.voice.engine / voice_id | Persisted browser-conversation TTS selection, applied only after the voice catalog loads | `piper` / `piper-local` | no | user setup | no |
+| setup.voice.stt_provider | Persisted supported STT selection used by setup, browser conversation, and readiness | `faster_whisper` | no | user setup | no |
+| setup.google_profiles[] | Variable-length stable profile IDs, user labels, read scopes, and selected calendar IDs; never OAuth credentials | empty list | no | user setup | no |
 | METIS_BUILD_ID | Optional sanitized build identifier override | derived from local Git revision | no | process | yes |
 | METIS_GOOGLE_CLIENT_SECRETS | Path to Google desktop OAuth client JSON used during one-time setup | unset | yes | setup process | no |
 | METIS_PAID_BUDGET_USD | Application ceiling for paid-provider reservations | unset; paid calls blocked | no | host | yes |
@@ -65,12 +68,12 @@ The detailed project variable map remains docs/project_variable_map.md. This cap
 | METIS_OPENAI_MODEL | Paid OpenAI model identifier | `gpt-4o-mini` | no | process | yes |
 | OPENAI_API_KEY | OpenAI credential; never stored in repository or exports | unset | yes | process | yes |
 | METIS_STT_ALLOW_LOCAL | Enables local faster-whisper execution | direct process: false; tracked launcher: true | no | process | yes |
-| METIS_STT_ENGINE | Selected STT adapter | direct process: simulated; tracked launcher: faster_whisper | no | process | yes |
+| METIS_STT_ENGINE | Explicit process-level STT override; when absent, setup/browser conversation/readiness use persisted `setup.voice.stt_provider` | persisted `faster_whisper`; legacy direct routes may retain simulated fallback | no | process/user setup | environment: yes; setup: no |
 | METIS_STT_MODEL | Warmed faster-whisper model name | direct process: small; tracked launcher: base.en | no | process | yes |
 | METIS_STT_MODEL_DIR | Optional local model/download directory | unset | no | host | yes |
 | METIS_AUDIO_ALLOW_LOCAL_MIC | Enables optional server-host microphone adapter; browser held-to-talk does not require it | false | no | process | yes |
 | METIS_VOICE_ENABLED | Enables automatic voice output | false | no | process | yes |
-| METIS_VOICE_PROVIDER | Voice provider selector (`mock`, `system`, `piper`) | mock | no | process/request | yes |
+| METIS_VOICE_PROVIDER | Explicit process/request voice provider selector (`mock`, `system`, `piper`); browser conversation restores persisted Setup choice after catalog load | saved Setup engine for browser use; mock for unconfigured low-level calls | no | process/request/user setup | environment: yes; setup: no |
 | METIS_VOICE_ID | Voice profile identifier | `metis-counsel-mock` | no | process/request | yes |
 | METIS_VOICE_RATE | Speech-rate metadata, clamped by voice configuration | 1.0 | no | process/request | yes |
 | METIS_VOICE_VOLUME | Voice volume | state volume or 0.6 | no | process/request | yes |
