@@ -82,7 +82,7 @@ def _route_single_mcp_chat_read(
     mcp = _cached_mcp_result(cache_key, started)
     cache_hit = mcp is not None
     if mcp is None:
-        mcp = _call_mcp(call_tool, server_id, intent["tool_name"], intent["arguments"], env)
+        mcp = _call_intent(call_tool, intent, env)
         _remember_mcp_result(cache_key, mcp, started)
     elapsed_ms = max(0, round((perf_counter() - started) * 1000))
     status = str(mcp.get("status") or "unknown")
@@ -121,6 +121,48 @@ def _call_mcp(
     env: dict[str, str],
 ) -> dict[str, Any]:
     return call_tool(server_id, tool_name, arguments, env=env)
+
+
+def _call_intent(
+    call_tool: CallMCPTool,
+    intent: dict[str, Any],
+    env: dict[str, str],
+) -> dict[str, Any]:
+    """Execute a classified read without discarding a named Atlas project.
+
+    Atlas status/brief tools require a stable project id.  Resolve the exact
+    user-supplied name against the bounded project catalog, then call the
+    requested named-project tool.  Generic diagnostics continue to use the
+    ordinary list operation.
+    """
+    server_id = str(intent["server_id"])
+    tool_name = str(intent["tool_name"])
+    arguments = dict(intent["arguments"])
+    project_query = arguments.pop("project", None)
+    if server_id != "project_atlas" or not isinstance(project_query, str):
+        return _call_mcp(call_tool, server_id, tool_name, arguments, env)
+
+    listing = _call_mcp(call_tool, server_id, "list_projects", {"limit": 100}, env)
+    if listing.get("status") != "read_only_complete":
+        return listing
+    matches = _matching_atlas_projects(_project_items(listing.get("result")), project_query)
+    if len(matches) != 1:
+        reason = "atlas_project_not_found" if not matches else "atlas_project_ambiguous"
+        return {
+            "status": "read_error",
+            "blocked_reason": reason,
+            "error": reason,
+            "result": {"project_query": project_query, "candidate_count": len(matches)},
+        }
+    project = matches[0]
+    project_id = project.get("project_id") or project.get("id")
+    if not isinstance(project_id, str) or not project_id.strip():
+        return {
+            "status": "read_error",
+            "blocked_reason": "atlas_project_missing_stable_id",
+            "error": "atlas_project_missing_stable_id",
+        }
+    return _call_mcp(call_tool, server_id, tool_name, {"project_id": project_id.strip()}, env)
 
 
 def _classify_intent(message: str) -> dict[str, Any] | None:
@@ -221,6 +263,12 @@ def _is_write_request(normalized: str) -> bool:
 
 def _read_tool_and_arguments(server_id: str, message: str, normalized: str) -> tuple[str, dict[str, Any]]:
     if server_id == "project_atlas":
+        project = _atlas_project_query(message)
+        if project:
+            if "brief" in normalized or "summary" in normalized:
+                return "get_project_brief", {"project": project}
+            if "status" in normalized or "state" in normalized:
+                return "get_project_status", {"project": project}
         return "list_projects", {"limit": 5}
     if _is_boh_access_probe(normalized):
         return "get_current_state", {}
@@ -241,6 +289,46 @@ def _boh_query(message: str) -> str:
     query = re.sub(r"\s+", " ", query).strip()
     query = re.sub(r"^the\s+", "", query, flags=re.IGNORECASE)
     return query or message.strip()
+
+
+def _atlas_project_query(message: str) -> str | None:
+    """Extract a project name only from an explicit status/brief question."""
+    patterns = (
+        r"\b(?:status|state|brief|summary)\s+(?:of|for)\s+(.+)$",
+        r"\b(.+?)\s+(?:project\s+)?(?:status|state|brief|summary)\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, message, flags=re.IGNORECASE)
+        if not match:
+            continue
+        query = match.group(1)
+        query = re.split(r"\b(?:using|through|from|in)\s+(?:project\s+)?atlas(?:\s+mcp)?\b", query, maxsplit=1, flags=re.IGNORECASE)[0]
+        query = re.sub(r"\b(?:project\s+)?atlas(?:\s+mcp)?\b", " ", query, flags=re.IGNORECASE)
+        query = re.sub(r"^(?:the\s+)?project\s+", "", query, flags=re.IGNORECASE)
+        query = re.sub(r"[^A-Za-z0-9._\-\s]+", " ", query)
+        query = re.sub(r"\s+", " ", query).strip()
+        if _normalize(query) not in {"", "project", "projects", "project list", "atlas"}:
+            return query
+    return None
+
+
+def _matching_atlas_projects(projects: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    needle = _normalize(query)
+    matches: list[dict[str, Any]] = []
+    for project in projects:
+        aliases = project.get("aliases")
+        identities = [
+            project.get("project_id"),
+            project.get("id"),
+            project.get("name"),
+            project.get("title"),
+            project.get("project_name"),
+        ]
+        if isinstance(aliases, list):
+            identities.extend(aliases)
+        if any(isinstance(value, str) and _normalize(value) == needle for value in identities):
+            matches.append(project)
+    return matches
 
 
 def _render_success(intent: dict[str, Any], mcp: dict[str, Any], elapsed_ms: int, cache_hit: bool) -> str:
@@ -282,6 +370,24 @@ def _render_atlas_detail(result: Any) -> str:
             status = project.get("status") or project.get("state")
             rendered.append(_clean_text(f"{name}{f' ({status})' if status else ''}", limit=100))
         return f"Projects: {', '.join(rendered)}."
+    for payload in _parsed_payloads(result):
+        if not isinstance(payload, dict):
+            continue
+        candidate = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+        if not isinstance(candidate, dict):
+            continue
+        name = candidate.get("name") or candidate.get("title") or candidate.get("project_name")
+        status = candidate.get("status") or candidate.get("state")
+        summary = candidate.get("summary") or candidate.get("brief") or candidate.get("description")
+        if name or status or summary:
+            parts = []
+            if name:
+                parts.append(f"Project: {_clean_text(str(name), limit=120)}")
+            if status:
+                parts.append(f"status: {_clean_text(str(status), limit=120)}")
+            if summary:
+                parts.append(f"summary: {_clean_text(str(summary), limit=260)}")
+            return "; ".join(parts) + "."
     text = _first_text(result)
     if text:
         return f"Result preview: {_clean_text(text, limit=360)}"

@@ -32,23 +32,27 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | Completion release candidate (`G0`-`G5` fixture integration) |
-| Focus | Private contextual sessions, real browser WAV PTT, typed tool loop, Google read adapters, credential/budget boundaries, and truthful readiness. |
-| Verification | Completion release verified under Python 3.11 (`603 passed`), including user-confirmed browser microphone input and Piper audio output, faster-whisper transcription, persisted Ollama selection, and resumable setup state. Live Google consent remains operator-completed. |
+| Current phase | Account-aware local-assistant reliability checkpoint |
+| Focus | Server-authoritative account routing, complete loopback OAuth/calendar selection, deterministic saved voice/STT settings, audio recovery, and consistently gated Atlas reads. |
+| Verification | Windows/Python 3.11: `620 passed`; Python compilation, audio lifecycle, voice-catalog, and six-connection Node checks passed. Prior operator-confirmed browser microphone, faster-whisper, and Piper output evidence is preserved. Live Google consent remains operator-completed. |
 
 Completion-release behavior:
 
 - Open `/setup` for the permanent resumable provider, speaker, microphone, Google-profile, and project setup flow. Settings are backend-persisted; browser storage never holds credentials.
 - The saved Setup conversation provider and Ollama model drive Virtual Chat and voice turns after restart. `Mock` remains an explicit deterministic test fixture, not the normal configured conversation path.
 - Voice Preview now enters the same session-owned browser playback queue as a spoken reply. A separate user-clicked tone isolates browser/OS output from Piper and model setup.
-- Four editable Google profile slots support one default or an explicit authorized set; switching a dashboard profile closes the old private conversation.
+- Google connections are a variable-length collection with stable IDs. Only real connected identities render; each connection has an independent label, calendar grant selection, and Remove action.
 
 - Each browser tab owns a private bounded session. Session transcripts are used transiently for context but are redacted from global state and safe exports.
 - Hold to Talk captures bounded WAV audio only after server authorization, posts it to the local STT route, and supports cancellation during permission, capture, model work, synthesis, and browser playback.
 - The local Ollama OpenAI-compatible adapter supports bounded model-selected read-only tool calls in ordinary chat, including calendar follow-ups in the same session.
 - Google Calendar, Gmail, and Contacts access is read-only, account-explicit, paginated/bounded, and unavailable when the necessary actual OAuth grant is missing.
 - The dashboard discovers connected Google accounts/calendars and persists calendar selection in the per-user state directory; refreshed OAuth tokens preserve that selection.
-- BOH and Project Atlas remain allowlisted read-only MCP integrations. Private commands, paths, and child environment values remain outside the repository.
+- Typed and transcribed requests use the same full-label/unique-alias account resolver. Exclusions never grant access, deliberate multi-account requests authorize only the named set, and ambiguous requests retain the original question while asking for clarification.
+- Google OAuth uses a strict, expiring, single-use loopback callback and performs token exchange against Google's HTTPS endpoint without disabling transport validation.
+- Saved voice catalogs load before the persisted Piper choice is applied; saved STT is `faster_whisper`. Suspended audio contexts are resumed, and stale capture/transcription results are suppressed after cancel, navigation, or a newer attempt.
+- BOH and Project Atlas remain allowlisted read-only MCP integrations. Atlas tools are hidden and transport-gated when the Tool Control Center is Off; named-project MCP questions resolve the project before requesting status/brief. Private commands, paths, and child environment values remain outside the repository.
+- Startup readiness reports effective configuration separately from verified local execution and operator-confirmed physical output.
 - OpenAI production chat is formally deferred: the legacy direct provider is fail-closed before network dispatch. Durable shared accounting is fixture-verified but is not composed into the application as a paid dispatch path.
 
 Implemented phase groups:
@@ -265,7 +269,7 @@ Phase 0BC implemented:
   2. Lazy `from faster_whisper import WhisperModel` â€” never at module load time. Missing dep â†’ `dependency_unavailable`.
   3. `METIS_STT_MODEL` (default `small`), `METIS_STT_MODEL_DIR` (offline model path). Model load fail â†’ `model_unavailable`; no crash.
 - **Disabled scaffolds**: `VoskSTT`, `OpenAIWhisperSTT`, `WhisperCppSTT` â€” return `not_enabled`; no imports.
-- **`METIS_STT_ENGINE`** env var (default `simulated`) selects the active STT engine; `POST /metis/audio/listen` falls back to this env var when no `stt_provider` is in the payload.
+- **Historical Phase 0BC default:** `METIS_STT_ENGINE` originally defaulted legacy direct audio routes to `simulated`. Current setup/browser conversation persists `voice.stt_provider=faster_whisper`; an explicit environment variable remains the process-level override.
 - **`stt-whisper = ["faster-whisper>=1.0"]`** optional extra in `pyproject.toml` (`pip install -e ".[stt-whisper]"`). No PyTorch or openai-whisper dependency.
 - **`GET /metis/audio/input`** now reports `stt_engine`, `stt_allow_local`, `faster_whisper_available`, `stt_model`; input device enumeration is gated behind `mic_hardware_enabled`.
 - **`docs/LOCAL_STT_SMOKE_TEST.md`**: manual PowerShell smoke-test for real STT.
@@ -1360,6 +1364,12 @@ Default local Piper assets are auto-detected when installed/downloaded:
 `METIS_VOICE_ALLOW_SYSTEM_TTS=true`; the default `mock` provider emits deterministic TTS events
 without audio.
 
+The setup wizard also persists `voice.enabled`, `voice.engine`, `voice.voice_id`, and
+`voice.stt_provider`. The browser loads the provider/voice catalog first and then applies these
+saved values, so a delayed refresh cannot silently replace a valid Piper choice with mock. Explicit
+request options and environment gates still take precedence where those lower-level routes support
+them.
+
 For local audible speech, choose `piper` in the dashboard, enter the local Piper executable and
 `.onnx` model paths, turn on `Voice replies`, then use `Preview Voice` or send a chat response.
 The generated WAV is held briefly in a bounded in-memory store and consumed once by the requesting
@@ -1378,7 +1388,7 @@ $env:METIS_AUDIO_ALLOW_LOCAL_MIC = "true"
 
 # Real STT (Phase 0BC) â€” requires pip install -e ".[stt-whisper]"
 $env:METIS_STT_ALLOW_LOCAL       = "true"
-$env:METIS_STT_ENGINE            = "faster_whisper"   # default: simulated
+$env:METIS_STT_ENGINE            = "faster_whisper"   # explicit process override; Setup default is faster_whisper
 $env:METIS_STT_MODEL             = "small"            # tiny/base/small/medium/large
 $env:METIS_STT_MODEL_DIR         = "C:/models/whisper" # optional offline model dir
 ```

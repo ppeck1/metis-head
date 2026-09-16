@@ -64,6 +64,7 @@ from .setup_state import SetupStateError, SetupStateStore
 from .provider_capabilities import provider_capabilities
 from .build_info import build_info
 from .google_oauth_web import GoogleOAuthWebError, GoogleOAuthWebManager
+from .account_routing import AccountProfile, AccountResolution, profiles_from_setup, resolve_account_labels
 
 
 @asynccontextmanager
@@ -131,6 +132,11 @@ def setup_wizard_script() -> FileResponse:
     return _static_file("setup_wizard.js", media_type="application/javascript")
 
 
+@app.get("/static/setup_connections.js")
+def setup_connections_script() -> FileResponse:
+    return _static_file("setup_connections.js", media_type="application/javascript")
+
+
 def _setup_store() -> SetupStateStore:
     return SetupStateStore()
 
@@ -169,12 +175,13 @@ def update_setup(payload: dict[str, Any]) -> dict[str, Any]:
         )
         if capability is None or not capability["selectable"]:
             raise HTTPException(status_code=400, detail="selected conversation provider is not available")
-    if isinstance(profile_updates, dict):
+    if isinstance(profile_updates, (dict, list)):
         connected = {
             str(item.get("account_id")) for item in _google_store().list_connections()
             if item.get("provider") == "google" and item.get("status") == "connected"
         }
-        for update in profile_updates.values():
+        updates = profile_updates.values() if isinstance(profile_updates, dict) else profile_updates
+        for update in updates:
             if isinstance(update, dict) and update.get("account_id") and str(update["account_id"]) not in connected:
                 raise HTTPException(status_code=400, detail="profile identity must be a verified connected Google account")
     try:
@@ -203,49 +210,44 @@ def setup_conversation_context() -> dict[str, Any]:
     }
 
 
-def _profile_label_aliases(label: str) -> tuple[str, ...]:
-    normalized = " ".join(re.findall(r"[a-z0-9]+", label.casefold()))
-    aliases = {normalized} if normalized else set()
-    aliases.update(part for part in normalized.split() if len(part) >= 3)
-    return tuple(sorted(aliases, key=len, reverse=True))
+def _setup_account_profiles() -> tuple[AccountProfile, ...]:
+    return profiles_from_setup(_setup_store().load()["google_profiles"])
 
 
-@app.post("/metis/setup/resolve-profile")
-def resolve_setup_profile(payload: dict[str, Any]) -> dict[str, Any]:
-    message = str(payload.get("message") or "").strip().casefold()
-    if not message:
-        raise HTTPException(status_code=400, detail="message is required")
-    state = _setup_store().load()
-    profiles = [item for item in state["google_profiles"] if item.get("account_id")]
-    matched = []
-    for profile in profiles:
-        aliases = _profile_label_aliases(str(profile["label"]))
-        if any(re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", message) for alias in aliases):
-            matched.append(profile)
-    if not matched and len(profiles) == 1:
-        matched = profiles
-        status = "sole_profile"
-    elif matched:
-        status = "matched"
-    elif profiles:
-        status = "clarification_required"
-    else:
-        status = "no_profiles"
-    account_ids = tuple(item["account_id"] for item in matched)
-    calendars = {item["account_id"]: list(item.get("calendar_ids") or ()) for item in matched}
-    _validate_persisted_google_selections(
-        account_ids, {key: tuple(value) for key, value in calendars.items()}
-    )
+def _account_resolution_payload(
+    resolution: AccountResolution,
+    profiles: tuple[AccountProfile, ...],
+) -> dict[str, Any]:
+    account_ids = tuple(item.account_id for item in resolution.matched)
+    calendars = {item.account_id: list(item.calendar_ids) for item in resolution.matched}
     return {
-        "status": status,
-        "explicit_match": status == "matched",
+        "status": resolution.status,
+        "explicit_match": resolution.explicit_match,
+        "account_request": resolution.account_request,
         "account_ids": list(account_ids),
         "account_id": account_ids[0] if len(account_ids) == 1 else None,
         "calendars_by_account": calendars,
         "calendar_ids": calendars.get(account_ids[0], []) if len(account_ids) == 1 else [],
-        "matched_labels": [item["label"] for item in matched],
-        "available_labels": [item["label"] for item in profiles],
+        "matched_labels": [item.label for item in resolution.matched],
+        "excluded_labels": [item.label for item in resolution.excluded],
+        "ambiguous_labels": [item.label for item in resolution.ambiguous],
+        "available_labels": [item.label for item in profiles],
     }
+
+
+@app.post("/metis/setup/resolve-profile")
+def resolve_setup_profile(payload: dict[str, Any]) -> dict[str, Any]:
+    message = str(payload.get("message") or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+    profiles = _setup_account_profiles()
+    resolution = resolve_account_labels(message, profiles, require_selection=True)
+    account_ids = tuple(item.account_id for item in resolution.matched)
+    calendars = {item.account_id: item.calendar_ids for item in resolution.matched}
+    _validate_persisted_google_selections(
+        account_ids, calendars
+    )
+    return _account_resolution_payload(resolution, profiles)
 
 
 @app.get("/metis/startup/readiness")
@@ -254,7 +256,11 @@ def startup_readiness() -> dict[str, Any]:
         connections = _google_store().list_connections()
     except (OSError, ValueError):
         connections = []
-    return build_startup_readiness(connection_records=connections)
+    try:
+        setup = _setup_store().load()
+    except (OSError, ValueError, SetupStateError):
+        setup = {}
+    return build_startup_readiness(connection_records=connections, setup_state=setup)
 
 
 @app.post("/metis/sessions")
@@ -429,6 +435,135 @@ def _validate_persisted_google_selections(
         _validate_persisted_google_selection(account, calendars_by_account.get(account, ()))
 
 
+def _clarification_message(resolution: AccountResolution, profiles: tuple[AccountProfile, ...]) -> str:
+    candidates = resolution.ambiguous or tuple(
+        profile for profile in profiles if profile not in resolution.excluded
+    )
+    labels = [profile.label for profile in candidates]
+    if not labels:
+        return "No connected Google account is available for that request."
+    if len(labels) == 1:
+        return f"Should I use the {labels[0]} account?"
+    return f"Which account should I use: {', '.join(labels[:-1])}, or {labels[-1]}?"
+
+
+def _set_session_account_context(
+    session_id: str,
+    resolution: AccountResolution,
+    *,
+    clear_history: bool,
+) -> None:
+    account_ids = tuple(profile.account_id for profile in resolution.matched)
+    calendars = {profile.account_id: profile.calendar_ids for profile in resolution.matched}
+    _validate_persisted_google_selections(account_ids, calendars)
+    primary = account_ids[0] if len(account_ids) == 1 else None
+    SESSIONS.update_context(
+        session_id,
+        account_id=primary,
+        calendar_ids=calendars.get(primary, ()) if primary else (),
+        account_ids=account_ids,
+        calendars_by_account=calendars,
+        clear_history=clear_history,
+    )
+
+
+def _route_chat_account_context(
+    session_id: str | None,
+    message: str,
+) -> tuple[str, dict[str, Any] | None, str | None]:
+    """Resolve account authority before either typed or transcribed chat dispatch.
+
+    The unresolved request is retained only in the private session store. When
+    clarification changes account scope, prior history is cleared before the
+    original request is restored, preventing cross-account private context.
+    """
+    profiles = _setup_account_profiles()
+    if session_id is None:
+        resolution = resolve_account_labels(message, profiles)
+        payload = _account_resolution_payload(resolution, profiles)
+        clarification = (
+            _clarification_message(resolution, profiles)
+            if resolution.requires_clarification or (resolution.status == "no_profiles" and resolution.account_request)
+            else None
+        )
+        return message, payload, clarification
+
+    try:
+        snapshot = SESSIONS.snapshot(session_id)
+        pending = SESSIONS.pending_account_request(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    valid_ids = {profile.account_id for profile in profiles}
+    current_ids = snapshot.context.account_ids or (
+        (snapshot.context.account_id,) if snapshot.context.account_id else ()
+    )
+    context_valid = bool(current_ids) and all(account in valid_ids for account in current_ids)
+    if context_valid:
+        try:
+            _validate_persisted_google_selections(current_ids, dict(snapshot.context.calendars_by_account))
+        except HTTPException:
+            context_valid = False
+    if current_ids and not context_valid:
+        SESSIONS.update_context(
+            session_id,
+            account_id=None,
+            calendar_ids=(),
+            account_ids=(),
+            calendars_by_account={},
+            clear_history=True,
+        )
+        current_ids = ()
+
+    if pending is not None:
+        resolution = resolve_account_labels(message, profiles, require_selection=True)
+        payload = _account_resolution_payload(resolution, profiles)
+        if resolution.cancelled:
+            SESSIONS.clear_pending_account_request(session_id)
+            return message, payload, "Okay, I cancelled the pending account request."
+        if resolution.matched:
+            _set_session_account_context(session_id, resolution, clear_history=True)
+            SESSIONS.clear_pending_account_request(session_id)
+            payload["status"] = "clarification_resolved"
+            payload["original_request_restored"] = True
+            payload["history_reset"] = True
+            payload["display_request"] = pending
+            return pending, payload, None
+        return message, payload, _clarification_message(resolution, profiles)
+
+    resolution = resolve_account_labels(message, profiles)
+    payload = _account_resolution_payload(resolution, profiles)
+    if resolution.matched:
+        next_ids = tuple(profile.account_id for profile in resolution.matched)
+        _set_session_account_context(session_id, resolution, clear_history=next_ids != current_ids)
+        payload["history_reset"] = next_ids != current_ids
+        return message, payload, None
+    if resolution.requires_clarification:
+        # An unlabeled account request may continue in an already-authorized
+        # context. Explicit ambiguity or exclusion must be clarified instead.
+        if context_valid and not resolution.explicit_match and not resolution.excluded:
+            selected = tuple(profile for profile in profiles if profile.account_id in current_ids)
+            current = AccountResolution(
+                "current_profile", matched=selected, account_request=True
+            )
+            return message, _account_resolution_payload(current, profiles), None
+        if current_ids:
+            SESSIONS.update_context(
+                session_id,
+                account_id=None,
+                calendar_ids=(),
+                account_ids=(),
+                calendars_by_account={},
+                clear_history=True,
+            )
+            payload["history_reset"] = True
+        SESSIONS.set_pending_account_request(session_id, message)
+        return message, payload, _clarification_message(resolution, profiles)
+    if resolution.status == "no_profiles" and resolution.account_request:
+        return message, payload, _clarification_message(resolution, profiles)
+    return message, payload, None
+
+
 def _session_turn(payload: dict[str, Any], user_message: str, options: dict[str, Any]) -> TurnToken | None:
     existing = payload.get("_turn_token")
     if isinstance(existing, TurnToken):
@@ -473,12 +608,33 @@ def _google_read_broker() -> GoogleReadBroker:
     return GoogleReadBroker.restore_from_credential_store(store).broker
 
 
+def _atlas_read_status() -> str:
+    from .control_center import build_control_center_status
+    from .mcp_access import mcp_status
+
+    control = build_control_center_status(STATE, mcp_status())
+    return str(control["mcp"]["servers"]["project_atlas"].get("read_status") or "unknown")
+
+
+def _controlled_atlas_read(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Apply operator controls at the final ordinary-registry dispatch boundary."""
+    read_status = _atlas_read_status()
+    if read_status != "usable":
+        return {
+            "status": "blocked",
+            "attempted": False,
+            "blocked_reason": f"mcp_read_{read_status}",
+        }
+    return call_configured_mcp_tool("project_atlas", tool_name, dict(arguments))
+
+
 def _personal_tool_entries(broker: GoogleReadBroker) -> dict[str, Any]:
     entries = dict(google_broker_entries(broker))
-    atlas = AtlasReadConnector(
-        lambda tool_name, arguments: call_configured_mcp_tool("project_atlas", tool_name, dict(arguments))
-    )
-    entries.update(atlas_registry_entries(atlas))
+    # Hide Atlas tools from the model while read mode is off or unusable.  The
+    # transport wrapper rechecks the same policy so a coordinator created while
+    # enabled cannot keep reading after the operator turns the control off.
+    if _atlas_read_status() == "usable":
+        entries.update(atlas_registry_entries(AtlasReadConnector(_controlled_atlas_read)))
     return entries
 
 
@@ -638,6 +794,7 @@ def _trusted_conversation_context(
 def google_accounts() -> dict[str, Any]:
     accounts = [
         {
+            "connection_id": item.get("connection_id") or f"google:{item['account_id']}",
             "account_id": item["account_id"],
             "scopes": item["scopes"],
             "status": item["status"],
@@ -688,12 +845,6 @@ async def google_oauth_start(
 
 @app.get("/metis/connectors/google/oauth/callback", name="google_oauth_callback")
 def google_oauth_callback(request: Request, state: str = "", error: str = "") -> HTMLResponse:
-    if error:
-        return HTMLResponse(
-            "<h1>Google connection was not completed</h1><p>You can close this window and retry in Metis.</p>",
-            status_code=400,
-            headers={"Cache-Control": "no-store"},
-        )
     try:
         result = GOOGLE_OAUTH_WEB.complete(
             state=state,
@@ -2210,8 +2361,45 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     request_session_id = _optional_session_value(payload.get("session_id") or options.get("session_id"))
     if request_session_id is not None:
         options = {**options, "session_id": request_session_id, "_metis_private_session": True}
+    user_message, account_resolution, account_reply = _route_chat_account_context(
+        request_session_id, user_message
+    )
+    existing_token = payload.get("_turn_token")
+    if isinstance(existing_token, TurnToken) and account_resolution and account_resolution.get("original_request_restored"):
+        if not SESSIONS.set_transcript(existing_token, user_message):
+            raise HTTPException(status_code=409, detail="turn was cancelled before account clarification resolved")
     session_token = _session_turn(payload, user_message, options)
     persisted_user_message = _persisted_chat_user_message(user_message, options)
+    if account_reply is not None:
+        persisted_assistant_message = _persisted_chat_assistant_message(account_reply, user_message, options)
+        STATE = reduce_metis_event(
+            STATE,
+            {
+                "type": "chat_event",
+                "status": "complete",
+                "provider": "account_router",
+                "model": "metis.account_resolution.v1",
+                "user_message": persisted_user_message,
+                "assistant_message": persisted_assistant_message,
+                "source_state": STATE.get("source_state", "unsourced"),
+            },
+        )
+        voice = _finish_chat_turn(session_token, account_reply, options)
+        return {
+            "message": account_reply,
+            "provider": "account_router",
+            "model": "metis.account_resolution.v1",
+            "proposal_queued": False,
+            "source_state": STATE.get("source_state", "unsourced"),
+            "policy": classify_intent(user_message, STATE).to_dict(),
+            "state": STATE,
+            "leds": resolve_leds(STATE),
+            "metadata": {"account_resolution": account_resolution},
+            "retrieval": None,
+            "voice": voice,
+            "account_resolution": account_resolution,
+            "session": SESSIONS.safe_export(session_token.session_id) if session_token is not None else None,
+        }
     plan_task = _route_chat_plan_request(user_message)
     if plan_task is not None:
         try:
@@ -2616,6 +2804,8 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
     )
     voice = _finish_chat_turn(session_token, assistant_message, options)
     metadata = dict(result.metadata)
+    if account_resolution is not None:
+        metadata["account_resolution"] = account_resolution
     if retrieval is not None:
         metadata["boh"] = retrieval.to_metadata()
         metadata["boh_evidence_delivery"] = "delivered" if assembled.evidence_supplied else "not_delivered"
@@ -2632,6 +2822,7 @@ def chat(payload: dict[str, Any]) -> dict[str, Any]:
         "metadata": metadata,
         "retrieval": retrieval.to_metadata() if retrieval is not None else None,
         "voice": voice,
+        "account_resolution": account_resolution,
         "session": SESSIONS.safe_export(session_token.session_id) if session_token is not None else None,
     }
 

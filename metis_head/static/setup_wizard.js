@@ -55,6 +55,10 @@
   async function load() {
     snapshot = await json('/metis/setup');
     byId('build').textContent = `Build ${snapshot.build.build_id} · ${snapshot.build.branch}`;
+    const savedStt = snapshot.setup.voice?.stt_provider || 'faster_whisper';
+    byId('stt').value = [...byId('stt').options].some((option) => option.value === savedStt)
+      ? savedStt
+      : 'faster_whisper';
     renderProviders();
     renderModels();
     renderConnections();
@@ -87,22 +91,25 @@
 
   function renderConnections() {
     const accounts = snapshot.connections || [];
-    const mappings = snapshot.setup.google_profiles.filter((profile) => profile.account_id);
-    const usedSlots = new Set(mappings.map((profile) => profile.slot_id));
-    const freeSlots = snapshot.setup.google_profiles.filter((profile) => !usedSlots.has(profile.slot_id));
-    const cards = accounts.map((account, index) => {
-      const mapped = mappings.find((profile) => profile.account_id === account.account_id);
-      const slot = mapped || freeSlots.shift();
-      if (!slot) return '';
-      const label = mapped?.label || `Google account ${index + 1}`;
-      return `<div class="profile" data-slot="${esc(slot.slot_id)}" data-account="${esc(account.account_id)}">`
-        + `<label>Label<input class="label" value="${esc(label)}"></label>`
-        + `<div><strong>Verified identity</strong><br>${esc(account.account_id)}</div>`
+    const views = MetisSetupConnections.connectionViews(accounts, snapshot.setup.google_profiles);
+    const cards = views.map((view) => {
+      const selected = view.calendar_ids.map((calendarId) => calendarChoice({
+        calendar_id: calendarId, name: calendarId, selected: true
+      })).join('');
+      const account = accounts.find((item) => item.account_id === view.account_id) || {};
+      return `<div class="profile" data-profile-id="${esc(view.profile_id)}" data-account="${esc(view.account_id)}">`
+        + `<label>Label<input class="label" value="${esc(view.label)}"></label>`
+        + `<div><strong>Verified identity</strong><br>${esc(view.account_id)}</div>`
         + `<div class="muted">${esc(account.status)} · ${(account.scopes || []).length} read grant(s) · `
         + `${(account.selected_calendar_ids || []).length} selected calendar(s)</div>`
+        + `<div class="calendars">${selected || '<span class="muted">No calendars selected. Discover calendars to grant access.</span>'}</div>`
+        + `<button type="button" class="discoverCalendars">Discover calendars</button> `
         + `<button type="button" class="removeConnection">Remove connection</button></div>`;
     }).filter(Boolean);
     byId('profiles').innerHTML = cards.length ? cards.join('') : '<p>No Google accounts connected.</p>';
+    document.querySelectorAll('.discoverCalendars').forEach((button) => {
+      button.addEventListener('click', () => discoverCalendars(button.closest('.profile')));
+    });
     document.querySelectorAll('.removeConnection').forEach((button) => {
       button.addEventListener('click', () => removeConnection(button.closest('.profile')));
     });
@@ -111,36 +118,55 @@
       : 'No Google accounts are connected. Choose a Desktop OAuth client JSON and click Connect Google account.';
   }
 
+  function calendarChoice(calendar) {
+    return `<label><input class="calendarChoice" type="checkbox" value="${esc(calendar.calendar_id)}" `
+      + `${calendar.selected ? 'checked' : ''}> <span>${esc(calendar.name || calendar.calendar_id)}`
+      + `${calendar.primary ? ' (primary)' : ''}</span></label>`;
+  }
+
+  async function discoverCalendars(card) {
+    const container = card.querySelector('.calendars');
+    container.innerHTML = '<span class="muted">Discovering calendars...</span>';
+    try {
+      const result = await json('/metis/connectors/google/calendars', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({account_id: card.dataset.account, max_calendars: 100, max_pages: 10})
+      });
+      if (result.status === 'unavailable' || result.status === 'error') {
+        throw new Error(result.error?.message || 'Calendar discovery is unavailable');
+      }
+      const calendars = result.data || [];
+      container.innerHTML = calendars.length
+        ? calendars.map(calendarChoice).join('')
+        : '<span class="muted">No calendars were returned for this account.</span>';
+    } catch (error) {
+      container.innerHTML = `<span class="muted">${esc(String(error))}</span>`;
+    }
+  }
+
   function makePatch(completed) {
-    const profileUpdates = {};
-    snapshot.setup.google_profiles.forEach((profile, index) => {
-      profileUpdates[profile.slot_id] = {
-        label: `Google connection ${index + 1}`,
-        account_id: null,
-        status: 'not_connected',
-        scopes: [],
-        calendar_ids: [],
-        last_verification: null
-      };
-    });
+    const profiles = [];
     const assignedSlots = [];
     document.querySelectorAll('.profile[data-account]').forEach((card) => {
       const account = card.dataset.account;
       const connection = (snapshot.connections || []).find((item) => item.account_id === account);
-      profileUpdates[card.dataset.slot] = {
+      const profileId = card.dataset.profileId;
+      profiles.push({
+        slot_id: profileId,
         label: card.querySelector('.label').value,
         account_id: account,
         status: 'verified',
         scopes: connection?.scopes || [],
-        calendar_ids: connection?.selected_calendar_ids || [],
+        calendar_ids: [...card.querySelectorAll('.calendarChoice:checked')].map((item) => item.value),
         last_verification: {
           timestamp: new Date().toISOString(), device: null, provider: 'google', model: null,
           status: 'verified', error_code: null
         }
-      };
-      assignedSlots.push(card.dataset.slot);
+      });
+      assignedSlots.push(profileId);
     });
-    const defaultSlot = assignedSlots[0] || 'profile_1';
+    const previousDefault = snapshot.setup.profile_selection.default_slot_id;
+    const defaultSlot = assignedSlots.includes(previousDefault) ? previousDefault : (assignedSlots[0] || null);
     return {
       provider: {
         choice: document.querySelector('input[name="provider"]:checked')?.value || 'ollama',
@@ -148,8 +174,9 @@
         status: 'unverified',
         last_verification: null
       },
-      google_profiles: profileUpdates,
-      profile_selection: {mode: 'default', default_slot_id: defaultSlot, active_slot_ids: [defaultSlot]},
+      voice: {stt_provider: byId('stt').value || 'faster_whisper'},
+      google_profiles: profiles,
+      profile_selection: {mode: 'default', default_slot_id: defaultSlot, active_slot_ids: defaultSlot ? [defaultSlot] : []},
       wizard: {completed: Boolean(completed), completed_version: completed ? '1' : null}
     };
   }
@@ -165,7 +192,14 @@
 
   async function save(completed) {
     try {
-      await patchSetup(makePatch(completed));
+      const patch = makePatch(completed);
+      for (const profile of patch.google_profiles) {
+        await json('/metis/connectors/google/selection', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({account_id: profile.account_id, calendar_ids: profile.calendar_ids})
+        });
+      }
+      await patchSetup(patch);
       byId('saveStatus').textContent = completed
         ? 'Setup saved. Open Metis and run the final live conversation check.'
         : 'Progress saved.';
@@ -202,12 +236,9 @@
       const response = await browserFetch(`/metis/connectors/google/accounts/${encodeURIComponent(account)}`, {method: 'DELETE'});
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'Connection removal failed');
-      await patchSetup({google_profiles: {
-        [card.dataset.slot]: {
-          label: 'Google connection', account_id: null, status: 'not_connected', scopes: [],
-          calendar_ids: [], last_verification: null
-        }
-      }});
+      card.remove();
+      const patch = makePatch(false);
+      await patchSetup({google_profiles: patch.google_profiles, profile_selection: patch.profile_selection});
       await load();
     } catch (error) {
       byId('profileStatus').textContent = String(error);

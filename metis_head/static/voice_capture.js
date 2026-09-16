@@ -79,6 +79,14 @@
           return false;
         }
         context = new this.AudioContextType();
+        if (context.state === 'suspended' && typeof context.resume === 'function') {
+          await context.resume();
+        }
+        if (context.state === 'suspended') {
+          const error = new Error('audio_context_suspended');
+          error.name = 'NotAllowedError';
+          throw error;
+        }
         source = context.createMediaStreamSource(stream);
         processor = context.createScriptProcessor(this.frameSize, 1, 1);
         if (!this._isCurrent(epoch)) {
@@ -104,7 +112,13 @@
         await closeResources({stream, context, source, processor});
         if (this._isCurrent(epoch)) {
           this._resetIdle();
-          this.onStatus(error && error.name === 'NotAllowedError' ? 'Microphone permission denied.' : 'Microphone capture failed.');
+          this.onStatus(
+            error && error.message === 'audio_context_suspended'
+              ? 'Browser audio input is suspended. Click and hold again to resume microphone capture.'
+              : error && error.name === 'NotAllowedError'
+                ? 'Microphone permission denied.'
+                : 'Microphone capture failed.'
+          );
         }
         await this._cleanupBackend(epoch, error && error.name === 'NotAllowedError' ? 'permission_denied' : 'capture_failed');
         return false;
@@ -256,6 +270,51 @@
     return new Blob([buffer], {type: 'audio/wav'});
   }
 
+  class MetisVoiceCatalogState {
+    constructor() {
+      this._request = 0;
+      this._saved = null;
+      this._touched = false;
+    }
+
+    beginRequest() {
+      this._request += 1;
+      return this._request;
+    }
+
+    accepts(request) {
+      return request === this._request;
+    }
+
+    setSaved(voice) {
+      if (!voice || typeof voice !== 'object') {
+        this._saved = null;
+        return;
+      }
+      this._saved = {
+        engine: String(voice.engine || ''),
+        voice_id: voice.voice_id ? String(voice.voice_id) : null
+      };
+    }
+
+    markTouched() {
+      this._touched = true;
+    }
+
+    preferred(currentProvider, currentVoice, serverProvider, serverVoice) {
+      if (!this._touched && this._saved && this._saved.engine) return {...this._saved};
+      return {
+        engine: currentProvider || serverProvider || 'mock',
+        voice_id: currentVoice || serverVoice || 'metis-counsel-mock'
+      };
+    }
+
+    saved() {
+      return this._saved ? {...this._saved} : null;
+    }
+  }
+
   global.MetisVoiceCapture = MetisVoiceCapture;
-  if (typeof module !== 'undefined' && module.exports) module.exports = {MetisVoiceCapture, STATES};
+  global.MetisVoiceCatalogState = MetisVoiceCatalogState;
+  if (typeof module !== 'undefined' && module.exports) module.exports = {MetisVoiceCapture, MetisVoiceCatalogState, STATES};
 })(typeof window !== 'undefined' ? window : globalThis);

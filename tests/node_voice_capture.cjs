@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const {MetisVoiceCapture, STATES} = require('../metis_head/static/voice_capture.js');
+const {MetisVoiceCapture, MetisVoiceCatalogState, STATES} = require('../metis_head/static/voice_capture.js');
 
 function deferred() {
   let resolve;
@@ -32,6 +32,7 @@ class FakeAudioContext {
   createMediaStreamSource() { return this.source; }
   createScriptProcessor() { return this.processor; }
   async close() { this.state = 'closed'; }
+  async resume() { this.state = 'running'; this.resumed = true; }
 }
 FakeAudioContext.instances = [];
 
@@ -118,6 +119,41 @@ async function successfulCaptureProducesBoundedWavAndCleansUp() {
   assert.deepEqual(cleanups, ['released']);
 }
 
+async function suspendedAudioContextIsResumedBeforeRecording() {
+  class SuspendedAudioContext extends FakeAudioContext {
+    constructor() { super(); this.state = 'suspended'; this.resumed = false; }
+  }
+  const capture = new MetisVoiceCapture({
+    authorize: async () => ({status: 'ptt_pressed'}),
+    mediaDevices: {async getUserMedia() { return fakeStream(); }},
+    AudioContext: SuspendedAudioContext
+  });
+  assert.equal(await capture.start(), true);
+  const context = FakeAudioContext.instances.at(-1);
+  assert.equal(context.resumed, true);
+  assert.equal(context.state, 'running');
+  await capture.cancel();
+}
+
+async function contextThatStaysSuspendedFailsTruthfully() {
+  const statuses = [];
+  class BlockedAudioContext extends FakeAudioContext {
+    constructor() { super(); this.state = 'suspended'; }
+    async resume() {}
+  }
+  const stream = fakeStream();
+  const capture = new MetisVoiceCapture({
+    authorize: async () => ({status: 'ptt_pressed'}),
+    mediaDevices: {async getUserMedia() { return stream; }},
+    AudioContext: BlockedAudioContext,
+    onStatus: (message) => statuses.push(message)
+  });
+  assert.equal(await capture.start(), false);
+  assert.equal(stream.track.stopped, true);
+  assert.equal(capture.state, STATES.IDLE);
+  assert.ok(statuses.some((message) => message.includes('suspended')));
+}
+
 async function permissionFailureCleansBackendExactlyOnce() {
   const cleanups = [];
   const capture = new MetisVoiceCapture({
@@ -168,14 +204,36 @@ async function resourceLimitCancelsInsteadOfUploadingPartialAudio() {
   assert.ok(statuses.some((status) => status.includes('limit reached')));
 }
 
+function voiceCatalogStateRejectsLateResponsesAndPreservesSavedPiper() {
+  const state = new MetisVoiceCatalogState();
+  const oldRequest = state.beginRequest();
+  const currentRequest = state.beginRequest();
+  assert.equal(state.accepts(oldRequest), false);
+  assert.equal(state.accepts(currentRequest), true);
+
+  state.setSaved({engine: 'piper', voice_id: 'piper-local'});
+  assert.deepEqual(
+    state.preferred('', '', 'mock', 'metis-counsel-mock'),
+    {engine: 'piper', voice_id: 'piper-local'}
+  );
+  state.markTouched();
+  assert.deepEqual(
+    state.preferred('browser', 'browser-default', 'mock', 'metis-counsel-mock'),
+    {engine: 'browser', voice_id: 'browser-default'}
+  );
+}
+
 async function main() {
   await cancelDuringAuthorization();
   await releaseDuringGetUserMediaStopsLateStream();
   await cancelDuringGetUserMediaStopsLateStream();
   await successfulCaptureProducesBoundedWavAndCleansUp();
+  await suspendedAudioContextIsResumedBeforeRecording();
+  await contextThatStaysSuspendedFailsTruthfully();
   await permissionFailureCleansBackendExactlyOnce();
   await emptyReleaseStillCleansBackend();
   await resourceLimitCancelsInsteadOfUploadingPartialAudio();
+  voiceCatalogStateRejectsLateResponsesAndPreservesSavedPiper();
   process.stdout.write('voice capture state-machine tests passed\n');
 }
 

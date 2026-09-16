@@ -121,6 +121,7 @@ class _Session:
     context: SessionContext
     turns: Deque[TurnSnapshot]
     history: Deque[ConversationMessage]
+    pending_account_request: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -170,6 +171,7 @@ class SessionStore:
                 context=self._normalize_context(context or SessionContext()),
                 turns=deque(maxlen=self._max_turns),
                 history=deque(maxlen=self._max_history_messages),
+                pending_account_request=None,
                 created_at=now,
                 updated_at=now,
             )
@@ -215,6 +217,7 @@ class SessionStore:
         calendar_ids: Iterable[str] | None = None,
         account_ids: Iterable[str] | None = None,
         calendars_by_account: Mapping[str, Iterable[str]] | None = None,
+        clear_history: bool = False,
     ) -> SessionSnapshot:
         """Atomically replace selectable context for an active session.
 
@@ -236,8 +239,28 @@ class SessionStore:
                 ),
             )
             session.context = self._normalize_context(candidate)
+            if clear_history:
+                session.history.clear()
             session.updated_at = self._clock()
             return self._snapshot(session)
+
+    def set_pending_account_request(self, session_id: str, text: str) -> None:
+        """Retain one unresolved request only in process-private session memory."""
+        clean = self._clean_message(text)
+        with self._lock:
+            session = self._require_active(session_id)
+            session.pending_account_request = clean
+            session.updated_at = self._clock()
+
+    def pending_account_request(self, session_id: str) -> str | None:
+        with self._lock:
+            return self._require_active(session_id).pending_account_request
+
+    def clear_pending_account_request(self, session_id: str) -> None:
+        with self._lock:
+            session = self._require_active(session_id)
+            session.pending_account_request = None
+            session.updated_at = self._clock()
 
     def transition(self, token: TurnToken, stage: TurnStage, *, failure_code: str | None = None) -> bool:
         """Advance a current turn; return False for cancelled/stale late work."""
@@ -339,6 +362,7 @@ class SessionStore:
             self.cancel(session_id)
             session.active = False
             session.history.clear()
+            session.pending_account_request = None
             session.updated_at = self._clock()
 
     def accepts(self, token: TurnToken) -> bool:
@@ -371,6 +395,7 @@ class SessionStore:
                 {"role": item.role, "turn_id": item.turn_id, "text": "[REDACTED]", "character_count": len(item.text)}
                 for item in self.private_history(session_id)
             ],
+            "pending_account_clarification": snapshot.active and self.pending_account_request(session_id) is not None,
             "turns": [
                 {
                     "turn_id": turn.turn_id,

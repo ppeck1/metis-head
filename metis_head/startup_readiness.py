@@ -6,15 +6,19 @@ import os
 import shutil
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 def build_startup_readiness(
     env: dict[str, str] | None = None,
     *,
     connection_records: list[dict[str, Any]] | None = None,
+    setup_state: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     env = os.environ if env is None else env
+    setup_state = setup_state or {}
+    setup_provider = setup_state.get("provider") if isinstance(setup_state.get("provider"), Mapping) else {}
+    setup_voice = setup_state.get("voice") if isinstance(setup_state.get("voice"), Mapping) else {}
     checks: list[dict[str, Any]] = []
 
     def add(component: str, status: str, reason: str, remedy: str | None = None) -> None:
@@ -32,7 +36,10 @@ def build_startup_readiness(
         None if multipart_ok else "pip install -e .",
     )
 
-    stt_engine = str(env.get("METIS_STT_ENGINE") or "simulated").strip().lower()
+    stt_engine = str(
+        env["METIS_STT_ENGINE"] if "METIS_STT_ENGINE" in env
+        else setup_voice.get("stt_provider") or "simulated"
+    ).strip().lower()
     stt_model = str(env.get("METIS_STT_MODEL") or "small").strip()
     stt_model_dir = str(env.get("METIS_STT_MODEL_DIR") or "").strip()
     local_stt = _truthy(env.get("METIS_STT_ALLOW_LOCAL"))
@@ -66,8 +73,15 @@ def build_startup_readiness(
         None if stt_status == "available" else "select faster_whisper, install .[stt-whisper], set its model, and explicitly allow local STT",
     )
 
-    voice_enabled = _truthy(env.get("METIS_VOICE_ENABLED"))
-    voice_provider = str(env.get("METIS_VOICE_PROVIDER") or "mock").strip().lower()
+    voice_enabled = (
+        _truthy(env.get("METIS_VOICE_ENABLED"))
+        if "METIS_VOICE_ENABLED" in env
+        else bool(setup_voice.get("enabled", False))
+    )
+    voice_provider = str(
+        env["METIS_VOICE_PROVIDER"] if "METIS_VOICE_PROVIDER" in env
+        else setup_voice.get("engine") or "mock"
+    ).strip().lower()
     allow_piper = _truthy(env.get("METIS_VOICE_ALLOW_PIPER"))
     allow_system = _truthy(env.get("METIS_VOICE_ALLOW_SYSTEM_TTS"))
     piper_exe = env.get("METIS_PIPER_EXE") or shutil.which("piper") or shutil.which("piper.exe")
@@ -153,8 +167,15 @@ def build_startup_readiness(
         "cumulative application budget configured" if budget_valid else "paid providers blocked until a valid cumulative budget is configured",
         None if budget_valid else "set METIS_PAID_BUDGET_USD to a finite non-negative amount before enabling paid providers",
     )
-    llm_provider = str(env.get("METIS_LLM_PROVIDER") or "mock").strip().lower()
-    llm_model = env.get("METIS_OLLAMA_MODEL") if llm_provider == "ollama" else env.get("METIS_OPENAI_MODEL")
+    saved_provider = str(setup_provider.get("choice") or "").strip().lower()
+    llm_provider = str(
+        env["METIS_LLM_PROVIDER"] if "METIS_LLM_PROVIDER" in env
+        else ({"openai_api": "openai", "codex_app_server": "codex_app_server"}.get(saved_provider, saved_provider) or "mock")
+    ).strip().lower()
+    if llm_provider == "ollama":
+        llm_model = env.get("METIS_OLLAMA_MODEL") if "METIS_OLLAMA_MODEL" in env else setup_provider.get("model")
+    else:
+        llm_model = env.get("METIS_OPENAI_MODEL") if "METIS_OPENAI_MODEL" in env else setup_provider.get("model")
     if llm_provider == "mock":
         llm_status, llm_reason, text_ready = "fixture_only", "mock provider is available for non-live testing", True
         llm_remedy = None
@@ -167,11 +188,16 @@ def build_startup_readiness(
         llm_status = "implemented_but_disabled"
         llm_reason = "OpenAI production dispatch remains guarded off; configuration alone does not enable it"
         llm_remedy = "use the supported local Ollama path until guarded OpenAI production composition is completed"
+    elif llm_provider == "codex_app_server":
+        llm_status, llm_reason, text_ready = "implemented_but_disabled", "Codex App Server is not an implemented conversation provider", False
+        llm_remedy = "use the supported local Ollama path"
     else:
         llm_status, llm_reason, text_ready = "unavailable", f"unsupported provider: {llm_provider}", False
         llm_remedy = "configure a supported provider and model"
     add("language_model", llm_status, llm_reason, llm_remedy)
     browser_audio_ready = multipart_ok and stt_status == "available"
+    provider_verification = setup_provider.get("last_verification") if isinstance(setup_provider.get("last_verification"), Mapping) else None
+    voice_verification = setup_voice.get("last_verification") if isinstance(setup_voice.get("last_verification"), Mapping) else None
     return {
         "schema_version": "metis_startup_readiness.v1",
         "ready_for_text": text_ready,
@@ -180,8 +206,33 @@ def build_startup_readiness(
         "selected_stt_provider": stt_engine,
         "selected_tts_provider": voice_provider,
         "ready_for_spoken_browser_loop": browser_audio_ready and tts_status == "available",
+        "effective_configuration": {
+            "llm": {"provider": llm_provider, "model": llm_model, "source": "environment" if "METIS_LLM_PROVIDER" in env or "METIS_OLLAMA_MODEL" in env else "setup" if setup_provider else "default"},
+            "stt": {"provider": stt_engine, "source": "environment" if "METIS_STT_ENGINE" in env else "setup" if setup_voice.get("stt_provider") else "default"},
+            "tts": {"provider": voice_provider, "enabled": voice_enabled, "source": "environment" if "METIS_VOICE_PROVIDER" in env or "METIS_VOICE_ENABLED" in env else "setup" if setup_voice else "default"},
+        },
+        "evidence": {
+            "configuration": "reported_above",
+            "successful_local_execution": {
+                "llm": _verification_evidence(provider_verification),
+                "tts": "not_recorded",
+                "stt": "not_recorded",
+            },
+            "operator_confirmed_physical_output": {
+                "tts": _verification_evidence(voice_verification, verified_label="operator_confirmed"),
+                "microphone": "not_recorded",
+            },
+        },
         "checks": checks,
     }
+
+
+def _verification_evidence(value: Mapping[str, Any] | None, *, verified_label: str = "verified_local_probe") -> str:
+    if not value:
+        return "not_recorded"
+    status = str(value.get("status") or "unknown")
+    timestamp = str(value.get("timestamp") or "unknown_time")
+    return f"{verified_label}:{timestamp}" if status == "verified" else f"{status}:{timestamp}"
 
 
 def _truthy(value: str | None) -> bool:
