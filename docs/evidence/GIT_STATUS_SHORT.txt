@@ -1,0 +1,32 @@
+ M README.md
+ M docs/ACCEPTANCE.md
+ M docs/COMPLETION_LEDGER.md
+ M docs/HANDOFF.md
+ M docs/VARIABLE_MATRIX.md
+ M docs/project_variable_map.md
+ M metis_head/brain.py
+ M metis_head/connectors/google_access.py
+ M metis_head/conversation/session.py
+ M metis_head/conversation_context.py
+ M metis_head/static/conversation_client.js
+ M metis_head/static/dashboard.html
+ M metis_head/static/voice_capture.js
+ M scripts/launch_metis.ps1
+ M tests/node_conversation_client.cjs
+ M tests/test_completion_integration.py
+?? .project/
+?? docs/PROVIDER_OPTIONS.md
+?? docs/evidence/
+?? metis_head/build_info.py
+?? metis_head/google_oauth_web.py
+?? metis_head/provider_capabilities.py
+?? metis_head/setup_state.py
+?? metis_head/static/audio_setup.js
+?? metis_head/static/setup.html
+?? metis_head/static/setup_wizard.js
+?? tests/node_audio_setup.cjs
+?? tests/test_audio_setup_js.py
+?? tests/test_google_oauth_web.py
+?? tests/test_provider_capabilities.py
+?? tests/test_setup_integration.py
+?? tests/test_setup_state.py

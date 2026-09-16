@@ -60,9 +60,17 @@ DECISIONS = {
 
 def classify_intent(intent: str, state: dict[str, Any] | None = None) -> ActionPolicy:
     lowered = intent.lower()
+    # A mailbox noun does not imply a send. Actual tool identity/scopes remain
+    # authoritative at the executor boundary; this legacy text classifier only
+    # supplies conversational guidance.
+    read_mail_request = bool(
+        any(noun in lowered for noun in ("email", "mailbox", "gmail"))
+        and any(verb in lowered for verb in ("read", "search", "find", "show", "check", "look up"))
+        and not any(verb in lowered for verb in ("send", "reply", "forward", "delete", "archive", "mark as"))
+    )
     matches: list[tuple[str, str]] = []
     for action_class, keyword, reason in KEYWORDS:
-        if keyword in lowered:
+        if keyword in lowered and not (read_mail_request and action_class == "external_action" and keyword == "email"):
             matches.append((action_class, reason))
     action_class = _highest_priority([item[0] for item in matches]) or "observe"
     default_decision, requires_approval = DECISIONS[action_class]

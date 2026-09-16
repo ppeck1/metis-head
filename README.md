@@ -1,14 +1,18 @@
 # Metis Head
 
-Simulation-first skeleton for the v0.5 Metis Head buildspec.
-
-This repo intentionally contains no real hardware, microphone, camera, Atlas, or
-tool integrations. External systems are represented by versioned adapters and
-deterministic mock providers. As of Phase 0B the one live external integration is a
-read-only BOH retrieval bridge (opt-in, never mutates BOH, never holds BOH's operator
-token).
+Local-first personal assistant with typed conversation sessions, browser push-to-talk,
+bounded read-only tool orchestration, Google Calendar/Gmail/Contacts connectors, and
+allowlisted BOH / Project Atlas reads. Live services remain explicit opt-ins; unavailable
+providers report unavailable instead of returning simulated personal data. MCE remains inactive.
 
 Public repository target: `https://github.com/ppeck1/metis-head`
+
+<!-- PROJECT_OPS_CAPSULE:README_AUDIT_START -->
+Project Ops Capsule:
+- Last run ID: 20260916-metis-completion-release
+- Last README audit: updated
+- Last verified: 2026-09-16
+<!-- PROJECT_OPS_CAPSULE:README_AUDIT_END -->
 
 ## Project Media
 
@@ -28,9 +32,24 @@ Reference and dashboard media are tracked for public review:
 
 | Field | Value |
 |---|---|
-| Current phase | `0BG` |
-| Focus | Repair pass for documentation/state alignment, voice-origin privacy, browser verbal-path clarity, and local browser upload guardrails. |
-| Verification | `414 passed` under Python 3.11; `compileall` passed. Coverage command attempted but `pytest-cov`/`coverage` is not installed in this environment. |
+| Current phase | Completion release candidate (`G0`-`G5` fixture integration) |
+| Focus | Private contextual sessions, real browser WAV PTT, typed tool loop, Google read adapters, credential/budget boundaries, and truthful readiness. |
+| Verification | Completion release verified under Python 3.11 (`603 passed`), including user-confirmed browser microphone input and Piper audio output, faster-whisper transcription, persisted Ollama selection, and resumable setup state. Live Google consent remains operator-completed. |
+
+Completion-release behavior:
+
+- Open `/setup` for the permanent resumable provider, speaker, microphone, Google-profile, and project setup flow. Settings are backend-persisted; browser storage never holds credentials.
+- The saved Setup conversation provider and Ollama model drive Virtual Chat and voice turns after restart. `Mock` remains an explicit deterministic test fixture, not the normal configured conversation path.
+- Voice Preview now enters the same session-owned browser playback queue as a spoken reply. A separate user-clicked tone isolates browser/OS output from Piper and model setup.
+- Four editable Google profile slots support one default or an explicit authorized set; switching a dashboard profile closes the old private conversation.
+
+- Each browser tab owns a private bounded session. Session transcripts are used transiently for context but are redacted from global state and safe exports.
+- Hold to Talk captures bounded WAV audio only after server authorization, posts it to the local STT route, and supports cancellation during permission, capture, model work, synthesis, and browser playback.
+- The local Ollama OpenAI-compatible adapter supports bounded model-selected read-only tool calls in ordinary chat, including calendar follow-ups in the same session.
+- Google Calendar, Gmail, and Contacts access is read-only, account-explicit, paginated/bounded, and unavailable when the necessary actual OAuth grant is missing.
+- The dashboard discovers connected Google accounts/calendars and persists calendar selection in the per-user state directory; refreshed OAuth tokens preserve that selection.
+- BOH and Project Atlas remain allowlisted read-only MCP integrations. Private commands, paths, and child environment values remain outside the repository.
+- OpenAI production chat is formally deferred: the legacy direct provider is fail-closed before network dispatch. Durable shared accounting is fixture-verified but is not composed into the application as a paid dispatch path.
 
 Implemented phase groups:
 
@@ -47,6 +66,72 @@ Implemented phase groups:
 - Spoken confirmation routing: `0BE`.
 - Browser held-to-talk + radio panel controls: `0BF`.
 - Repair pass: `0BG`.
+- MCP access bridge: `0BH`.
+- Virtual chat control center: `0BI`.
+- Control-center capability modes: `0BJ`.
+- MCP launch gate defaults: `0BK`.
+- Local-only MCP env loading: BL.
+- Virtual Chat MCP read routing: BM.
+
+Status: Phase 0BM adds a deterministic Virtual Chat MCP read bridge. Explicit BOH MCP, Project Atlas MCP, and combined BOH + Project Atlas MCP read requests are intercepted before LLM generation, checked against the Tool Control Center and server-side MCP gates, called through allowlisted read-only MCP tools, and rendered as bounded sourced answers. A short in-process TTL cache avoids repeated stdio cold-start cost for identical read-only chat requests. Write/apply requests remain proposal-only.
+
+Phase 0BM implemented:
+
+- Added `metis_head/mcp_chat_bridge.py` with explicit MCP intent routing, read-mode gating, BOH/Atlas direct renderers, sanitized audit metadata, and short TTL caching for repeated identical read-only calls.
+- Routed `/metis/chat` through the MCP chat bridge before native tool routing and LLM generation for explicit MCP read intents only.
+- Added `mcp_chat_read` event records with status, server ID, tool name, read status, elapsed milliseconds, result hash, blocked reason, and cache-hit flag.
+- Preserved legacy BOH search proposal behavior when the operator does not explicitly ask for MCP.
+- Combined BOH + Project Atlas MCP prompts now return both read results and emit one sanitized `mcp_chat_read` event per server.
+- Added focused tests for BOH and Project Atlas chat MCP reads, off-mode blocking, proposal-only write blocking, redaction boundaries, and cache behavior.
+- Phase 0BM verification: `python -m pytest -q` -> `444 passed`; `python -m compileall -q metis_head tests` passed; live BOH/Atlas chat MCP smokes passed.
+Status: Phase 0BL adds optional loading for an ignored `.project/local_mcp_env.ps1` file and local-only MCP read configuration on this workstation. The tracked launcher only dot-sources the local file when present; private command paths, database paths, and local shim code remain ignored. BOH uses its accepted read-only FastMCP stdio server. Project Atlas currently has a transport-neutral Dart MCP adapter but no official stdio launcher, so this workstation uses an ignored read-only SQLite-backed shim until Atlas grows a committed stdio surface.
+
+Phase 0BL implemented:
+
+- Added `.project/local_mcp_env.ps1` and `.project/local_mcp/` ignore rules.
+- Updated `scripts/launch_metis.ps1` to optionally load the ignored local config file.
+- Created local-only BOH stdio config and a local-only read-only Project Atlas MCP shim under `.project/`.
+- Preserved `write_apply_allowed=false`; Atlas proposal/apply tools and BOH mutation remain blocked by Metis policy.
+- Phase 0BL verification: `python -m pytest -q` -> `438 passed`; `python -m compileall -q metis_head tests` passed; live BOH and Project Atlas read MCP smokes passed.
+
+Status: Phase 0BK defaults the local PowerShell launcher to active MCP global, BOH, and Project Atlas gates when unset. It also renames the dashboard backend gate-closed label from `global disabled` to `MCP gate disabled`. Private stdio commands, cwd values, child env, tokens, and direct write/apply authority remain unset and blocked.
+
+Phase 0BK implemented:
+
+- Added safe MCP gate defaults to `scripts/launch_metis.ps1` for `METIS_MCP_ENABLED`, `METIS_MCP_BOH_ENABLED`, and `METIS_MCP_ATLAS_ENABLED`.
+- Preserved private configuration boundaries; without command configuration the status reports `not_configured`, not usable.
+- Updated the Tool Control Center status label to `MCP gate disabled`.
+- Phase 0BK verification: `python -m pytest -q` -> `434 passed`; `python -m compileall -q metis_head tests` passed.
+
+Status: Phase 0BJ upgrades the Virtual Chat Tool Control Center from boolean toggles to explicit capability modes: Off, Read, Write Proposal, and Read + Write Proposal. Read mode still depends on server-side MCP env gates and read-only allowlists. Write mode is proposal/outbox intent only; direct apply remains blocked.
+
+Phase 0BJ implemented:
+
+- Upgraded `metis_head/control_center.py` to `metis_control_center.v0.2` and `metis_control_center_state.v0.2`.
+- Added `POST /metis/control_center/modes` for replayable mode selection while keeping the older toggle endpoint as read/off compatibility.
+- Replaced the Virtual Chat control-center checkboxes with mode selectors for Tools, BOH MCP, and Project Atlas MCP.
+- Added status fields for read status, write-proposal status, combined readiness, and `write_apply_allowed=false`.
+- Added focused tests for read/write/both mode persistence, invalid mode rejection, replay determinism, dashboard selectors, and no direct apply.
+- Phase 0BJ verification: `python -m pytest -q` -> `431 passed`; `python -m compileall -q metis_head tests` passed.
+Status: Phase 0BI adds a Tool Control Center below Virtual Chat. The controls record replayable operator intent for tool usage, BOH MCP access, and Project Atlas MCP access, then render sanitized running/usable indicators from `/metis/control_center`, `/metis/mcp/status`, and `/metis/boh/status`. The toggles do not set process env vars, invoke MCP tools, approve proposals, or grant execution.
+
+Phase 0BI implemented:
+
+- Added `metis_head/control_center.py` with a sanitized `metis_control_center.v0.1` status model.
+- Added `GET /metis/control_center` and `POST /metis/control_center/toggles`.
+- Added replayable `tool_control_toggle` events and `tool_control_center` state fields.
+- Added a Virtual Chat Tool Control Center with toggles and status chips for Tools, BOH MCP, and Project Atlas MCP.
+- Added focused tests for disabled defaults, redaction, toggle replay, usable indicators, and dashboard placement.
+- Verification: `python -m pytest -q` -> `426 passed`; `python -m compileall -q metis_head tests` passed.
+
+Status: Phase 0BH adds a governed MCP access bridge for BOH and Project Atlas. The bridge is disabled by default, exposes safe status/tool-list routes, and can call only allowlisted read-only tools through an operator-configured stdio MCP command. Atlas proposal tools are visible as proposal-only and are not invoked. Command, cwd, child-env, token, and secret values are never returned by status or call responses.
+
+Phase 0BH implemented:
+
+- Added `metis_head/mcp_access.py` with BOH and Project Atlas MCP allowlists, blocked capability metadata, argument/result redaction, and a configured stdio MCP client.
+- Added `GET /metis/mcp/status`, `GET /metis/mcp/tools`, and `POST /metis/mcp/{server_id}/tools/{tool_name}/call`.
+- Added tests proving defaults are disabled, command/cwd values are hidden, sensitive arguments/results are redacted, Atlas proposal tools are not invoked, unallowlisted tools are blocked, and a fake stdio MCP server can be called through the API.
+- Preserved the existing BOH retrieval bridge and governed tool execution boundaries; no BOH promotion, Atlas apply, GitHub push, arbitrary shell, or operator-token path was added.
 
 Status: The dashboard now has a passive `Voice Trace` panel for radio-first operator review.
 It renders redacted simulated voice-command and voice-confirmation events from the canonical event log,
@@ -60,14 +145,13 @@ Phase 0BG repair implemented:
   voice/audio provider events persist a redacted transcript marker instead of the raw text.
 - Voice/audio provider events remain redacted (`text_len`, `text_hash`, `text_redacted`) and tests
   assert a sentinel phrase does not appear in persisted state or event logs.
-- Dashboard Hold to Talk uses browser `SpeechRecognition` when available, then sends recognized text
-  as a simulated STT hint through `/metis/audio/ptt`. It does not upload browser-recorded audio to
-  faster-whisper.
+- Dashboard Hold to Talk uses bounded browser WAV capture and uploads only after server-side PTT
+  authorization. It does not use the browser cloud `SpeechRecognition` service.
 - `POST /metis/audio/browser_ptt` remains a backend multipart audio route for local prototype clients
   and tests. It now has explicit upload-size, content-type, empty-payload, and WAV-header guardrails.
 - Optional local faster-whisper STT remains available only through the env-gated STT provider path
-  (`METIS_STT_ALLOW_LOCAL=true`, `METIS_STT_ENGINE=faster_whisper`) and is not required by the
-  dashboard Web Speech path.
+  (`METIS_STT_ALLOW_LOCAL=true`, `METIS_STT_ENGINE=faster_whisper`) and is required for live local
+  transcription of dashboard WAV uploads.
 
 Bounded Phase 0V/AUDIO11 hardware-parity analyzer patch:
 
@@ -96,28 +180,28 @@ Phase 0AY implemented:
 - Added tests proving dashboard hooks are present and STT/confirmation source events remain redacted.
 - Verification after Phase 0AY plus analyzer/media documentation updates: `271 passed` under Python 3.11.
 
-Phase 0BF implemented:
+Historical Phase 0BF behavior (superseded by the completion-release WAV capture described above):
 
-- **`POST /metis/audio/browser_ptt`** — async multipart upload route accepting `audio: UploadFile`,
+- **`POST /metis/audio/browser_ptt`** â€” async multipart upload route accepting `audio: UploadFile`,
   `stt_provider`, `stt_hint`, `options_json`. Same governance gate order as `audio_ptt`:
-  `mic_hardware_enabled` → `audio_input_enabled` → `listen_mode==push_to_talk` → `power_state==awake`.
+  `mic_hardware_enabled` â†’ `audio_input_enabled` â†’ `listen_mode==push_to_talk` â†’ `power_state==awake`.
   Routes through `_run_stt_route_cycle` (the extracted STT+routing helper) and returns `route_used`.
   Raw audio bytes and transcript are never persisted.
-- **`_run_stt_route_cycle` helper** — extracted from `_run_listen_cycle`; shared by all capture-based
+- **`_run_stt_route_cycle` helper** â€” extracted from `_run_listen_cycle`; shared by all capture-based
   routes and the new browser upload route. `_run_listen_cycle` external contract unchanged; all
   previous tests pass.
-- **Dashboard "Hold to Talk" button** — uses the browser's `SpeechRecognition` API (no local Whisper
+- **Dashboard "Hold to Talk" button** â€” uses the browser's `SpeechRecognition` API (no local Whisper
   needed). Hold = recognition active; release = transcript sent as PTT release hint; `stt_provider`
   forced to `simulated` so the hint is returned verbatim through the 0BE routing fork. Falls back to
   the Hint/fixture field when the browser API returns no text (no internet, mic blocked, etc.). The
-  status line shows `"Recognition active — speak now"` or a specific error message.
-- **Radio panel AUDIO IN + PTT MODE buttons** — `AUDIO IN` toggles `audio_input_enabled` (turns green
-  when on); `PTT MODE` cycles `listen_mode` through `no_listen → push_to_talk → wake_word` (green
+  status line shows `"Recognition active â€” speak now"` or a specific error message.
+- **Radio panel AUDIO IN + PTT MODE buttons** â€” `AUDIO IN` toggles `audio_input_enabled` (turns green
+  when on); `PTT MODE` cycles `listen_mode` through `no_listen â†’ push_to_talk â†’ wake_word` (green
   when push_to_talk, amber when wake_word). Both update the Radio Status readouts (`Audio In`,
   `Listen`). The full PTT voice path is now operable from radio panel buttons alone without touching
   the Voice Conversation Test panel checkboxes.
-- **`block_reason` in status line** — `vcShowResult` and `vcPttPress` now surface the block reason
-  directly in the status text (e.g., `blocked — audio_input_disabled`) so the cause is immediately
+- **`block_reason` in status line** â€” `vcShowResult` and `vcPttPress` now surface the block reason
+  directly in the status text (e.g., `blocked â€” audio_input_disabled`) so the cause is immediately
   visible.
 - **12 tests** in `tests/test_phase_0bf_browser_ptt.py` covering governance blocks (audio disabled,
   mic off, wrong listen mode), routing (voice_command and voice_confirm paths), transcript redaction,
@@ -134,7 +218,7 @@ Phase 0BE implemented:
   phrase (`confirm approve`, `deny proposal`, `cancel`, etc.) and the exact proposal ID in the
   recognized text. Ambiguous phrases (e.g., `"yes"`, `"confirm approve"` without ID) return
   `readback_required`; proposal stays pending.
-- **`SimulatedSTT` passthrough**: `SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default` — unknown
+- **`SimulatedSTT` passthrough**: `SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default` â€” unknown
   hints return the hint text verbatim. Existing hints (`git_status`, `time_now`, etc.) are unchanged.
   This allows tests to inject arbitrary confirmation phrases, including dynamic proposal IDs.
 - **Dashboard Voice Conversation Test panel**: controls for audio input on/off, mic hardware on/off,
@@ -149,7 +233,7 @@ Phase 0BE implemented:
 Phase 0BD implemented:
 
 - **Event-driven bounded listen loop**: `POST /metis/audio/ptt` and `POST /metis/audio/wake` each
-  fire exactly one capture → STT → `voice_command` cycle per explicit trigger. No background threads,
+  fire exactly one capture â†’ STT â†’ `voice_command` cycle per explicit trigger. No background threads,
   no always-listening standby.
 - **`POST /metis/audio/ptt {"action":"press"|"release"}`**: Models the radio PTT button.
   `press` validates `listen_mode==push_to_talk` + full governance, sets `listen_session_active=true`.
@@ -158,13 +242,13 @@ Phase 0BD implemented:
 - **`POST /metis/audio/wake {"text":"..."}`**: Caller supplies recognized text (simulated wake-word
   detector path). If the text starts with the configured `wake_phrase` (default `"hey metis"`,
   case-insensitive) **and** `listen_mode==wake_word` **and** governance passes, the phrase is stripped
-  and one cycle runs on the remainder. Otherwise returns `wake_not_detected` — no capture, no routing.
+  and one cycle runs on the remainder. Otherwise returns `wake_not_detected` â€” no capture, no routing.
 - **`LocalWakeWordDetector` scaffold**: disabled, no external imports. Returns `not_enabled` always.
   Stub for a future openWakeWord / Porcupine integration.
 - **New state fields**: `listen_session_active` (default `false`), `wake_phrase` (default `"hey metis"`),
   `last_listen_trigger` (`"ptt"` | `"wake"` | `null`). All configurable via `button_event`.
 - **`GET /metis/audio/input`** now reports these fields and a `trigger_routes` map.
-- **`_run_listen_cycle(payload, trigger)`**: shared capture→STT→voice_command function; called by all
+- **`_run_listen_cycle(payload, trigger)`**: shared captureâ†’STTâ†’voice_command function; called by all
   three audio routes (`/listen`, `/ptt`, `/wake`). Governance verified by the caller.
 - **Mic cutoff stays highest precedence**: blocks press, release, and wake before any capture.
 - **28 new tests** covering PTT/wake routing, no-op paths, mic cutoff, no background threads, no raw
@@ -176,11 +260,11 @@ Phase 0BC implemented:
 - **In-memory audio handoff**: `CaptureResult._wav_bytes` (private, non-serialised) carries WAV bytes
   from capture to STT within a single `/metis/audio/listen` request. Set by `SimulatedAudioInput` and
   `LocalMicAudioInput`; absent from `to_dict()`, state, event log, and all responses.
-- **`LocalFasterWhisperSTT`** — real CTranslate2/faster-whisper engine; fail-closed dual gate:
+- **`LocalFasterWhisperSTT`** â€” real CTranslate2/faster-whisper engine; fail-closed dual gate:
   1. `METIS_STT_ALLOW_LOCAL=true` (env opt-in, checked inside `transcribe()` only).
-  2. Lazy `from faster_whisper import WhisperModel` — never at module load time. Missing dep → `dependency_unavailable`.
-  3. `METIS_STT_MODEL` (default `small`), `METIS_STT_MODEL_DIR` (offline model path). Model load fail → `model_unavailable`; no crash.
-- **Disabled scaffolds**: `VoskSTT`, `OpenAIWhisperSTT`, `WhisperCppSTT` — return `not_enabled`; no imports.
+  2. Lazy `from faster_whisper import WhisperModel` â€” never at module load time. Missing dep â†’ `dependency_unavailable`.
+  3. `METIS_STT_MODEL` (default `small`), `METIS_STT_MODEL_DIR` (offline model path). Model load fail â†’ `model_unavailable`; no crash.
+- **Disabled scaffolds**: `VoskSTT`, `OpenAIWhisperSTT`, `WhisperCppSTT` â€” return `not_enabled`; no imports.
 - **`METIS_STT_ENGINE`** env var (default `simulated`) selects the active STT engine; `POST /metis/audio/listen` falls back to this env var when no `stt_provider` is in the payload.
 - **`stt-whisper = ["faster-whisper>=1.0"]`** optional extra in `pyproject.toml` (`pip install -e ".[stt-whisper]"`). No PyTorch or openai-whisper dependency.
 - **`GET /metis/audio/input`** now reports `stt_engine`, `stt_allow_local`, `faster_whisper_available`, `stt_model`; input device enumeration is gated behind `mic_hardware_enabled`.
@@ -194,7 +278,7 @@ Phase 0BB implemented:
   1. `METIS_AUDIO_ALLOW_LOCAL_MIC=true` (env opt-in, checked inside `capture()` only).
   2. `mic_hardware_enabled` (state flag, enforced by `_audio_capture_governance()` before the provider is called).
   3. `audio_input_enabled` (state flag, same governance layer).
-- `sounddevice` is lazy-imported inside `capture()` only — never at module load time. If absent, returns `dependency_unavailable` without crashing.
+- `sounddevice` is lazy-imported inside `capture()` only â€” never at module load time. If absent, returns `dependency_unavailable` without crashing.
 - Real capture: records a short fixed-duration mono PCM sample via `sounddevice.rec()`, writes it to a tempfile WAV, analyses it with the shared Piper WAV-analysis helpers (`_wav_level_envelope`, `_wav_spectrum_frames`, `_wav_duration_ms`), then deletes the tempfile. Raw PCM and the tempfile path are never stored.
 - `GET /metis/audio/input` now includes `allow_local_mic`, `sounddevice_available`, and `input_devices` (input-capable devices by name/index) when the env flag is set; all tolerate the dep being absent.
 - `_audio_capture_governance()` extended with `require_listen_mode` parameter; all three audio routes (`/capture`, `/transcribe`, `/listen`) now use it consistently.
@@ -205,15 +289,15 @@ Phase 0BB implemented:
 
 Phase 0BA implemented:
 
-- Added `metis_head/audio_input.py` — `audio_input_adapter.v0.1` with `NoneAudioInput`, `SimulatedAudioInput` (synthetic WAV + Piper helpers), and disabled `LocalMicAudioInput` scaffold.
-- Added `metis_head/stt.py` — `stt_engine.v0.1` with `NoneSTT`, `SimulatedSTT` (deterministic hint→text map), and disabled `LocalWhisperSTT` scaffold.
+- Added `metis_head/audio_input.py` â€” `audio_input_adapter.v0.1` with `NoneAudioInput`, `SimulatedAudioInput` (synthetic WAV + Piper helpers), and disabled `LocalMicAudioInput` scaffold.
+- Added `metis_head/stt.py` â€” `stt_engine.v0.1` with `NoneSTT`, `SimulatedSTT` (deterministic hintâ†’text map), and disabled `LocalWhisperSTT` scaffold.
 - Canonical state additions: `audio_input_state`, `audio_input_enabled`, `listen_mode`, `last_audio_capture`, `input_adapters.audio_input`.
 - New endpoints: `GET /metis/audio/input`, `POST /metis/audio/input/capture`, `POST /metis/audio/transcribe`, `POST /metis/audio/listen`.
 - Capture fail-closed behind `mic_hardware_enabled` (highest precedence) then `audio_input_enabled` then `listen_mode` then `power_state`.
-- `POST /metis/audio/listen` feeds recognized text into the existing `POST /metis/voice/command` governed route — no new execution authority.
+- `POST /metis/audio/listen` feeds recognized text into the existing `POST /metis/voice/command` governed route â€” no new execution authority.
 - STT output redacted (`text_len`/`text_hash` only); recognized text never written to state, event log, or responses.
 - `audio_input` and `listen_mode` toggleable via `button_event` for tests; no new dep imports.
-- 35 new tests covering all §7 assertions; full suite: `319 passed` under Python 3.11.
+- 35 new tests covering all Â§7 assertions; full suite: `319 passed` under Python 3.11.
 
 Previous Phase 0AX status: Metis has a simulated voice confirmation protocol for pending governed proposals.
 `POST /metis/voice/confirm` accepts caller-supplied recognized text, emits redacted voice-confirmation
@@ -1101,7 +1185,7 @@ Phase 0C implemented:
 - When the background link reports `auth_failed`, `/metis/chat` skips the per-message live retrieval
   and labels the answer `degraded` instead of repeatedly hammering BOH.
 - Boundary: Metis only reads from BOH (`/api/health`, `/api/retrieve/status`, `/api/retrieve`), never
-  mutates it, never holds or sends BOH's operator token, and never copies/mirrors the BOH corpus —
+  mutates it, never holds or sends BOH's operator token, and never copies/mirrors the BOH corpus â€”
   BOH remains the source of truth for library/index/chunks/citations.
 
 Status: governed virtual chat can retrieve read-only context packs from a running BOH
@@ -1186,13 +1270,13 @@ This keeps each commit reviewable without needing to rediscover the architecture
 Run tests:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m pytest
+python -m pytest -q
 ```
 
 Run the mock Brain:
 
 ```powershell
-.\scripts\launch_metis.ps1 -PythonExe "C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe" -Port 8787
+.\scripts\launch_metis.ps1 -PythonExe "python" -Port 8787
 ```
 
 Dashboard:
@@ -1207,7 +1291,8 @@ is started from another directory.
 
 ## LLM Provider Config
 
-Default provider is mock:
+When neither the environment nor saved Setup state selects a live provider, the safe fallback is
+the deterministic mock provider:
 
 ```powershell
 $env:METIS_LLM_PROVIDER="mock"
@@ -1219,11 +1304,15 @@ Ollama:
 $env:METIS_LLM_PROVIDER="ollama"
 $env:METIS_OLLAMA_BASE_URL="http://127.0.0.1:11434"
 $env:METIS_OLLAMA_MODEL="llama3.1"
+$env:METIS_OLLAMA_TIMEOUT_SECONDS="120" # bounded 10-600 seconds
 ```
 
-The dashboard can also select `Ollama` in the Virtual Chat panel, refresh models
-from the configured base URL, and send the selected model in the chat request.
-This is a UI override; it does not change your shell environment.
+The setup wizard persists the selected conversation provider, base URL, and model in the
+non-secret per-user setup state. Unless an environment variable explicitly overrides it, the
+dashboard restores that saved Ollama selection after restart. The Virtual Chat panel can refresh
+the locally installed model list and sends the selected model with both typed and voice turns.
+The timeout remains bounded; the longer default accommodates first-token warm-up for larger local
+models.
 
 OpenAI:
 
@@ -1232,6 +1321,10 @@ $env:METIS_LLM_PROVIDER="openai"
 $env:OPENAI_API_KEY="..."
 $env:METIS_OPENAI_MODEL="gpt-4o-mini"
 ```
+
+The legacy direct OpenAI provider currently fails closed before network dispatch. Production paid
+calls must use the bounded reservation/accounting adapter and remain unavailable until an operator
+explicitly configures credentials, pricing, and `METIS_PAID_BUDGET_USD`.
 
 ## Voice Output Config (Phase 0V)
 
@@ -1249,18 +1342,18 @@ $env:METIS_VOICE_ALLOW_PIPER="false"
 $env:METIS_PIPER_EXE="B:\path\to\piper.exe"
 $env:METIS_PIPER_MODEL="B:\path\to\voice.onnx"
 $env:METIS_PIPER_CONFIG="B:\path\to\voice.onnx.json"   # optional
-$env:METIS_PIPER_PLAYBACK="true"
+$env:METIS_PIPER_PLAYBACK="false"                    # browser delivery is the default
 $env:METIS_PIPER_PLAYBACK_STRATEGY="soundplayer"       # soundplayer or winsound
 $env:METIS_PIPER_PLAYBACK_MODE="async"                 # async or sync
 $env:METIS_VOICE_NORMALIZE_TEXT="true"
 ```
 
-Default local Piper paths are auto-detected when installed/downloaded:
+Default local Piper assets are auto-detected when installed/downloaded:
 
 ```text
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\Scripts\piper.exe
-B:\dev\metis_head\metis_head\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx
-B:\dev\metis_head\metis_head\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx.json
+<python-scripts>\piper.exe
+<repo>\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx
+<repo>\models\piper\en_US\hfc_female\medium\en_US-hfc_female-medium.onnx.json
 ```
 
 `system` is present as a gated provider shape only. Real OS speech remains disabled unless
@@ -1269,18 +1362,21 @@ without audio.
 
 For local audible speech, choose `piper` in the dashboard, enter the local Piper executable and
 `.onnx` model paths, turn on `Voice replies`, then use `Preview Voice` or send a chat response.
-The dashboard request sets `allow_piper=true` for that selected local provider; text is passed to
-Piper over stdin and raw speech text is still not persisted in the Metis event log.
+The generated WAV is held briefly in a bounded in-memory store and consumed once by the requesting
+browser with `Cache-Control: no-store`. The Stop Voice control pauses real browser playback.
+Set `METIS_PIPER_PLAYBACK=true` only for legacy playback on the backend Windows speaker.
 
 ## Audio Input + STT Config (Phase 0BB / 0BC)
 
-Real microphone capture and real STT are each opt-in. Neither is active by default.
+Browser microphone capture is user-gesture and permission gated. It does not require the
+server-host microphone adapter. The tracked launcher enables local faster-whisper defaults when
+the variables are otherwise unset; direct process startup remains fail-closed.
 
 ```powershell
-# Real mic capture (Phase 0BB) — requires pip install -e ".[mic]"
+# Real mic capture (Phase 0BB) â€” requires pip install -e ".[mic]"
 $env:METIS_AUDIO_ALLOW_LOCAL_MIC = "true"
 
-# Real STT (Phase 0BC) — requires pip install -e ".[stt-whisper]"
+# Real STT (Phase 0BC) â€” requires pip install -e ".[stt-whisper]"
 $env:METIS_STT_ALLOW_LOCAL       = "true"
 $env:METIS_STT_ENGINE            = "faster_whisper"   # default: simulated
 $env:METIS_STT_MODEL             = "small"            # tiny/base/small/medium/large
@@ -1292,9 +1388,10 @@ should be driven by the physical cutoff switch wired through the bridge; the env
 interim software proxies. See `docs/LOCAL_MIC_SMOKE_TEST.md` and `docs/LOCAL_STT_SMOKE_TEST.md`
 for manual smoke-test steps.
 
-In-memory audio (`_wav_bytes`) and recognized text (`_recognized_text`) are never written to state,
-the event log, or any response payload. Recognized text enters `POST /metis/voice/command` or
-`POST /metis/voice/confirm` only (Phase 0BE routing fork); it is never persisted.
+In-memory audio (`_wav_bytes`) and recognized text (`_recognized_text`) are never written to
+canonical state or the event log. The recognized text is returned transiently to the requesting
+local browser so the operator can verify transcription, then enters `POST /metis/voice/command` or
+`POST /metis/voice/confirm`; safe exports retain only length/hash metadata.
 
 ## BOH Retrieval Bridge Config (Phase 0B)
 
@@ -1324,25 +1421,25 @@ are not executed.
 Emit one canonical bridge event as JSON:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator control initiative 0.82 --raw 839
+python -m metis_head.bridge_emulator control initiative 0.82 --raw 839
 ```
 
 Post an event directly to a running mock Brain:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator --post http://127.0.0.1:8787 button am_fm fm
+python -m metis_head.bridge_emulator --post http://127.0.0.1:8787 button am_fm fm
 ```
 
 Replay a JSONL bridge log locally through the deterministic reducer:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator replay .\events.jsonl --local-final-state
+python -m metis_head.bridge_emulator replay .\events.jsonl --local-final-state
 ```
 
 Replay JSONL into the mock Brain:
 
 ```powershell
-C:\Users\peckm\AppData\Local\Programs\Python\Python311\python.exe -m metis_head.bridge_emulator --post http://127.0.0.1:8787 replay .\events.jsonl
+python -m metis_head.bridge_emulator --post http://127.0.0.1:8787 replay .\events.jsonl
 ```
 
 ### Background Link Manager (Phase 0C)
@@ -1363,7 +1460,38 @@ probe; link states are `disabled`, `connecting`, `connected`, `degraded`, `disco
 `auth_failed`. A 401/403 from health, retrieve/status, or the retrieve probe maps to
 `auth_failed`; health connection refusal maps to `disconnected`; health 5xx or probe network
 error maps to `degraded`. The status response never includes any token, and the corpus is never copied into
-Metis — BOH remains the source of truth.
+Metis â€” BOH remains the source of truth.
+
+
+## MCP Access Bridge Config (Phase 0BH)
+
+The MCP bridge is read-only and gate-controlled. `scripts/launch_metis.ps1` now defaults the global, BOH, and Project Atlas MCP gates to active when unset, but status responses expose only booleans such as `command_configured` and `cwd_configured`; they never return command strings, working directories, child environment values, tokens, or secrets.
+Configured stdio calls use the installed MCP Python SDK client; if that SDK is missing, calls fail closed with `transport_error`.
+
+```powershell
+$env:METIS_MCP_ENABLED="true"
+$env:METIS_MCP_TIMEOUT_SECONDS="8"
+
+# BOH MCP stdio server. Use placeholders here; keep real local paths in operator env only.
+$env:METIS_MCP_BOH_ENABLED="true"
+$env:METIS_MCP_BOH_COMMAND="<python-or-mcp-runner>"
+$env:METIS_MCP_BOH_ARGS_JSON='["-m","tools.boh_mcp_adapter.server"]'
+$env:METIS_MCP_BOH_CWD="<boh-repo-root>"
+$env:METIS_MCP_BOH_ENV_JSON='{"BOH_DB":"<boh-db>","BOH_LIBRARY":"<boh-library>"}'
+
+# Project Atlas MCP stdio server, when an Atlas launcher is available.
+$env:METIS_MCP_ATLAS_ENABLED="true"
+$env:METIS_MCP_ATLAS_COMMAND="<atlas-mcp-runner>"
+$env:METIS_MCP_ATLAS_ARGS_JSON='[]'
+$env:METIS_MCP_ATLAS_CWD="<atlas-repo-root>"
+$env:METIS_MCP_ATLAS_ENV_JSON='{}'
+```
+
+BOH allowlisted tools: `search_boh`, `retrieve_context`, `get_document`, `get_current_state`, `assemble_context_pack`, `build_governed_handoff`, `classify_failure`.
+
+Project Atlas read-only allowlist: `list_projects`, `get_project_status`, `get_project_brief`, `get_project_summary`, `get_stale_projects`, `list_agent_proposals`, `preview_local_refresh`, `inspect_git_visibility`, `get_github_remote_status`, `list_project_enrichment_runs`, `get_project_enrichment_run`.
+
+Project Atlas proposal tools remain proposal-only in Metis and are not invoked by Phase 0BH. BOH mutation, BOH promotion, Atlas apply/delete/push, arbitrary shell execution, and operator-token handling remain blocked.
 
 ## API
 
@@ -1375,6 +1503,9 @@ Metis — BOH remains the source of truth.
 - `GET /metis/sim/manifest`
 - `GET /metis/sim/tests`
 - `GET /metis/boh/status`
+- `GET /metis/mcp/status`
+- `GET /metis/mcp/tools`
+- `POST /metis/mcp/{server_id}/tools/{tool_name}/call`
 - `GET /metis/llm/options`
 - `GET /metis/tools`
 - `GET /metis/tools/contract`
@@ -1418,7 +1549,7 @@ Metis — BOH remains the source of truth.
 - `POST /metis/audio/listen` (response includes `route_used`)
 - `POST /metis/audio/ptt` (response includes `route_used` on release)
 - `POST /metis/audio/wake` (response includes `route_used`)
-- `POST /metis/audio/browser_ptt` (guarded multipart upload; governance → `_run_stt_route_cycle`; response includes `route_used`)
+- `POST /metis/audio/browser_ptt` (guarded multipart upload; governance â†’ `_run_stt_route_cycle`; response includes `route_used`)
 - `GET /metis/personality`
 - `GET /metis/personality/console`
 - `POST /metis/llm/health`
@@ -1441,13 +1572,13 @@ Metis — BOH remains the source of truth.
 Last verified:
 
 ```text
-414 passed under Python 3.11
+603 passed under Python 3.11
 ```
 
 Coverage includes:
 
 - Browser held-to-talk governance blocks (audio disabled, mic off, wrong listen mode), routing fork, transcript redaction, `execution_allowed=false`.
-- Spoken confirmation routing: PTT/wake/listen → `voice_confirm` when phrase + pending proposal; readback when ambiguous; mic cutoff blocks before mutation; `execution_allowed` stays `false`.
+- Spoken confirmation routing: PTT/wake/listen â†’ `voice_confirm` when phrase + pending proposal; readback when ambiguous; mic cutoff blocks before mutation; `execution_allowed` stays `false`.
 - Push-to-talk and wake-word listen loop; no-op paths; no background threads; no raw audio or transcript in state/events/responses.
 - Voice trace dashboard visibility and simulated voice confirmation.
 - Deterministic voice-first tool awareness and simulated voice-command routing.
@@ -1458,6 +1589,7 @@ Coverage includes:
 - Approved read-only lanes for `filesystem.read`, `git.status`, and `time.now`.
 - Piper spectrum frames, hardware-parity analyzer presentation, voice, artifacts, BOH link, and hardware parity coverage.
 - Phase 0BG voice-origin sentinel non-persistence and browser PTT upload guardrails.
+- Phase 0BH MCP status/tool-list/call policy, stdio fake-server smoke, redaction, and proposal blocking.
 
 Additional verification:
 
@@ -1480,16 +1612,17 @@ Current phases do not implement:
 
 - Real hardware, wake word, camera capture, or autonomous listening.
 - Real local STT without setting `METIS_STT_ALLOW_LOCAL=true` and installing `pip install -e ".[stt-whisper]"` (requires faster-whisper; no PyTorch).
-- Project Atlas integration.
+- Project Atlas mutation/apply integration; Phase 0BH only permits configured read-only MCP calls and classifies Atlas proposal tools without invoking them.
 - Side-effectful external tools, arbitrary shell commands, or autonomous execution.
 - Arbitrary filesystem reads or arbitrary git commands.
-- BOH-as-tool execution, BOH mutation, Atlas mutation, hardware mutation, or memory promotion.
+- BOH mutation/promotion, Atlas mutation/apply/delete/push, hardware mutation, or memory promotion.
 
-Live external integration is limited to the opt-in read-only BOH link:
+Live external integration is limited to opt-in read-only bridges:
 
-- Retrieval bridge: `/api/retrieve`, gated by `METIS_BOH_ENABLED`.
-- Background link manager: `/api/health`, `/api/retrieve/status`, and a `limit=1` retrieval probe, gated by `METIS_BOH_BACKGROUND_ENABLED`.
-- Metis never mutates BOH, never holds BOH's operator token, and never copies the BOH corpus. BOH remains the source of truth.
+- BOH retrieval bridge: `/api/retrieve`, gated by `METIS_BOH_ENABLED`.
+- BOH background link manager: `/api/health`, `/api/retrieve/status`, and a `limit=1` retrieval probe, gated by `METIS_BOH_BACKGROUND_ENABLED`.
+- MCP access bridge: `/metis/mcp/...`, gated by `METIS_MCP_ENABLED` plus per-server enable flags and read-only tool allowlists.
+- Metis never mutates BOH, never holds BOH's operator token, never applies Atlas proposals, and never copies the BOH corpus. BOH and Project Atlas remain sources of truth.
 
 Approved read-only tool lanes are intentionally narrow:
 

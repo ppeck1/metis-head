@@ -1,0 +1,17 @@
+ README.md                                |  57 ++--
+ docs/ACCEPTANCE.md                       |  24 +-
+ docs/COMPLETION_LEDGER.md                |  15 ++
+ docs/HANDOFF.md                          |  71 ++---
+ docs/VARIABLE_MATRIX.md                  |  27 +-
+ docs/project_variable_map.md             |   5 +-
+ metis_head/brain.py                      | 443 +++++++++++++++++++++++++++++--
+ metis_head/connectors/google_access.py   |  40 +++
+ metis_head/conversation/session.py       |  40 ++-
+ metis_head/conversation_context.py       |  16 +-
+ metis_head/static/conversation_client.js |  41 ++-
+ metis_head/static/dashboard.html         | 260 +++++++++++-------
+ metis_head/static/voice_capture.js       |   4 +
+ scripts/launch_metis.ps1                 |   3 +
+ tests/node_conversation_client.cjs       |  45 ++++
+ tests/test_completion_integration.py     |  44 ++-
+ 16 files changed, 944 insertions(+), 191 deletions(-)

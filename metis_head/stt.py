@@ -21,11 +21,45 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+import threading
 from dataclasses import dataclass
 from typing import Any
 
 
 STT_SCHEMA_VERSION = "stt_engine.v0.1"
+
+
+class _WhisperModelCache:
+    """Process-local, bounded cache for one warmed faster-whisper model.
+
+    A changed model configuration replaces the prior instance. Loading is
+    serialized so simultaneous PTT requests cannot construct duplicate models.
+    The cache never retains audio or transcript data.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._key: tuple[str, str | None, str, str] | None = None
+        self._model: Any = None
+
+    def get(self, factory: Any, model_size: str, model_dir: str | None) -> Any:
+        key = (model_size, model_dir, "cpu", "int8")
+        with self._lock:
+            if self._model is None or self._key != key:
+                kwargs: dict[str, Any] = {}
+                if model_dir:
+                    kwargs["download_root"] = model_dir
+                self._model = factory(model_size, device="cpu", compute_type="int8", **kwargs)
+                self._key = key
+            return self._model
+
+    def clear(self) -> None:
+        with self._lock:
+            self._model = None
+            self._key = None
+
+
+_WHISPER_MODELS = _WhisperModelCache()
 
 SIMULATED_TRANSCRIPT_MAP: dict[str, str] = {
     "git_status": "git status",
@@ -218,10 +252,7 @@ class LocalFasterWhisperSTT(STTProvider):
         model_dir = os.environ.get("METIS_STT_MODEL_DIR")
 
         try:
-            kwargs: dict[str, Any] = {}
-            if model_dir:
-                kwargs["download_root"] = model_dir
-            model = WhisperModel(model_size, device="cpu", compute_type="int8", **kwargs)
+            model = _WHISPER_MODELS.get(WhisperModel, model_size, model_dir)
         except Exception:
             return STTResult(
                 provider_id=self.provider_id,

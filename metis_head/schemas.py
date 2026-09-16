@@ -42,6 +42,8 @@ EVENT_TYPES = {
     "tool_plan_step_queue",
     "tool_plan_execution_request",
     "tool_plan_result_binding",
+    "tool_control_toggle",
+    "mcp_chat_read",
 }
 
 ACTION_CLASSES = {
@@ -145,6 +147,17 @@ def baseline_state(*, adapters_enabled: bool = False, timestamp: str = "2026-05-
         "approval_queue": [],
         "execution_audit_log": [],
         "tool_plan_queue": [],
+        "tool_control_center": {
+            "schema_version": "metis_control_center_state.v0.2",
+            "tool_usage_requested": False,
+            "boh_mcp_requested": False,
+            "project_atlas_mcp_requested": False,
+            "tool_usage_mode": "off",
+            "boh_mcp_mode": "off",
+            "project_atlas_mcp_mode": "off",
+            "last_updated_at": None,
+            "last_toggle": None,
+        },
         "module_health": {
             "metis_head_bridge": "ok",
             "metis_core": "ok",

@@ -95,21 +95,9 @@ class OpenAILLMProvider(BaseLLMProvider):
     def generate(self, messages: list[dict[str, str]], state: dict[str, Any], options: dict[str, Any]) -> LLMResult:
         if not self.api_key:
             raise LLMProviderError("OPENAI_API_KEY is required for METIS_LLM_PROVIDER=openai")
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": options.get("temperature", 0.2),
-        }
-        response = _post_json(
-            "https://api.openai.com/v1/chat/completions",
-            payload,
-            headers={"Authorization": f"Bearer {self.api_key}"},
+        raise LLMProviderError(
+            "OpenAI dispatch is disabled until the budgeted paid-provider adapter is configured; no request was sent"
         )
-        choices = response.get("choices") or []
-        text = choices[0].get("message", {}).get("content") if choices else None
-        if not isinstance(text, str):
-            raise LLMProviderError("OpenAI response did not contain choices[0].message.content")
-        return LLMResult(text=text, provider=self.provider_id, model=self.model, raw=response)
 
 
 def provider_from_env(env: dict[str, str] | None = None) -> BaseLLMProvider:

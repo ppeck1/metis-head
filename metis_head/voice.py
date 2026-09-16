@@ -15,6 +15,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
+from .audio.artifacts import AUDIO_ARTIFACTS
+
 
 VOICE_SCHEMA_VERSION = "metis_voice.v0.1"
 VOICE_OPTIONS_VERSION = "metis_voice_options.v0.1"
@@ -284,6 +286,9 @@ class PiperVoiceProvider(BaseVoiceProvider):
             base["audio_spectrum_segments_per_side"] = AUDIO_SPECTRUM_SEGMENTS_PER_SIDE
             if audio_duration_ms is not None:
                 base["audio_duration_ms"] = audio_duration_ms
+            artifact_id = AUDIO_ARTIFACTS.put(wav_path.read_bytes())
+            base["audio_ref"] = f"/metis/voice/audio/{artifact_id}"
+            base["playback_target"] = "client"
             events.append({**base, "status": "speaking", "audio_file": "local_temp_wav"})
             if config.piper_playback:
                 if config.piper_playback_mode == "async":
@@ -323,7 +328,7 @@ def voice_config_from_env(env: dict[str, str] | None = None, options: dict[str, 
     piper_exe = _optional_str(voice_options.get("piper_exe", env.get("METIS_PIPER_EXE"))) or _default_piper_exe()
     piper_model = _optional_str(voice_options.get("piper_model", env.get("METIS_PIPER_MODEL"))) or _default_piper_model()
     piper_config = _optional_str(voice_options.get("piper_config", env.get("METIS_PIPER_CONFIG"))) or _default_piper_config()
-    piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "true")))
+    piper_playback = _as_bool(voice_options.get("piper_playback", env.get("METIS_PIPER_PLAYBACK", "false")))
     piper_playback_strategy = _playback_strategy(voice_options.get("piper_playback_strategy", env.get("METIS_PIPER_PLAYBACK_STRATEGY", "soundplayer")))
     piper_playback_mode = _playback_mode(voice_options.get("piper_playback_mode", env.get("METIS_PIPER_PLAYBACK_MODE", "async")))
     normalize_text = _as_bool(voice_options.get("normalize_text", env.get("METIS_VOICE_NORMALIZE_TEXT", "true")))

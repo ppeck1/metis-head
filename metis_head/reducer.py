@@ -10,6 +10,18 @@ from .tool_task_planner import build_tool_plan_review_receipt
 from .schemas import FAILURE_TABLE, SUPPORTED_ADAPTER_SCHEMAS, validate_event
 
 
+CONTROL_CENTER_REQUEST_KEYS = {
+    "tool_usage": "tool_usage_requested",
+    "boh_mcp": "boh_mcp_requested",
+    "project_atlas_mcp": "project_atlas_mcp_requested",
+}
+CONTROL_CENTER_MODE_KEYS = {
+    "tool_usage": "tool_usage_mode",
+    "boh_mcp": "boh_mcp_mode",
+    "project_atlas_mcp": "project_atlas_mcp_mode",
+}
+CONTROL_CENTER_MODES = {"off", "read", "write_proposal", "read_write_proposal"}
+
 def bucket(value: float, low: str, mid: str, high: str) -> str:
     if value < 0.34:
         return low
@@ -70,6 +82,8 @@ def reduce_metis_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str
         _reduce_tool_plan_execution_request(next_state, event)
     elif event_type == "tool_plan_result_binding":
         _reduce_tool_plan_result_binding(next_state, event)
+    elif event_type == "tool_control_toggle":
+        _reduce_tool_control_toggle(next_state, event)
 
     return next_state
 
@@ -126,6 +140,51 @@ def _reduce_button(state: dict[str, Any], event: dict[str, Any]) -> None:
         if isinstance(value, str) and value.strip():
             state["wake_phrase"] = value.strip().lower()
 
+
+
+def _as_event_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+    return bool(value)
+
+
+def _normalize_control_mode(value: Any, *, enabled: bool) -> str:
+    if isinstance(value, str):
+        mode = value.strip().lower()
+        if mode in CONTROL_CENTER_MODES:
+            return mode
+    return "read" if enabled else "off"
+
+
+def _control_center_default_state() -> dict[str, Any]:
+    return {
+        "schema_version": "metis_control_center_state.v0.2",
+        "tool_usage_requested": False,
+        "boh_mcp_requested": False,
+        "project_atlas_mcp_requested": False,
+        "tool_usage_mode": "off",
+        "boh_mcp_mode": "off",
+        "project_atlas_mcp_mode": "off",
+        "last_updated_at": None,
+        "last_toggle": None,
+    }
+
+
+def _reduce_tool_control_toggle(state: dict[str, Any], event: dict[str, Any]) -> None:
+    control = str(event.get("control") or "")
+    request_key = CONTROL_CENTER_REQUEST_KEYS.get(control)
+    mode_key = CONTROL_CENTER_MODE_KEYS.get(control)
+    if not request_key or not mode_key:
+        return
+    enabled = _as_event_bool(event.get("enabled"))
+    mode = _normalize_control_mode(event.get("mode"), enabled=enabled)
+    control_state = state.setdefault("tool_control_center", _control_center_default_state())
+    control_state["schema_version"] = "metis_control_center_state.v0.2"
+    control_state[mode_key] = mode
+    control_state[request_key] = mode != "off"
+    control_state["last_updated_at"] = event.get("toggled_at") or event.get("timestamp")
+    control_state["last_toggle"] = {"control": control, "mode": mode, "enabled": mode != "off"}
+    state["external_action_executed"] = False
 
 def _reduce_privacy(state: dict[str, Any], event: dict[str, Any]) -> None:
     device = event.get("device")

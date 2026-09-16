@@ -1,0 +1,64 @@
+{
+  "schema_version": "0.2",
+  "project_id": "metis-head",
+  "display_name": "metis head",
+  "root": ".",
+  "repo_kind": "software",
+  "visibility": "public",
+  "profiles": [
+    "public_repo",
+    "software_project"
+  ],
+  "canonical_docs": {
+    "readme": "README.md",
+    "handoff": "docs/HANDOFF.md",
+    "variable_matrix": "docs/VARIABLE_MATRIX.md",
+    "current_state": "ACTIVE_TASK.md",
+    "project_variable_map": "docs/project_variable_map.md",
+    "operations": "docs/READ_ONLY_EXECUTION_POLICY_v0_1.md",
+    "architecture": "docs/PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md"
+  },
+  "validation": {
+    "required": [
+      "python -m pytest -q",
+      "python -m compileall -q metis_head tests"
+    ],
+    "focused": [],
+    "smoke": [],
+    "manual": []
+  },
+  "protected_paths": [
+    ".git/",
+    ".env",
+    ".project/runs/",
+    ".project/atlas_outbox/",
+    ".project/boh_outbox/",
+    "models/"
+  ],
+  "generated_paths": [
+    "__pycache__/",
+    ".pytest_cache/",
+    ".coverage",
+    "htmlcov/",
+    "artifacts/",
+    "models/"
+  ],
+  "secrets_policy": "names-only",
+  "atlas_sync": {
+    "enabled": true,
+    "mode": "outbox",
+    "project_key": "metis-head"
+  },
+  "boh_sync": {
+    "enabled": true,
+    "mode": "outbox",
+    "authority": "evidence-only",
+    "project_key": "metis-head"
+  },
+  "git_policy": {
+    "require_git": true,
+    "commit_after_signable_run": false,
+    "push_policy": "manual",
+    "allow_dirty_unrelated": false
+  }
+}
