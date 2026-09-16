@@ -23,6 +23,9 @@ def test_launch_script_sets_repo_root_and_starts_uvicorn() -> None:
     content = script.read_text(encoding="utf-8")
 
     assert "METIS_REPO_ROOT" in content
+    assert 'METIS_MCP_ENABLED = "true"' in content
+    assert 'METIS_MCP_BOH_ENABLED = "true"' in content
+    assert 'METIS_MCP_ATLAS_ENABLED = "true"' in content
     assert "Set-Location -LiteralPath $RepoRoot" in content
     assert "uvicorn" in content
     assert "metis_head.brain:app" in content
@@ -38,6 +41,20 @@ def test_read_only_tools_use_configured_repo_root_when_cwd_differs(monkeypatch, 
 
     assert file_result["path"].endswith("pyproject.toml")
     assert git_result["repository"] == str(ROOT.resolve())
+
+
+def test_filesystem_receipt_preserves_filename_from_long_working_directory(monkeypatch, tmp_path) -> None:
+    repo = tmp_path / ("long-directory-segment-" * 5) / "repository"
+    repo.mkdir(parents=True)
+    target = repo / "distinctive_receipt_filename.md"
+    target.write_text("safe preview", encoding="utf-8")
+    monkeypatch.setenv("METIS_REPO_ROOT", str(repo))
+    monkeypatch.chdir(tmp_path)
+
+    result = execute_filesystem_read({"path": target.name})
+
+    assert result["path"] == target.name
+    assert result["filename"] == target.name
 
 
 def test_execution_policy_distinguishes_arbitrary_execution_from_scoped_read_only_lanes() -> None:

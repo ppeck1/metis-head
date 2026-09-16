@@ -94,6 +94,7 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
 
     def fake_run(command: list[str], **kwargs: Any) -> object:
         calls.append({"command": command, "kwargs": kwargs})
+        Path(command[command.index("--output-file") + 1]).write_bytes(b"RIFFfixture-WAVE")
         return object()
 
     monkeypatch.setattr(voice_module.subprocess, "run", fake_run)
@@ -117,7 +118,9 @@ def test_piper_speak_invokes_local_cli_and_records_audio_events(monkeypatch, tmp
     assert calls[0]["kwargs"]["input"] == "Piper local voice check."
     assert body["events"][0]["playback_mode"] == "async"
     assert body["events"][0]["audio_visualization_hint_ms"] >= 2200
-    assert playback_calls
+    assert not playback_calls
+    assert body["events"][2]["audio_ref"].startswith("/metis/voice/audio/")
+    assert body["events"][2]["playback_target"] == "client"
 
 
 def test_piper_speak_normalizes_markdown_for_audible_output(monkeypatch, tmp_path) -> None:
@@ -132,6 +135,7 @@ def test_piper_speak_normalizes_markdown_for_audible_output(monkeypatch, tmp_pat
 
     def fake_run(command: list[str], **kwargs: Any) -> object:
         calls.append({"command": command, "kwargs": kwargs})
+        Path(command[command.index("--output-file") + 1]).write_bytes(b"RIFFfixture-WAVE")
         return object()
 
     monkeypatch.setattr(voice_module.subprocess, "run", fake_run)

@@ -34,8 +34,10 @@ def execute_filesystem_read(arguments: dict[str, Any] | None = None) -> dict[str
         raise ReadOnlyToolError("file exceeds Phase 0F preview size limit")
     text = data.decode("utf-8", errors="replace")
     lines = [_redact_line(line)[:160] for line in text.splitlines()[:12]]
+    relative_path = path.relative_to(_repo_root()).as_posix()
     return {
-        "path": str(path),
+        "path": relative_path,
+        "filename": path.name,
         "extension": path.suffix.lower(),
         "byte_count": len(data),
         "line_count": len(text.splitlines()),

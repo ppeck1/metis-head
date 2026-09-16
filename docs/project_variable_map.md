@@ -1,10 +1,10 @@
 # Metis Head Project Variable Map
 
-Version: `metis_variable_map.v0.5`
+Version: `metis_variable_map.v0.11`
 
-Last phase updated: `0BG` (documentation/state alignment repair, voice-origin privacy, browser verbal-path clarity, browser upload guardrails)
+Last phase updated: `0BM` (Virtual Chat MCP read bridge)
 
-Full phase chain: `0A 0S 0S/S3 0S/S4 0M 0X 0Y 0R 0P 0V 0V/AUDIO9–12 0B 0C 0E 0T 0U 0W 0Q 0L 0G 0F 0J 0K 0N 0D 0I 0H 0AA–0AG 0AH–0AO 0AP–0AY 0AZ 0BA 0BB 0BC 0BD 0BE 0BF 0BG`
+Full phase chain: `0A 0S 0S/S3 0S/S4 0M 0X 0Y 0R 0P 0V 0V/AUDIO9â€“12 0B 0C 0E 0T 0U 0W 0Q 0L 0G 0F 0J 0K 0N 0D 0I 0H 0AAâ€“0AG 0AHâ€“0AO 0APâ€“0AY 0AZ 0BA 0BB 0BC 0BD 0BE 0BF 0BG 0BH 0BI 0BJ 0BK 0BL 0BM`
 
 Purpose: keep canonical names, state fields, event fields, API routes, adapter IDs,
 scenario IDs, and future build placeholders reviewable before each phase commit.
@@ -25,16 +25,22 @@ Before committing any phase:
 
 | Phase | Decision / Constraint | Rationale |
 |---|---|---|
+| `0BJ` | Control-center controls use explicit modes: off, read, write_proposal, read_write_proposal. Write mode is proposal/outbox intent only; direct apply remains blocked. | Gives the operator read/write/both affordances without widening MCP mutation authority. |
+| `0BK` | Local PowerShell launch defaults the MCP global, BOH, and Project Atlas gates active when unset, and the dashboard labels gate closure as MCP gate disabled. | Removes the misleading global disabled readout while preserving private MCP command configuration and no direct write/apply authority. |
+| `0BM` | Explicit Virtual Chat MCP read requests, including combined BOH + Project Atlas access checks, route through a deterministic pre-LLM bridge with bounded direct rendering and a short TTL cache. Generic `search boh ...` requests stay in the legacy proposal lane unless MCP is explicitly named. | Fixes the green-indicator/no-access chat mismatch without provider-dependent tool calling or new write/apply authority. |
+| `0BL` | Launch optionally loads ignored `.project/local_mcp_env.ps1`; workstation-only BOH config and Project Atlas read shim can make local MCP reads usable. | Gets local reads working without committing private paths, local DB locations, or write/apply authority. |
+| `0BI` | Virtual Chat Tool Control Center toggles record replayable operator intent for tool usage, BOH MCP, and Project Atlas MCP. Indicators are computed from sanitized control-center, MCP, and BOH status payloads. | Puts access visibility under Virtual Chat without granting execution, setting env vars, invoking MCP tools, or applying Atlas/BOH mutations. |
+| `0BH` | MCP access is disabled by default and requires `METIS_MCP_ENABLED=true` plus a per-server enable flag. It exposes configured stdio calls only for allowlisted read-only BOH and Project Atlas tools. Atlas proposal tools are classified as proposal-only and are not invoked. | Adds MCP access without granting BOH promotion, Atlas apply/delete/push, arbitrary shell, operator-token handling, or accepted-truth mutation. |
 | `0BG` | Voice-origin raw text is transient only. `/metis/voice/command` tags its internal chat call with `_metis_voice_origin` and `_redact_voice_transcript_persistence`; `chat_event.user_message`, `chat_history`, and exact assistant echoes persist a redacted marker rather than raw transcript text. | Aligns implementation with the stronger voice privacy contract and prevents spoken text from persisting in canonical state/log structures. |
-| `0BG` | Dashboard Hold to Talk uses browser `SpeechRecognition` and sends recognized text as a simulated STT hint through `/metis/audio/ptt`; it does not upload browser-recorded audio to `/metis/audio/browser_ptt` or faster-whisper. | Keeps the current dashboard path honest and dependency-light while preserving the governed PTT routing cycle. |
+| `0BG` | Historical behavior, superseded by completion release: Dashboard Hold to Talk used browser `SpeechRecognition` and sent recognized text as a simulated STT hint through `/metis/audio/ptt`. | Retained as phase history only; current behavior is bounded local WAV capture. |
 | `0BG` | `POST /metis/audio/browser_ptt` is a guarded backend multipart lane for local prototype clients/tests. It enforces `BROWSER_PTT_MAX_UPLOAD_BYTES`, content-type allowlist, empty-payload rejection, and simple WAV header validation. | Prevents unbounded local uploads while avoiding production overbuild. |
 | `0BF` | `POST /metis/audio/browser_ptt` accepts a `multipart/form-data` upload (`audio` file + `stt_provider` + `stt_hint` + `options_json`). Audio bytes held in `CaptureResult._wav_bytes` (in-memory only, never serialized). `stt_provider=simulated` + `stt_hint=<transcribed text>` is the primary path; SimulatedSTT returns the hint verbatim. Response routed through `_run_stt_route_cycle` identically to PTT/wake paths. Route requires `listen_mode==push_to_talk`. | Enables browser-side Web Speech API (or typed hint) to reach the same governed audio pipeline as PTT/wake without adding a separate execution path. |
-| `0BF` | Browser dashboard "Hold to Talk" button uses `SpeechRecognition` (Web Speech API). Text sent as `hint` to `POST /metis/audio/ptt` with `stt_provider=simulated`. Chrome sends audio to Google cloud STT; requires internet. Hint-field fallback works when recognition unavailable. `_vcBrPttReleasing` + `_vcBrPttSent` guard prevent double-send across `onresult`/`onend` race. | Web Speech API does not require a local microphone capture pipeline; SimulatedSTT passthrough avoids dependency on faster-whisper being enabled. |
-| `0BF` | Radio panel AUDIO IN button calls `toggleAudioInput()` → `button_event audio_input on/off`. PTT MODE button calls `cyclePttMode()` → cycles `listen_mode` through `no_listen → push_to_talk → wake_word`. Both reflected in Radio Status readouts and button background colors via `updateRadio()`. | Fulfils radio-first UX requirement: audio input and listen mode must be settable from the dashboard radio panel without using debug test-panel checkboxes. |
-| `0BE` | `_run_listen_cycle` routing fork: if `_pending_proposals()` is non-empty AND `_parse_voice_confirmation(recognized_text)` returns a non-None decision or proposal_id → routes to `voice_confirm`; otherwise routes to `voice_command`. `execution_allowed` stays `false`; no standing approval granted. | Keeps spoken confirmation in the existing governed lane without adding a new execution path or bypassing the explicit-phrase + explicit-ID gate. |
+| `0BF` | Historical behavior, superseded by completion release: the browser used `SpeechRecognition` and simulated STT hints. | Retained as phase history only; current browser code does not invoke cloud Web Speech. |
+| `0BF` | Radio panel AUDIO IN button calls `toggleAudioInput()` â†’ `button_event audio_input on/off`. PTT MODE button calls `cyclePttMode()` â†’ cycles `listen_mode` through `no_listen â†’ push_to_talk â†’ wake_word`. Both reflected in Radio Status readouts and button background colors via `updateRadio()`. | Fulfils radio-first UX requirement: audio input and listen mode must be settable from the dashboard radio panel without using debug test-panel checkboxes. |
+| `0BE` | `_run_listen_cycle` routing fork: if `_pending_proposals()` is non-empty AND `_parse_voice_confirmation(recognized_text)` returns a non-None decision or proposal_id â†’ routes to `voice_confirm`; otherwise routes to `voice_command`. `execution_allowed` stays `false`; no standing approval granted. | Keeps spoken confirmation in the existing governed lane without adding a new execution path or bypassing the explicit-phrase + explicit-ID gate. |
 | `0BE` | `SimulatedSTT.transcribe()` returns unknown hints verbatim (`SIMULATED_TRANSCRIPT_MAP.get(hint) or hint or default`). | Allows tests to inject arbitrary confirmation phrases (including dynamic proposal IDs) without changing the map or adding non-deterministic entries. |
 | `0BE` | `voice_confirm` still requires both an explicit decision phrase AND an explicit proposal ID in the text for approve/deny/cancel. Ambiguous phrases (e.g., "yes", "confirm approve" with no ID) return `readback_required`. | The explicit-phrase + explicit-ID gate from 0AX is unchanged. Routing to voice_confirm through the listen path does not weaken it. |
-| `0BD` | Listen loop is event-driven and bounded — one capture→STT→route cycle per explicit PTT or wake trigger; never an always-listening background thread. | Core design principle. Standby must not imply hidden listening. Mic cutoff is highest precedence. |
+| `0BD` | Listen loop is event-driven and bounded â€” one captureâ†’STTâ†’route cycle per explicit PTT or wake trigger; never an always-listening background thread. | Core design principle. Standby must not imply hidden listening. Mic cutoff is highest precedence. |
 | `0BD` | `POST /metis/audio/ptt press` sets `listen_session_active=true` but does NOT start capture. Capture only runs on `release`. | Separates intent signal from capture execution; lets governance fire once with correct state. |
 | `0BD` | `POST /metis/audio/wake` requires caller-supplied text (no embedded audio stream). `LocalWakeWordDetector` is a disabled scaffold with no external imports. | Real wake-word engine (openWakeWord/Porcupine) is future-phase; simulated path exercises full governed cycle now. |
 | `0BD` | `wake_phrase` defaults to `"hey metis"`, case-insensitive prefix match. Configurable via `button_event`. | Allows integration test flexibility without code changes; casing normalised in reducer and wake route. |
@@ -45,7 +51,7 @@ Before committing any phase:
 | `0AX` | `/metis/voice/confirm` never requests execution or grants standing approval. Explicit proposal-specific phrase required. | Simulated voice confirmation must not weaken the approval gate. |
 | `0AW` | Tool/capability questions are answered deterministically before LLM generation. | Prevents provider drift; LLM should not say "I have no tools." |
 | `0AQ` | `METIS_REPO_ROOT` set by launch script; read-only lanes use it as allowlist anchor. | Prevents clean-export tests from reading outside repo root. |
-| `0Q` | `execution_enabled=false` covers arbitrary/autonomous execution only; scoped approved read-only receipts are represented separately as `scoped_read_only_receipts_enabled=true`. | Distinction matters for operator review: blocking general execution ≠ blocking safe read-only receipt lanes. |
+| `0Q` | `execution_enabled=false` covers arbitrary/autonomous execution only; scoped approved read-only receipts are represented separately as `scoped_read_only_receipts_enabled=true`. | Distinction matters for operator review: blocking general execution â‰  blocking safe read-only receipt lanes. |
 | General | Reference repos (MCP, openWakeWord, Porcupine, etc.) are pattern donors only. Never vendored, imported, or spawned. | Keeps dependency surface explicit and auditable. |
 | General | All schema versions are caller-visible; reducers validate event type before mutating state. | Enables replay determinism and handoff reproducibility. |
 
@@ -107,7 +113,11 @@ Before committing any phase:
 | `metis_tool_capability_awareness.v0.1` | `metis_tool_capability_awareness.v0.1` | `metis_head.brain` | Deterministic chat/voice response metadata for registry-derived tool awareness. |
 | `metis_voice_confirmation.v0.1` | `metis_voice_confirmation.v0.1` | `metis_head.brain` | Redacted simulated voice-confirmation event metadata for proposal review phrases. |
 | `metis_voice_confirmation_readback.v0.1` | `metis_voice_confirmation_readback.v0.1` | `metis_head.brain` | Safe spoken/readable summary for one pending proposal before voice confirmation. |
-| `metis_variable_map.v0.5` | `metis_variable_map.v0.5` | `docs/project_variable_map.md` | Documentation map version. v0.2 added Notes matrix. v0.3 adds 0BE spoken confirmation routing. v0.4 adds 0BF browser held-to-talk and radio panel audio controls. v0.5 adds 0BG repair contract alignment. |
+| `MCP_CHAT_BRIDGE_VERSION` | `metis_mcp_chat_bridge.v0.1` | `metis_head.mcp_chat_bridge` | Deterministic Virtual Chat MCP read bridge schema. Added 0BM. |
+| `MCP_ACCESS_VERSION` | `metis_mcp_access.v0.1` | `metis_head.mcp_access` | Governed MCP access bridge status/call schema. Added 0BH. |
+| `CONTROL_CENTER_VERSION` | `metis_control_center.v0.2` | `metis_head.control_center` | Sanitized Virtual Chat control-center status schema. Added 0BI. |
+| `CONTROL_CENTER_STATE_VERSION` | `metis_control_center_state.v0.2` | `metis_head.control_center` / `metis_head.schemas` | Replayable control-center intent state schema. Added 0BI. |
+| `metis_variable_map.v0.11` | `metis_variable_map.v0.11` | `docs/project_variable_map.md` | Documentation map version. v0.11 adds Phase 0BM Virtual Chat MCP read routing. |
 
 ---
 
@@ -124,9 +134,9 @@ Before committing any phase:
 | `cognition_state` | enum | 0A | `idle` | `idle`, `retrieving`, `drafting`, `awaiting_approval`. |
 | `authority_state` | enum | 0A | `local_governed` | `local_governed`, `source_grounded`, `awaiting_approval`, `blocked`. |
 | `interaction_mode` | enum | 0A | `human` | `human` or `agent`. |
-| `initiative_level` | number | 0A | `0.5` | Normalized tuning knob value `0.0`–`1.0`. |
+| `initiative_level` | number | 0A | `0.5` | Normalized tuning knob value `0.0`â€“`1.0`. |
 | `initiative_bucket` | enum | 0A | `helpful` | `reactive`, `helpful`, `proactive`. |
-| `conversation_depth_level` | number | 0A | `0.5` | Normalized depth knob value `0.0`–`1.0`. |
+| `conversation_depth_level` | number | 0A | `0.5` | Normalized depth knob value `0.0`â€“`1.0`. |
 | `conversation_depth_bucket` | enum | 0A | `rationale` | `direct`, `rationale`, `systems`. |
 | `volume_level` | number | 0A | `0.6` | Spoken output volume only. |
 | `output_muted` | boolean | 0A | `false` | LOUD/output mute; does not imply privacy. |
@@ -143,6 +153,10 @@ Before committing any phase:
 | `approval_queue` | array | 0R | `[]` | Structured pending proposal records; no execution path. |
 | `execution_audit_log` | array | 0W | `[]` | Safe execution request receipts; no raw secrets, file contents, command output, or external receipts. |
 | `tool_plan_queue` | array | 0AI | `[]` | Persistent reviewable governed tool plans; all transitions are governed and non-autonomous. |
+| `tool_control_center` | object | 0BI/0BJ | off/requested false values plus mode values | Replayable Virtual Chat control-center intent for tool usage, BOH MCP, and Project Atlas MCP controls; does not grant execution. |
+| `tool_usage_mode` | enum | 0BJ | `off` | Global control-center mode: `off`, `read`, `write_proposal`, `read_write_proposal`. |
+| `boh_mcp_mode` | enum | 0BJ | `off` | BOH MCP control-center mode. Write mode is proposal/outbox intent only. |
+| `project_atlas_mcp_mode` | enum | 0BJ | `off` | Project Atlas MCP control-center mode. Write mode is proposal/outbox intent only. |
 | `module_health` | object | 0A | see keys below | High-level module status map. |
 | `input_adapters` | object | 0A | all disabled | Versioned adapter registry. |
 | `event_log` | array | 0S | `[]` | In-memory event log for replay/testing. |
@@ -182,10 +196,10 @@ Before committing any phase:
 | `heartbeat` | 0S | `bridge_id`, `uptime_ms`, `firmware` | Simulated bridge health. |
 | `provider_event` | 0S | `provider`, `status`, `failure_id` | Mock provider success/failure/degradation. |
 | `provider_event` (tts) | 0V/AUDIO9 | `status`, `voice_provider`, `voice_id`, `voice_schema`, `text_len`, `text_hash`, `text_redacted`, `normalized_text`, `source_text_len`, `source_text_hash`, `playback_strategy`, `playback_mode`, `audio_visualization_hint_ms`, `audio_levels`, `audio_level_count`, `audio_spectrum_levels`, `audio_spectrum_count`, `audio_spectrum_frames`, `audio_spectrum_frame_count`, `audio_spectrum_rows`, `audio_spectrum_segments_per_side`, optional `audio_duration_ms`, optional `audio_file=local_temp_wav` | Voice output events. Raw spoken text, raw audio, and temp paths are not persisted. `audio_spectrum_frames` drives the mirrored analyzer. |
-| `provider_event` (stt — simulated voice command) | 0AV | `status=transcript\|complete\|blocked`, `input_mode=simulated_voice_command`, `text_len`, `text_hash`, `text_redacted=true`, optional `reason` | Simulated voice-command recognition events. Raw audio and raw transcript not stored. |
-| `provider_event` (audio_input — capture lifecycle) | 0BA | `provider=audio_input`, `status=capturing\|transcribing\|complete\|blocked`, `input_mode=simulated_audio_input`, `audio_input_schema`, optional `audio_duration_ms`, `frame_count`, `sample_rate`, `captured`, `audio_provider_id`, `stt_provider_id`, `text_len`, `text_hash`, `text_redacted=true`, `block_reason` | Capture, transcription, and completion events. Raw audio, WAV bytes, and recognized text never included. |
-| `provider_event` (audio_input — PTT) | 0BD | `provider=audio_input`, `status=ptt_pressed\|ptt_released`, `input_mode=simulated_audio_input` | PTT session state events. `ptt_pressed` → reducer sets `listen_session_active=true`, `audio_input_state=capturing`. `ptt_released` → reducer clears `listen_session_active`, sets `last_listen_trigger=ptt`. |
-| `provider_event` (audio_input — wake) | 0BD | `provider=audio_input`, `status=wake_triggered\|wake_not_detected`, `input_mode=simulated_audio_input`, optional `block_reason` | Wake detection events. `wake_triggered` → reducer sets `last_listen_trigger=wake`. `wake_not_detected` → no state change; informational only. |
+| `provider_event` (stt â€” simulated voice command) | 0AV | `status=transcript\|complete\|blocked`, `input_mode=simulated_voice_command`, `text_len`, `text_hash`, `text_redacted=true`, optional `reason` | Simulated voice-command recognition events. Raw audio and raw transcript not stored. |
+| `provider_event` (audio_input â€” capture lifecycle) | 0BA | `provider=audio_input`, `status=capturing\|transcribing\|complete\|blocked`, `input_mode=simulated_audio_input`, `audio_input_schema`, optional `audio_duration_ms`, `frame_count`, `sample_rate`, `captured`, `audio_provider_id`, `stt_provider_id`, `text_len`, `text_hash`, `text_redacted=true`, `block_reason` | Capture, transcription, and completion events. Raw audio, WAV bytes, and recognized text never included. |
+| `provider_event` (audio_input â€” PTT) | 0BD | `provider=audio_input`, `status=ptt_pressed\|ptt_released`, `input_mode=simulated_audio_input` | PTT session state events. `ptt_pressed` â†’ reducer sets `listen_session_active=true`, `audio_input_state=capturing`. `ptt_released` â†’ reducer clears `listen_session_active`, sets `last_listen_trigger=ptt`. |
+| `provider_event` (audio_input â€” wake) | 0BD | `provider=audio_input`, `status=wake_triggered\|wake_not_detected`, `input_mode=simulated_audio_input`, optional `block_reason` | Wake detection events. `wake_triggered` â†’ reducer sets `last_listen_trigger=wake`. `wake_not_detected` â†’ no state change; informational only. |
 | `failure_event` | 0A/0S | `failure_id`, `reason` | Explicit visible failure trigger. |
 | `user_intent` | 0S | `intent`, `action_class` | Agent Mode governance classification. |
 | `user_intent` (tool proposal) | 0T | `intent`, `action_class`, `policy`, `tool_id`, `tool_arguments`, `risk_class`, `side_effect_class`, `dry_run_available` | Governed tool proposal event. Arguments sanitized/redacted before storage. |
@@ -196,6 +210,8 @@ Before committing any phase:
 | `tool_plan_step_queue` | 0AK | `plan_id`, `queued_steps`, `queued_at` | Replayable bookkeeping event. Does not approve or execute proposals. |
 | `tool_plan_execution_request` | 0AL | `plan_id`, `executed_steps`, `requested_at` | Replayable bookkeeping event. Does not bypass proposal review or receipt gates. |
 | `tool_plan_result_binding` | 0AM | `plan_id`, `bindings`, `bound_at` | Replayable event binding bounded receipt summaries into pending dependent step proposals. Raw content not included. |
+| `tool_control_toggle` | 0BI/0BJ | `control`, `enabled`, `mode`, `toggled_at` | Replayable operator-intent mode/toggle for `tool_usage`, `boh_mcp`, or `project_atlas_mcp`. Does not execute tools. |
+| `mcp_chat_read` | 0BM | `status`, `server_id`, `tool_name`, `intent_summary`, `read_status`, `elapsed_ms`, `result_hash`, `blocked_reason`, `cache_hit` | Sanitized MCP chat-read audit event emitted before the chat response event; stores status/hash/timing only, not raw MCP payloads. |
 | `memory_event` | 0S | `operation`, `memory_id` | Memory proposal/delete lifecycle simulation. |
 | `capture_request` | 0S | `device`, `metadata` | Simulated mic/camera capture attempt. |
 | `adapter_health` | 0S | `adapter_id`, `health`, `enabled`, `mode` | Adapter health mutation endpoint input. |
@@ -220,6 +236,9 @@ Before committing any phase:
 | `audio_input` | button | 0BA | `audio_input_enabled`, `audio_input_state` | `state: "on"` enables; `state: "off"` disables and sets `audio_input_state=disabled`. |
 | `listen_mode` | button | 0BA | `listen_mode` | Valid values: `no_listen`, `wake_word`, `push_to_talk`. Invalid values silently ignored by reducer. |
 | `wake_phrase` | button | 0BD | `wake_phrase` | `state: "<phrase>"` sets wake phrase (stripped, lowercased). Empty/non-string ignored. |
+| `tool_usage` | tool_control_toggle | 0BI | `tool_control_center.tool_usage_requested` | Master operator-intent toggle for tool visibility/use; does not grant execution. |
+| `boh_mcp` | tool_control_toggle | 0BI | `tool_control_center.boh_mcp_requested` | BOH MCP operator-intent toggle; effective usability still requires MCP env gates and configured read-only stdio. |
+| `project_atlas_mcp` | tool_control_toggle | 0BI | `tool_control_center.project_atlas_mcp_requested` | Project Atlas MCP operator-intent toggle; Atlas proposal/apply tools remain non-invoked. |
 
 ---
 
@@ -232,6 +251,14 @@ Before committing any phase:
 | `METIS_STT_ALLOW_LOCAL` | bool | `false` | 0BC | Opt-in env gate for `LocalFasterWhisperSTT`. Required in addition to `METIS_STT_ENGINE=faster_whisper`. |
 | `METIS_STT_MODEL` | model name | `small` | 0BC | faster-whisper model size. |
 | `METIS_STT_MODEL_DIR` | filesystem path | none | 0BC | Optional offline model directory for faster-whisper. |
+
+### Completion release runtime state
+
+| Variable | Values | Default | Owner | Notes |
+|---|---|---|---|---|
+| `METIS_STATE_DIR` | directory path | `%LOCALAPPDATA%\MetisHead` on Windows; XDG/local-state equivalent elsewhere | `runtime_paths.py` | Per-user writable root; avoids installed-package state. |
+| `METIS_CONNECTIONS_FILE` | file path | `<state-dir>\connections.json` | credentials/Google | Non-secret connection, grant, and selected-calendar metadata. |
+| `METIS_USAGE_FILE` | file path | `<state-dir>\usage.json` | usage accounting | Durable paid-usage ledger override; paid application dispatch remains disabled. |
 
 ---
 
@@ -254,8 +281,8 @@ Before committing any phase:
 | `LocalMicAudioInput` | 0BB | `local_mic` | triple-gated | Real `sounddevice` capture; lazy import; all three env+state gates must hold. Sets `result._wav_bytes`. Tempfile deleted after analysis. |
 | `LocalWakeWordDetector` | 0BD | `local_wake_word` | scaffold (disabled) | No external imports. `detect()` always returns `not_enabled`. Stub for openWakeWord / Porcupine. |
 | `AudioInputProvider` | 0BA | `base` | base class | Interface: `capture(context) -> CaptureResult`, `health() -> dict`. |
-| `CaptureContext` | 0BA | — | dataclass | `hint`, `fixture_id`, `sample_rate`, `duration_ms`. |
-| `CaptureResult` | 0BA | — | dataclass | `provider_id`, `status`, `captured`, `audio_duration_ms`, `audio_levels`, `audio_spectrum_frames`, `frame_count`, `sample_rate`, `block_reason`. `_wav_bytes` is a private in-memory field excluded from `to_dict()`. |
+| `CaptureContext` | 0BA | â€” | dataclass | `hint`, `fixture_id`, `sample_rate`, `duration_ms`. |
+| `CaptureResult` | 0BA | â€” | dataclass | `provider_id`, `status`, `captured`, `audio_duration_ms`, `audio_levels`, `audio_spectrum_frames`, `frame_count`, `sample_rate`, `block_reason`. `_wav_bytes` is a private in-memory field excluded from `to_dict()`. |
 
 ---
 
@@ -264,31 +291,31 @@ Before committing any phase:
 | Class | Phase | Provider ID | Status | Notes |
 |---|---|---|---|---|
 | `NoneSTT` | 0BA | `none` | always disabled | Returns empty result, `status=disabled`. |
-| `SimulatedSTT` | 0BA/0BE | `simulated` | enabled | Hint→text map; unknown hints return verbatim (0BE passthrough: `map.get(hint) or hint or default`). No model or network. Used by default in CI. |
-| `LocalFasterWhisperSTT` | 0BC | `faster_whisper` | env-gated | Real CTranslate2/faster-whisper; lazy import inside `transcribe()` only. Fail-closed: env opt-in → lazy import → model load. |
+| `SimulatedSTT` | 0BA/0BE | `simulated` | enabled | Hintâ†’text map; unknown hints return verbatim (0BE passthrough: `map.get(hint) or hint or default`). No model or network. Used by default in CI. |
+| `LocalFasterWhisperSTT` | 0BC | `faster_whisper` | env-gated | Real CTranslate2/faster-whisper; lazy import inside `transcribe()` only. Fail-closed: env opt-in â†’ lazy import â†’ model load. |
 | `VoskSTT` | 0BC | `vosk` | scaffold (disabled) | Returns `not_enabled`. No imports. |
 | `OpenAIWhisperSTT` | 0BC | `openai_whisper` | scaffold (disabled) | Returns `not_enabled`. No imports. |
 | `WhisperCppSTT` | 0BC | `whispercpp` | scaffold (disabled) | Returns `not_enabled`. No imports. |
 | `STTProvider` | 0BA | `base` | base class | Interface: `transcribe(capture_result, context) -> STTResult`, `health() -> dict`. |
-| `STTResult` | 0BA | — | dataclass | `provider_id`, `status`, `_recognized_text` (private), `text_len`, `text_hash`, `text_redacted=true`, `confidence`. `to_dict()` excludes `_recognized_text`. |
+| `STTResult` | 0BA | â€” | dataclass | `provider_id`, `status`, `_recognized_text` (private), `text_len`, `text_hash`, `text_redacted=true`, `confidence`. `to_dict()` excludes `_recognized_text`. |
 
 ---
 
-## Brain Functions (Audio Input — Phase 0BA–0BD)
+## Brain Functions (Audio Input â€” Phase 0BAâ€“0BD)
 
 | Function | Phase | Notes |
 |---|---|---|
-| `_audio_capture_governance(require_listen_mode=False)` | 0BB | Returns `(allowed, block_reason)`. Gate order: `mic_hardware_enabled` → `audio_input_enabled` → `[listen_mode != no_listen if require_listen_mode]` → `power_state == awake`. |
+| `_audio_capture_governance(require_listen_mode=False)` | 0BB | Returns `(allowed, block_reason)`. Gate order: `mic_hardware_enabled` â†’ `audio_input_enabled` â†’ `[listen_mode != no_listen if require_listen_mode]` â†’ `power_state == awake`. |
 | `_audio_input_event(status, *, block_reason, capture, stt_result, trigger)` | 0BA/0BD | Builds a `provider_event` dict for audio_input. `trigger` field added in 0BD; flows to `last_audio_capture.listen_trigger` via reducer. |
 | `_run_stt_route_cycle(capture_result, stt_name, stt_context, options, trigger)` | 0BF | Extracted helper: runs STT transcription + 0BE routing fork (voice_command vs voice_confirm) on an already-captured `CaptureResult`. Called by `_run_listen_cycle` and `audio_browser_ptt`. Returns response dict including `route_used`. |
-| `_run_listen_cycle(payload, trigger)` | 0BD/0BE | One bounded capture→STT→route cycle. Governance verified by caller. `trigger` is `"listen"`, `"ptt"`, or `"wake"`. 0BE adds routing fork via `_run_stt_route_cycle`. Response includes `route_used` field. Never starts a background thread. |
+| `_run_listen_cycle(payload, trigger)` | 0BD/0BE | One bounded captureâ†’STTâ†’route cycle. Governance verified by caller. `trigger` is `"listen"`, `"ptt"`, or `"wake"`. 0BE adds routing fork via `_run_stt_route_cycle`. Response includes `route_used` field. Never starts a background thread. |
 | `audio_input_status` | 0BA/0BD | `GET /metis/audio/input`. Reports audio/STT providers, state fields, trigger routes, and wake_word provider scaffold. |
 | `audio_capture` | 0BA | `POST /metis/audio/input/capture`. Capture only, no STT. |
 | `audio_transcribe` | 0BA | `POST /metis/audio/transcribe`. Transcription only, no capture (requires `_wav_bytes` in payload-injected fixture). |
-| `audio_listen` | 0BA/0BD | `POST /metis/audio/listen`. Governance → `_run_listen_cycle(payload, "listen")`. |
-| `audio_ptt` | 0BD | `POST /metis/audio/ptt`. Press: sets `listen_session_active`. Release: governance → `_run_listen_cycle` → clears session. Wrong mode or pressless release → safe no-op. |
-| `audio_wake` | 0BD | `POST /metis/audio/wake`. Mode check → governance → wake_phrase prefix match → strip phrase → `_run_listen_cycle(payload, "wake")`. No match or wrong mode → `wake_not_detected`. |
-| `audio_browser_ptt` | 0BF/0BG | `POST /metis/audio/browser_ptt`. Async multipart route. Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. 0BG validates max upload size, content type, empty payloads, and WAV headers before storing bytes in `CaptureResult._wav_bytes` (in-memory). Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
+| `audio_listen` | 0BA/0BD | `POST /metis/audio/listen`. Governance â†’ `_run_listen_cycle(payload, "listen")`. |
+| `audio_ptt` | 0BD | `POST /metis/audio/ptt`. Press: sets `listen_session_active`. Release: governance â†’ `_run_listen_cycle` â†’ clears session. Wrong mode or pressless release â†’ safe no-op. |
+| `audio_wake` | 0BD | `POST /metis/audio/wake`. Mode check â†’ governance â†’ wake_phrase prefix match â†’ strip phrase â†’ `_run_listen_cycle(payload, "wake")`. No match or wrong mode â†’ `wake_not_detected`. |
+| `audio_browser_ptt` | 0BF/0BG | `POST /metis/audio/browser_ptt`. Async multipart route. Governance: `listen_mode==push_to_talk` â†’ `_audio_capture_governance()`. 0BG validates max upload size, content type, empty payloads, and WAV headers before storing bytes in `CaptureResult._wav_bytes` (in-memory). Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
 
 ---
 
@@ -369,8 +396,8 @@ Provider events pass through the same reducer used by `/metis/event`. Non-event 
 | `METIS_LLM_PROVIDER` | `mock`, `ollama`, `openai` | `mock` | Selects the Phase 0R virtual chat provider. |
 | `METIS_OLLAMA_BASE_URL` | URL | `http://127.0.0.1:11434` | Ollama API base URL. |
 | `METIS_OLLAMA_MODEL` | model name | none | Required when `METIS_LLM_PROVIDER=ollama`. |
-| `OPENAI_API_KEY` | secret | none | Required when `METIS_LLM_PROVIDER=openai`. |
-| `METIS_OPENAI_MODEL` | model name | `gpt-4o-mini` | OpenAI chat model. |
+| `OPENAI_API_KEY` | secret | none | Never committed. Legacy direct dispatch is fail-closed; production paid use additionally requires the bounded adapter and an explicit budget. |
+| `METIS_OPENAI_MODEL` | model name | `gpt-4o-mini` | Paid model identifier; configuration alone does not enable dispatch. |
 
 ---
 
@@ -388,7 +415,7 @@ Provider events pass through the same reducer used by `/metis/event`. Non-event 
 | `METIS_PIPER_EXE` | filesystem path | none | Local Piper executable path. |
 | `METIS_PIPER_MODEL` | filesystem path | none | Local Piper `.onnx` model path. |
 | `METIS_PIPER_CONFIG` | filesystem path | none | Optional Piper model config path. |
-| `METIS_PIPER_PLAYBACK` | bool | `true` | Plays generated WAV through Windows audio when true. |
+| `METIS_PIPER_PLAYBACK` | bool | `false` | Legacy backend-speaker playback when true; normal dashboard playback is delivered to the browser. |
 | `METIS_PIPER_PLAYBACK_STRATEGY` | `soundplayer`, `winsound` | `soundplayer` | Windows playback strategy for generated Piper WAV files. |
 | `METIS_PIPER_PLAYBACK_MODE` | `async`, `sync` | `async` | Background launch by default so chat text and radio pulse can align with speech. |
 | `METIS_VOICE_NORMALIZE_TEXT` | bool | `true` | Sends audibility-normalized text to TTS while preserving display Markdown in chat history. |
@@ -532,6 +559,9 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 |---|---|---|
 | `metis_head.execution` | 0W | Builds deterministic execution receipts for execution requests. |
 | `metis_head.read_only_tools` | 0G/0F | Narrow approved read-only local executors: current-repo `git.status` and `filesystem.read` text preview. |
+| `metis_head.mcp_chat_bridge` | 0BM | Explicit Virtual Chat MCP read router, gated by control-center read modes and MCP status. Direct answer rendering plus short TTL cache; no write/apply authority. |
+| `metis_head.mcp_access` | 0BH | Disabled-by-default BOH/Project Atlas MCP access policy and configured stdio client. Read-only allowlists only; command/cwd/env values are not exposed. |
+| `metis_head.control_center` | 0BI | Sanitized status model for Virtual Chat tool/MCP control-center toggles and running/usable indicators. |
 | `METIS_REPO_ROOT` | 0AQ | Env allowlist anchor for `filesystem.read` and `git.status`; set by `scripts/launch_metis.ps1`. |
 | `tests/conftest.py` | handoff-QA | Sets `METIS_REPO_ROOT` during tests; initializes `.git` only when a clean export lacks git metadata. |
 | `receipt_id` | 0W | Deterministic ID derived from receipt index, proposal ID, status, and requested timestamp. |
@@ -550,7 +580,7 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | `execution_enabled` | 0Q | Always `false` for arbitrary/autonomous execution. |
 | `scoped_read_only_receipts_enabled` | 0AQ | `true`: reviewed `time.now`, `filesystem.read`, `git.status` receipt lanes are active. |
 | `active_approved_read_only_lanes` | 0AQ | `time.now`, `filesystem.read`, `git.status`. |
-| `scripts/launch_metis.ps1` | 0AQ | Sets `METIS_REPO_ROOT`, changes to repo root, starts Uvicorn. |
+| `scripts/launch_metis.ps1` | 0AQ/0BK/0BL | Sets `METIS_REPO_ROOT`, defaults MCP global/BOH/Atlas gates active when unset, optionally loads ignored local MCP env config, changes to repo root, starts Uvicorn. |
 
 ---
 
@@ -610,7 +640,7 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | `GET` | `/` | 0S | Static dashboard. |
 | `GET` | `/metis/state` | 0S | Canonical state, LEDs, readiness. |
 | `POST` | `/metis/event` | 0S | Reduce one event into state. |
-| `POST` | `/metis/chat` | 0R/0AW | Governed virtual chat. Phase 0J routes explicit chat tool requests; 0AO routes `plan:` to persisted governed plans; 0AR routes plan status/advance; 0AS routes approval/receipt summaries; 0AT routes next-step instructions; 0AW answers tool/capability questions deterministically before LLM generation. |
+| `POST` | `/metis/chat` | 0R/0BM | Governed virtual chat. Phase 0J routes explicit chat tool requests; 0AO routes `plan:` to persisted governed plans; 0AR routes plan status/advance; 0AS routes approval/receipt summaries; 0AT routes next-step instructions; 0AW answers tool/capability questions deterministically before LLM generation; 0BM routes explicit BOH/Project Atlas MCP read intents, including combined access checks, through a deterministic pre-LLM read bridge. |
 | `GET` | `/metis/voice` | 0V | Current voice config/status and output-only boundary. |
 | `GET` | `/metis/voice/options` | 0V | Reviewable `metis_voice_options.v0.1` voice option catalog. |
 | `POST` | `/metis/voice/speak` | 0V | Speak supplied text through the governed voice harness. |
@@ -621,13 +651,25 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | `GET` | `/metis/audio/input` | 0BA/0BD | Audio input + STT provider status, state fields (`listen_session_active`, `wake_phrase`, `last_listen_trigger`), trigger routes, and provider scaffolds. |
 | `POST` | `/metis/audio/input/capture` | 0BA | Capture only (no STT). Governed by `_audio_capture_governance`. |
 | `POST` | `/metis/audio/transcribe` | 0BA | Transcription only (no capture). Requires `audio_input_enabled`. |
-| `POST` | `/metis/audio/listen` | 0BA/0BD/0BE | Governance → `_run_listen_cycle(payload, "listen")`. One bounded cycle. Response includes `route_used` (`voice_command` or `voice_confirm`). |
-| `POST` | `/metis/audio/ptt` | 0BD/0BE | `action=press`: sets `listen_session_active`; `action=release`: one `_run_listen_cycle` then clears session. Response includes `route_used`. Wrong mode or pressless release → safe no-op. |
-| `POST` | `/metis/audio/wake` | 0BD/0BE | Wake-phrase match → one `_run_listen_cycle`. Response includes `route_used`. No match or wrong mode → `wake_not_detected`, no capture. |
-| `POST` | `/metis/audio/browser_ptt` | 0BF/0BG | `multipart/form-data`: `audio` (UploadFile) + `stt_provider` (Form) + `stt_hint` (Form) + `options_json` (Form). Governance: `listen_mode==push_to_talk` → `_audio_capture_governance()`. 0BG guardrails reject oversized uploads, unsupported content types, empty payloads, and invalid WAV payloads. Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
+| `POST` | `/metis/audio/listen` | 0BA/0BD/0BE | Governance â†’ `_run_listen_cycle(payload, "listen")`. One bounded cycle. Response includes `route_used` (`voice_command` or `voice_confirm`). |
+| `POST` | `/metis/audio/ptt` | 0BD/0BE | `action=press`: sets `listen_session_active`; `action=release`: one `_run_listen_cycle` then clears session. Response includes `route_used`. Wrong mode or pressless release â†’ safe no-op. |
+| `POST` | `/metis/audio/wake` | 0BD/0BE | Wake-phrase match â†’ one `_run_listen_cycle`. Response includes `route_used`. No match or wrong mode â†’ `wake_not_detected`, no capture. |
+| `POST` | `/metis/audio/browser_ptt` | 0BF/0BG | `multipart/form-data`: `audio` (UploadFile) + `stt_provider` (Form) + `stt_hint` (Form) + `options_json` (Form). Governance: `listen_mode==push_to_talk` â†’ `_audio_capture_governance()`. 0BG guardrails reject oversized uploads, unsupported content types, empty payloads, and invalid WAV payloads. Routes through `_run_stt_route_cycle`. Response includes `route_used`. Raw audio and transcript never persisted. |
+| `POST` | `/metis/sessions/{session_id}/context` | completion | Atomically updates this tab's selected account, calendars, timezone, and project; selected calendars must be within persisted selection. |
+| `GET` | `/metis/connectors/google/accounts` | completion | Lists non-secret account status, actual recorded scopes, and selected calendar IDs. |
+| `POST` | `/metis/connectors/google/calendars` | completion | Discovers bounded calendars through the restored credential broker and enforced calendar grant. |
+| `POST` | `/metis/connectors/google/selection` | completion | Persists selected calendar IDs and optionally updates the current session context. |
+| `DELETE` | `/metis/connectors/google/accounts/{account_id}` | completion | Deletes the OS credential first, then metadata; retains metadata and reports unavailable when secret deletion fails. |
+| `POST` | `/metis/orchestration/google/read` | completion | Compatibility read route now executes through the same production broker/grant boundary as ordinary conversation. |
 | `GET` | `/metis/personality` | 0P | Return active Metis personality constitution profile and trait matrix. |
 | `GET` | `/metis/personality/console` | 0P | Serve the supplied personality console HTML. |
 | `GET` | `/metis/boh/status` | 0C | Safe BOH background link state. Never exposes any token. |
+| `GET` | `/metis/control_center` | 0BI | Sanitized Virtual Chat control-center status composed from state, MCP status, and BOH link status. |
+| `POST` | `/metis/control_center/toggles` | 0BI | Records replayable control-center toggle intent. Does not invoke tools or grant execution. |
+| `POST` | `/metis/control_center/modes` | 0BJ | Records replayable control-center mode intent: off/read/write_proposal/read_write_proposal. Direct apply remains blocked. |
+| `GET` | `/metis/mcp/status` | 0BH | Safe MCP bridge status. Exposes booleans and allowlists only; never command/cwd/env/token values. |
+| `GET` | `/metis/mcp/tools` | 0BH | Lists BOH and Project Atlas MCP read-only/proposal-only tool classifications. |
+| `POST` | `/metis/mcp/{server_id}/tools/{tool_name}/call` | 0BH | Calls only enabled, configured, allowlisted read-only MCP tools through stdio; proposal and mutation tools are blocked. |
 | `GET` | `/metis/llm/options` | 0R | Provider defaults and available Ollama models. |
 | `GET` | `/metis/tools` | 0T | Governed tool registry listing. |
 | `GET` | `/metis/tools/contract` | 0AA | Derived governed tool contract manifest; visibility only. |
@@ -729,14 +771,14 @@ BOH link states: `disabled`, `connecting`, `connected`, `degraded`, `disconnecte
 | LED provider | `led_renderer`, `led_provider`, `led_command` | Provider receives already-resolved Metis LED state. |
 | Real wake-word engine | `wake_word_engine`, `local_wake_word_detector` | `LocalWakeWordDetector` scaffold exists; real engine (openWakeWord / Porcupine) is future-phase. No external imports until integrated. |
 | Physical radio panel | `panel_display`, `panel_led`, `panel_button_matrix` | `panel.py` and `PHYSICAL_RADIO_PANEL_CONTRACT_v0_1.md` define the contract; hardware wiring is future. |
-| Real mic PTT integration | `bridge_ptt_button`, `ptt_bridge_event` | `POST /metis/audio/ptt` accepts press/release; the physical PTT button → bridge → ptt route is future. |
+| Real mic PTT integration | `bridge_ptt_button`, `ptt_bridge_event` | `POST /metis/audio/ptt` accepts press/release; the physical PTT button â†’ bridge â†’ ptt route is future. |
 | Real STT integration | `stt_live_engine`, `faster_whisper_live`, `vosk_live` | `LocalFasterWhisperSTT` scaffold exists; scaffolds for Vosk, OpenAI Whisper, WhisperCpp also present. |
 | Real wake-word PTT confirmation | `voice_confirm_ptt_physical`, `voice_confirm_wake_physical` | Phase 0BE complete: `_run_listen_cycle` now routes to `voice_confirm` for spoken approval phrases. Remaining future work: physical PTT button wiring and real wake-word engine. |
-| Browser STT offline path | `browser_ptt_faster_whisper`, `local_stt_browser_upload` | Future phase only. Phase 0BG documents that the dashboard Hold to Talk path uses browser `SpeechRecognition` plus simulated STT hint routing through `/metis/audio/ptt`; it does not upload browser-recorded audio to faster-whisper. The backend `/metis/audio/browser_ptt` route can accept guarded multipart audio for local clients/tests, but dashboard MediaRecorder-to-faster-whisper wiring is not implemented. |
+| Browser STT offline path | `browser_ptt_faster_whisper`, `local_stt_browser_upload` | Implemented for the completion release: the dashboard obtains server PTT authorization before microphone access, captures bounded WAV audio while held, and posts it to `/metis/audio/browser_ptt`. Local faster-whisper remains opt-in and live acceptance requires an installed model. Browser cloud `SpeechRecognition` is not used. |
 | Phase 0R provider research | `stt_provider_candidate`, `tts_provider_candidate`, `vision_provider_candidate`, `llm_runtime_candidate` | Record evidence-backed recommendations only after bakeoff. |
 | Persistence | `event_log_path`, `state_export`, `scenario_manifest_path` | Start JSONL; add SQLite only if needed. |
 | Memory lifecycle | `memory_candidate`, `memory_review`, `memory_promotion`, `memory_deletion_audit` | No silent promotion. |
-| Project Atlas adapter | `atlas_task_proposal`, `atlas_task_receipt` | Future adapter only; no internal imports. |
-| BOH adapter | `boh_retrieval_candidate`, `boh_citation` | Read-only retrieval bridge implemented in 0B; deeper adapter wiring still future. |
+| Project Atlas adapter | `atlas_mcp_read`, `atlas_mcp_chat_read`, `atlas_mcp_proposal_classification`, `atlas_task_proposal`, `atlas_task_receipt` | Phase 0BM lets explicit chat reads call allowlisted Project Atlas MCP read tools; Atlas apply/delete/push remains future. |
+| BOH adapter | `boh_retrieval_candidate`, `boh_citation`, `boh_mcp_read`, `boh_mcp_chat_read` | Read-only retrieval bridge implemented in 0B; Phase 0BM lets explicit chat reads call allowlisted BOH MCP read tools without promotion or operator-token handling. |
 | Robot safety adapter | `actuator_action_classification`, `safety_gate_result` | Pattern donor now; future adapter only. |
 | External tool execution | `tool_proposal`, `approval_request`, `execution_receipt` | Approval remains separate from execution; future live integrations require additional scoped execution phases after explicit governance gates. |

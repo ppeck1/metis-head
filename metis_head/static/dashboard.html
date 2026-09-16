@@ -456,6 +456,66 @@
     .toggle-inline input {
       accent-color: #2f6fbe;
     }
+    .control-center {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #d8dde5;
+    }
+    .control-center-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .control-center-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .control-switch {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      border: 1px solid #d8dde5;
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: #384456;
+      font-size: 12px;
+      background: #fbfcfd;
+    }
+    .control-switch input {
+      accent-color: #2f6fbe;
+    }
+    .control-center-readouts {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .indicator-chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 76px;
+      border-radius: 999px;
+      border: 1px solid #9aa7b8;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #536173;
+      background: #e7ebf0;
+      white-space: nowrap;
+    }
+    .indicator-chip.requested { background: #dbe7f6; border-color: #2f6fbe; color: #214a80; }
+    .indicator-chip.usable { background: #d7f0e2; border-color: #2d9b67; color: #1c5e3f; }
+    .indicator-chip.master_off,
+    .indicator-chip.global_disabled,
+    .indicator-chip.server_disabled,
+    .indicator-chip.not_configured { background: #f7eccf; border-color: #d89a22; color: #7a5710; }
     .boh-badge {
       display: inline-flex;
       align-items: center;
@@ -479,6 +539,7 @@
       .radio-shell { grid-template-columns: 1fr; }
       .radio-switches, .radio-readouts { grid-template-columns: 1fr; }
       .chat-composer { grid-template-columns: 1fr; }
+      .control-center-grid, .control-center-readouts { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -553,12 +614,22 @@
         <label class="toggle-inline"><input id="voiceReplyEnabled" type="checkbox"> Voice replies</label>
         <button onclick="refreshVoiceOptions()">Refresh Voices</button>
         <button onclick="previewVoice()">Preview Voice</button>
+        <button onclick="stopClientVoice()">Stop Voice</button>
       </div>
       <div id="piperControls" class="tool-row" style="display:none;">
         <input id="piperExe" type="text" placeholder="Piper executable path">
         <input id="piperModel" type="text" placeholder="Piper .onnx model path">
         <input id="piperConfig" type="text" placeholder="Piper .onnx.json config path">
       </div>
+      <div class="tool-row" aria-label="Personal context selection">
+        <select id="googleAccount" onchange="discoverGoogleCalendars()"><option value="">No Google account</option></select>
+        <select id="googleCalendars" multiple size="3" aria-label="Selected Google calendars"></select>
+        <input id="conversationTimezone" type="text" value="America/New_York" aria-label="Conversation timezone">
+        <input id="atlasProject" type="text" placeholder="Atlas project name" aria-label="Selected Atlas project">
+        <button onclick="savePersonalContext()">Save Personal Context</button>
+        <button onclick="refreshGoogleAccounts()">Refresh Accounts</button>
+      </div>
+      <div id="personalContextStatus" class="status-line"></div>
       <div id="voiceStatus" class="status-line"></div>
       <div id="chatLog" class="chat-log"></div>
       <div class="chat-composer">
@@ -570,6 +641,23 @@
         <button onclick="clearChatInput()">Clear Input</button>
       </div>
       <div id="guidedActionPanel" class="status-line"></div>
+      <div id="toolControlCenter" class="control-center">
+        <div class="control-center-header">
+          <h3>Tool Control Center</h3>
+          <button onclick="refreshControlCenter()">Refresh Status</button>
+        </div>
+        <div class="control-center-grid">
+          <label class="control-switch"><span>Tools</span><select id="toolUsageMode" onchange="setControlCenterMode('tool_usage', this.value)"><option value="off">Off</option><option value="read">Read</option><option value="write_proposal">Write Proposal</option><option value="read_write_proposal">Read + Write Proposal</option></select><span id="toolUsageIndicator" class="indicator-chip off">off</span></label>
+          <label class="control-switch"><span>BOH MCP</span><select id="bohMcpMode" onchange="setControlCenterMode('boh_mcp', this.value)"><option value="off">Off</option><option value="read">Read</option><option value="write_proposal">Write Proposal</option><option value="read_write_proposal">Read + Write Proposal</option></select><span id="bohMcpIndicator" class="indicator-chip off">off</span></label>
+          <label class="control-switch"><span>Project Atlas MCP</span><select id="atlasMcpMode" onchange="setControlCenterMode('project_atlas_mcp', this.value)"><option value="off">Off</option><option value="read">Read</option><option value="write_proposal">Write Proposal</option><option value="read_write_proposal">Read + Write Proposal</option></select><span id="atlasMcpIndicator" class="indicator-chip off">off</span></label>
+        </div>
+        <div class="control-center-readouts">
+          <div class="readout"><strong>Tool Gate</strong><span id="toolUsageReadout">--</span></div>
+          <div class="readout"><strong>BOH MCP</strong><span id="bohMcpReadout">--</span></div>
+          <div class="readout"><strong>Atlas MCP</strong><span id="atlasMcpReadout">--</span></div>
+        </div>
+        <div id="controlCenterStatus" class="status-line"></div>
+      </div>
     </section>
     <section class="span-12">
       <h2>Voice Trace</h2>
@@ -752,12 +840,24 @@
       <pre id="eventLog"></pre>
     </section>
   </main>
+  <script src="/static/voice_capture.js"></script>
+  <script src="/static/conversation_client.js"></script>
   <script>
+    const metisConversation = new MetisConversationClient();
+    const metisPlayback = new MetisPlaybackController(undefined, undefined, {
+      getSessionId: () => metisConversation.sessionId
+    });
+    const privateChatHistory = [];
+    window.addEventListener('pagehide', () => {
+      metisPlayback.stop('page_closed');
+      metisConversation.close();
+    });
     let currentState = null;
     let currentLeds = null;
     let bohSeenTransitions = 0;
     let voiceOptionsCatalog = [];
     let toolsCatalog = [];
+    let controlCenterSnapshot = null;
     let proposalsCatalog = [];
     let executionReceipts = [];
     let lastSeenTtsOutputCount = 0;
@@ -783,6 +883,118 @@
     function fmtTime(epoch) {
       if (!epoch) return '--';
       return new Date(epoch * 1000).toLocaleTimeString();
+    }
+
+    function controlStatusLabel(status) {
+      const labels = {
+        off: "off",
+        requested: "requested",
+        master_off: "master off",
+        global_disabled: "MCP gate disabled",
+        server_disabled: "server disabled",
+        not_configured: "not configured",
+        usable: "usable",
+        proposal_ready: "proposal ready",
+        proposal_unavailable: "proposal unavailable",
+        read_write_ready: "read + write ready",
+      };
+      return labels[status] || String(status || "unknown").replaceAll("_", " ");
+    }
+
+    function controlStatusClass(status) {
+      return String(status || "off").replace(/[^a-z0-9_-]/gi, "_").toLowerCase();
+    }
+
+    function setControlIndicator(id, status) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const statusKey = controlStatusClass(status);
+      el.className = "indicator-chip " + statusKey;
+      el.textContent = controlStatusLabel(status);
+    }
+
+    function setText(id, text) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    }
+
+    function serverReadout(server) {
+      if (!server) return "--";
+      const mode = server.mode_label || controlStatusLabel(server.mode);
+      const read = controlStatusLabel(server.read_status);
+      const write = controlStatusLabel(server.write_status);
+      return mode + " / read: " + read + " / write: " + write;
+    }
+
+    function renderControlCenter(data) {
+      controlCenterSnapshot = data;
+      const controls = data.controls || {};
+      const mcp = data.mcp || {};
+      const servers = mcp.servers || {};
+      const tool = controls.tool_usage || {};
+      const bohControl = controls.boh_mcp || {};
+      const atlasControl = controls.project_atlas_mcp || {};
+      const toolMode = document.getElementById("toolUsageMode");
+      const bohMode = document.getElementById("bohMcpMode");
+      const atlasMode = document.getElementById("atlasMcpMode");
+      if (toolMode) toolMode.value = tool.mode || "off";
+      if (bohMode) bohMode.value = bohControl.mode || "off";
+      if (atlasMode) atlasMode.value = atlasControl.mode || "off";
+      setControlIndicator("toolUsageIndicator", tool.status || "off");
+      setControlIndicator("bohMcpIndicator", bohControl.status || "off");
+      setControlIndicator("atlasMcpIndicator", atlasControl.status || "off");
+      setText("toolUsageReadout", (tool.mode_label || controlStatusLabel(tool.mode)) + " / apply not granted");
+      setText("bohMcpReadout", serverReadout(servers.boh));
+      setText("atlasMcpReadout", serverReadout(servers.project_atlas));
+      const gate = mcp.enabled ? "MCP env gates enabled" : "MCP env gates disabled";
+      setText("controlCenterStatus", gate + "; " + (data.boundary || ""));
+    }
+
+    async function refreshControlCenter() {
+      try {
+        const response = await fetch("/metis/control_center");
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        renderControlCenter(await response.json());
+      } catch (error) {
+        setText("controlCenterStatus", "Control center status unavailable: " + error);
+      }
+    }
+
+
+    async function setControlCenterMode(control, mode) {
+      setText("controlCenterStatus", "Updating control center mode...");
+      try {
+        const response = await fetch("/metis/control_center/modes", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({control, mode}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+        renderControlCenter(data.control_center || data);
+        await refresh();
+      } catch (error) {
+        setText("controlCenterStatus", "Control center mode update failed: " + error);
+        await refreshControlCenter();
+      }
+    }
+
+    async function setControlCenterToggle(control, enabled) {
+      setText("controlCenterStatus", "Updating control center...");
+      try {
+        const response = await fetch("/metis/control_center/toggles", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({control, enabled}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || ("HTTP " + response.status));
+        renderControlCenter(data.control_center || data);
+        await refresh();
+      } catch (error) {
+        setText("controlCenterStatus", "Control center update failed: " + error);
+        await refreshControlCenter();
+      }
     }
     async function refreshBohStatus() {
       let data;
@@ -1075,6 +1287,7 @@
         options.piper_config = document.getElementById('piperConfig').value.trim();
         options.piper_playback_strategy = 'soundplayer';
         options.piper_playback_mode = 'async';
+        options.piper_playback = false;
       }
       return options;
     }
@@ -1094,6 +1307,88 @@
       }
       await refresh();
     }
+    function selectedCalendarIds() {
+      return [...document.getElementById('googleCalendars').selectedOptions].map(option => option.value);
+    }
+    function conversationContext() {
+      return {
+        account_id: document.getElementById('googleAccount').value || null,
+        calendar_ids: selectedCalendarIds(),
+        timezone: document.getElementById('conversationTimezone').value.trim() || 'America/New_York',
+        project_id: document.getElementById('atlasProject').value.trim() || null
+      };
+    }
+    async function refreshGoogleAccounts() {
+      const status = document.getElementById('personalContextStatus');
+      try {
+        const response = await fetch('/metis/connectors/google/accounts');
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Google account discovery failed');
+        const select = document.getElementById('googleAccount');
+        const previous = select.value;
+        select.innerHTML = '<option value="">No Google account</option>';
+        for (const account of result.accounts || []) {
+          const option = document.createElement('option');
+          option.value = account.account_id;
+          option.textContent = `${account.account_id} (${account.status})`;
+          select.appendChild(option);
+        }
+        if ([...select.options].some(option => option.value === previous)) select.value = previous;
+        status.textContent = `${result.count || 0} Google account(s) configured.`;
+        if (select.value) await discoverGoogleCalendars();
+      } catch (error) {
+        status.textContent = String(error);
+      }
+    }
+    async function discoverGoogleCalendars() {
+      const accountId = document.getElementById('googleAccount').value;
+      const calendars = document.getElementById('googleCalendars');
+      calendars.innerHTML = '';
+      if (!accountId) return;
+      const status = document.getElementById('personalContextStatus');
+      status.textContent = 'Discovering authorized calendars...';
+      try {
+        const response = await fetch('/metis/connectors/google/calendars', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({account_id: accountId})
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || 'Calendar discovery failed');
+        for (const calendar of result.data || []) {
+          const option = document.createElement('option');
+          option.value = calendar.calendar_id;
+          option.textContent = calendar.primary ? `${calendar.name} (primary)` : calendar.name;
+          option.selected = Boolean(calendar.selected);
+          calendars.appendChild(option);
+        }
+        status.textContent = result.error ? result.error.message : `${(result.data || []).length} authorized calendar(s) discovered.`;
+      } catch (error) {
+        status.textContent = String(error);
+      }
+    }
+    async function savePersonalContext() {
+      const context = conversationContext();
+      const status = document.getElementById('personalContextStatus');
+      try {
+        const sessionId = await metisConversation.ensureSession(context);
+        if (context.account_id) {
+          const selectionResponse = await fetch('/metis/connectors/google/selection', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({account_id: context.account_id, calendar_ids: context.calendar_ids, session_id: sessionId})
+          });
+          const selection = await selectionResponse.json();
+          if (!selectionResponse.ok) throw new Error(selection.detail || 'Calendar selection failed');
+        }
+        const contextResponse = await fetch(`/metis/sessions/${encodeURIComponent(sessionId)}/context`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(context)
+        });
+        const result = await contextResponse.json();
+        if (!contextResponse.ok) throw new Error(result.detail || 'Personal context update failed');
+        status.textContent = 'Personal context saved for this tab; calendar selection is persisted server-side.';
+      } catch (error) {
+        status.textContent = String(error);
+      }
+    }
     function chatOptions() {
       const provider = document.getElementById('chatProvider').value;
       const options = {provider};
@@ -1102,6 +1397,11 @@
         options.model = document.getElementById('ollamaModel').value;
       }
       options.voice = voiceChatOptions();
+      const context = conversationContext();
+      if (context.account_id) options.account_id = context.account_id;
+      if (context.calendar_ids.length) options.calendar_ids = context.calendar_ids;
+      if (context.project_id) options.project_id = context.project_id;
+      options.timezone = context.timezone;
       return options;
     }
     async function sendChat() {
@@ -1115,15 +1415,9 @@
       sendButton.disabled = true;
       document.getElementById('chatStatus').textContent = 'Generating...';
       try {
-        const response = await fetch('/metis/chat', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({message, options: chatOptions()})
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.detail || 'Chat failed');
-        }
+        if (metisPlayback.current) await stopClientVoice(true);
+        const result = await metisConversation.requestChat(message, chatOptions(), conversationContext());
+        privateChatHistory.push({role: 'user', content: message}, {role: 'assistant', content: result.message});
         const labels = [`${result.provider}:${result.model}`];
         if (result.proposal_queued) labels.push('proposal queued');
         if (result.plan_queued) labels.push('plan_queued');
@@ -1135,7 +1429,7 @@
         if (result.state && result.leds) {
           currentState = result.state;
           currentLeds = result.leds;
-          renderChat(result.state.chat_history);
+          renderChat(privateChatHistory);
           updateRadio(result.state, result.leds);
         }
         if (result.voice) {
@@ -1573,9 +1867,12 @@
     async function togglePower() {
       const next = currentState.power_state === 'awake' ? 'standby' : 'awake';
       await postEvent({type: 'button_event', button: 'pwr', state: next});
+      if (next === 'standby') await stopClientVoice(true);
     }
     async function toggleOutput() {
+      const muting = !currentState.output_muted;
       await postEvent({type: 'button_event', button: 'loud', state: currentState.output_muted ? 'on' : 'off'});
+      if (muting) await stopClientVoice(true);
     }
     async function toggleAfc() {
       await postEvent({type: 'button_event', button: 'afc', state: !currentState.source_grounding_enabled});
@@ -1584,6 +1881,10 @@
       await postEvent({type: 'button_event', button: 'am_fm', state: currentState.interaction_mode === 'agent' ? 'am' : 'fm'});
     }
     async function toggleMic() {
+      if (currentState.mic_hardware_enabled) {
+        await _metisCapture.cancel();
+        try { await fetch('/metis/audio/ptt', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'cancel'})}); } catch (_) {}
+      }
       await postEvent({type: 'hardware_privacy', device: 'mic', enabled: !currentState.mic_hardware_enabled});
     }
     async function toggleAudioInput() {
@@ -1788,8 +2089,26 @@
         }, 850);
       }, duration);
     }
+    async function playClientVoice(voice) {
+      if (!(voice && voice.metadata && voice.metadata.playback_id)) return;
+      try {
+        await metisPlayback.playNext(metisConversation.clientId);
+      } catch (error) {
+        document.getElementById('voiceStatus').textContent = 'Client playback failed: ' + String(error);
+      }
+    }
+    async function stopClientVoice(notifyServer = true) {
+      metisPlayback.stop('client_stopped');
+      if (notifyServer) {
+        try {
+          await metisConversation.cancel();
+          await fetch('/metis/voice/stop', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({session_id: metisConversation.sessionId})});
+        } catch (_) {}
+      }
+    }
     function pulseRadioFromVoice(voice) {
       if (!voice || !voice.spoken) return;
+      playClientVoice(voice);
       const events = voice.events || [];
       const speaking = events.find(event => event.status === 'speaking') || events[events.length - 1] || {};
       lastVoiceFrames = Array.isArray(speaking.audio_spectrum_frames) ? speaking.audio_spectrum_frames : [];
@@ -1827,7 +2146,7 @@
       document.getElementById('state').textContent = JSON.stringify(data.state, null, 2);
       document.getElementById('eventLog').textContent = JSON.stringify(data.state.event_log, null, 2);
       document.getElementById('adapters').textContent = JSON.stringify(data.state.input_adapters, null, 2);
-      renderChat(data.state.chat_history);
+      renderChat(privateChatHistory);
       renderVoiceTrace(data.state.event_log);
       document.getElementById('activityDot').style.background = colorFor(data.leds.activity_led.color);
       document.getElementById('authorityDot').style.background = colorFor(data.leds.authority_led.color);
@@ -1835,6 +2154,7 @@
       document.getElementById('authorityText').textContent = data.leds.authority_led.state;
       updateRadio(data.state, data.leds);
       vcSyncState(data.state);
+      await refreshControlCenter();
       const existing = await fetch('/metis/scenario/results').then(r => r.json());
       document.getElementById('scenarios').textContent = JSON.stringify(existing, null, 2);
     }
@@ -1869,7 +2189,7 @@
         stt_provider: document.getElementById('vcSttProvider').value || 'simulated',
         duration_ms: parseInt(document.getElementById('vcDurationMs').value) || 3000,
         hint: document.getElementById('vcHint').value.trim() || 'default',
-        options: voiceChatOptions(),
+        options: {...chatOptions(), session_id: metisConversation.sessionId, _metis_voice_origin: true},
       };
     }
     function vcShowResult(label, result, error) {
@@ -1950,7 +2270,8 @@
         vcShowResult('wake', await r.json());
       } catch(e) { vcShowResult('wake', {}, String(e)); }
     }
-    // --- Browser held-to-talk (Phase 0BF) ---
+    /* Legacy Web Speech prototype removed: browser PTT uses the bounded local
+       WAV capture implementation below.
     // Uses the browser's Web Speech API for transcription — no local Whisper needed.
     // The recognised text is sent as the PTT release hint; SimulatedSTT returns it verbatim.
     // _vcBrPttReleasing flag + _vcBrPttSent guard handle the race between onresult(isFinal)
@@ -2060,25 +2381,91 @@
         vcShowResult('browser_ptt', await r.json());
       } catch(e) { vcShowResult('browser_ptt', {}, String(e)); }
     }
+    */
     function _vcBrPttCleanup() {
-      _vcBrPttRec = null;
-      _vcBrPttFinalText = '';
-      _vcBrPttInterimText = '';
-      _vcBrPttResultIdx = 0;
-      _vcBrPttReleasing = false;
       const btn = document.getElementById('vcHoldToTalk');
       if (btn) btn.style.background = '';
     }
+    // Real browser WAV capture; transcription stays local to the configured STT provider.
+    const _metisCapture = new MetisVoiceCapture({
+      authorize: async () => {
+        await metisConversation.ensureSession(conversationContext());
+        const response = await fetch('/metis/audio/ptt', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({action:'press'})});
+        return response.json();
+      },
+      cleanup: async (reason) => {
+        try { await fetch('/metis/audio/ptt', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'cancel'})}); } catch (_) {}
+        if (reason !== 'released') {
+          try { await metisConversation.cancel(); } catch (_) {}
+        }
+      },
+      onStatus: (message) => { document.getElementById('vcBrPttStatus').textContent = message; }
+    });
+    async function vcBrowserPttDown(evt) {
+      evt.preventDefault();
+      const btn = document.getElementById('vcHoldToTalk');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        document.getElementById('vcBrPttStatus').textContent = 'Browser microphone capture unavailable; typed chat remains available.';
+        return;
+      }
+      if (btn && evt.pointerId !== undefined && btn.setPointerCapture) btn.setPointerCapture(evt.pointerId);
+      if (btn) btn.style.background = '#c00';
+      const started = await _metisCapture.start();
+      if (!started && btn) btn.style.background = '';
+    }
+    async function vcBrowserPttUp(evt) {
+      evt.preventDefault();
+      document.getElementById('vcBrPttStatus').textContent = 'Finalizing local WAV…';
+      const wav = await _metisCapture.stop();
+      const btn = document.getElementById('vcHoldToTalk');
+      if (btn && evt.pointerId !== undefined && btn.hasPointerCapture?.(evt.pointerId)) btn.releasePointerCapture(evt.pointerId);
+      _vcBrPttCleanup();
+      if (!wav) { document.getElementById('vcBrPttStatus').textContent = 'No audio captured.'; return; }
+      const form = new FormData();
+      form.append('audio', wav, 'metis-ptt.wav');
+      form.append('stt_provider', document.getElementById('vcSttProvider').value || 'faster_whisper');
+      form.append('stt_hint', document.getElementById('vcHint').value.trim());
+      form.append('options_json', JSON.stringify(vcPayload().options || {}));
+      try {
+        const response = await fetch('/metis/audio/browser_ptt', {method:'POST', body: form});
+        const result = await response.json();
+        if (response.status === 404) {
+          metisConversation.invalidateSession(metisConversation.sessionId);
+          document.getElementById('vcBrPttStatus').textContent = 'Voice session expired. Press and speak again to create a new session; audio was not replayed.';
+          return;
+        }
+        if (!response.ok) throw new Error(result.detail || 'Voice request failed');
+        const reply = result.voice_command;
+        if (result.recognized_text && reply && reply.message) {
+          privateChatHistory.push(
+            {role:'user', content:result.recognized_text},
+            {role:'assistant', content:reply.message}
+          );
+          renderChat(privateChatHistory);
+        }
+        vcShowResult('browser_ptt', result);
+      } catch(e) { vcShowResult('browser_ptt', {}, String(e)); }
+    }
+    async function vcBrowserPttCancel(evt) {
+      evt.preventDefault();
+      await _metisCapture.cancel();
+      document.getElementById('vcBrPttStatus').textContent = 'Cancelled; microphone tracks stopped.';
+      _vcBrPttCleanup();
+    }
     // --- end Browser held-to-talk ---
+    window.addEventListener('pagehide', () => { _metisCapture.cancel().catch(() => {}); });
     // --- end Voice Conversation Test panel ---
     document.getElementById('chatInput').addEventListener('keydown', handleChatKeydown);
     refresh();
     refreshLlmOptions();
     refreshVoiceOptions();
+    refreshGoogleAccounts();
     refreshTools();
     refreshToolPlans();
     refreshBohStatus();
+    refreshControlCenter();
     setInterval(refreshBohStatus, 10000);
+    setInterval(refreshControlCenter, 10000);
   </script>
 </body>
 </html>

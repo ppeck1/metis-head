@@ -182,3 +182,12 @@ models/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Project Ops Capsule local evidence for public repos
+.project/runs/
+.project/atlas_outbox/
+.project/boh_outbox/
+.project/local_mcp_env.ps1
+.project/local_mcp/
+.project/connections.json
+.project/usage.json
